@@ -16,9 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from APIS.views import WeatherforecastGetView
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('APIS.urls')),
+    path('WeatherForecast/', WeatherforecastGetView.as_view(), name='weatherforecast-get'),
 ]

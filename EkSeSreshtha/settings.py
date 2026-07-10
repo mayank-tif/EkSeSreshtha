@@ -129,8 +129,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         ),
-    'EXCEPTION_HANDLER': 'RFAPIS.exceptions.custom_exception_handler',
-    'EXCEPTION_HANDLER': 'MAppApis.exceptions.custom_exception_handler',
+    'EXCEPTION_HANDLER': 'APIS.exceptions.custom_exception_handler',
 }
 
 
