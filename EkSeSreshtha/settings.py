@@ -143,6 +143,14 @@ LOGGING = {
         },
     },
     'handlers': {
+        'app_file': {
+            'level': 'INFO',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'app.log',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
         'error_file': {
             'level': 'ERROR',
             'class': 'logging.handlers.RotatingFileHandler',
@@ -164,8 +172,8 @@ LOGGING = {
             'propagate': False,
         },
         'APIS': {
-            'handlers': ['error_file'],
-            'level': 'ERROR',
+            'handlers': ['app_file', 'error_file'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

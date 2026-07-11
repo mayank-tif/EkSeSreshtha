@@ -11,7 +11,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.decorators import method_decorator
 from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -20,8 +20,9 @@ from rest_framework_simplejwt.tokens import AccessToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from EkSeSreshtha.env_details import *
+from . import serializers as api_serializers
 from .models import *
-from .serializers import GenerateAppTokenSerializer, LoginSerializer
+from .serializers import GenerateAppTokenSerializer, LoginSerializer, UserLoginResponseSerializer
 from .utils import validate_app_and_device_with_token
 
 
@@ -118,12 +119,20 @@ def model_payload(obj, exclude_sensitive=True):
     payload["id"] = obj.pk
     if exclude_sensitive:
         payload.pop("password", None)
-        payload.pop("token", None)
     return payload
 
 
 def queryset_payload(queryset):
     return [model_payload(obj) for obj in queryset]
+
+
+def format_dotnet_datetime(value):
+    if not value:
+        return None
+    if isinstance(value, str):
+        return value
+    hour = value.strftime("%I").lstrip("0") or "0"
+    return f"{value.month}/{value.day}/{value.year} {hour}:{value:%M:%S %p}"
 
 
 def model_field_input_names(field):
@@ -201,25 +210,49 @@ def login_response(account, account_type, mobile_number):
     token["user_type"] = account_type
     token["mobile_number"] = mobile_number
     token["name"] = getattr(account, "full_name", None) or getattr(account, "name", None) or mobile_number
-    token.set_exp(lifetime=timedelta(days=1))
-    account.last_login_time = now().strftime("%Y-%m-%d %H:%M:%S")
+    token.set_exp(lifetime=timedelta(days=30))
+    account.last_login_time = format_dotnet_datetime(now())
     if hasattr(account, "token"):
         account.token = str(token)
         account.save(update_fields=["last_login_time", "token"])
     else:
         account.save(update_fields=["last_login_time"])
+    if isinstance(account, User):
+        serializer = UserLoginResponseSerializer(account, context={"token": str(token)})
+        return ok(data=serializer.data, message="Login successfully")
     data = model_payload(account)
     data["user_type"] = account_type
-    data["access_token"] = str(token)
     return ok(data=data, message="Login successfully")
 
 
 class DotNetAPIView(APIView):
     """Base DRF view for .NET-compatible endpoints with shared parsers and error logging."""
     parser_classes = [JSONParser, FormParser, MultiPartParser]
+    serializer_class = None
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        self.validate_request_serializer(request)
+
+    def get_request_serializer(self, request):
+        if self.serializer_class is None:
+            return None
+        data = request.query_params if request.method in {"GET", "DELETE"} else request.data
+        if request.method not in {"GET", "DELETE"} and not data:
+            data = request.query_params
+        return self.serializer_class(data=data)
+
+    def validate_request_serializer(self, request):
+        serializer = self.get_request_serializer(request)
+        if serializer is None:
+            return
+        serializer.is_valid(raise_exception=True)
+        self.validated_request_data = serializer.validated_data
 
     def handle_exception(self, exc):
         logger.exception("%s failed", self.__class__.__name__)
+        if isinstance(exc, serializers.ValidationError):
+            return fail("Validation failed", code=status.HTTP_400_BAD_REQUEST, data=exc.detail)
         if isinstance(exc, IntegrityError):
             return fail(str(exc), code=status.HTTP_409_CONFLICT)
         return fail(str(exc), code=status.HTTP_400_BAD_REQUEST)
@@ -250,16 +283,17 @@ class GenerateAppTokenView(TokenObtainPairView):
 class LoginAPIView(DotNetAPIView):
     """Authenticates a user, teacher, or regional admin using the hashed password flow."""
     permission_classes = [AllowAny]
+    authentication_classes = []
     serializer_class = LoginSerializer
 
     def post(self, request, *args, **kwargs):
-        print(123)
+        logger.info("LoginAPIView started")
         validate_app_and_device_with_token(request)
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        mobile_number = serializer.validated_data["mobile_number"]
+        mobile_number = serializer.validated_data["mobileNumber"]
         password = hash_password(serializer.validated_data["password"])
-        print(f"Attempting login for mobile number: {mobile_number} with hashed password: {password}")
+        logger.info("Attempting login for mobile number: %s", mobile_number)
 
         account = User.objects.filter(phone_number=mobile_number, password=password).first()
         if account:
@@ -331,6 +365,7 @@ class NameExistsView(DotNetAPIView):
 
 class AnnouncementSaveannouncementPostView(ModelSaveView):
     """Saves or updates announcement records from form or JSON data."""
+    serializer_class = api_serializers.AnnouncementSaveAnnouncementRequestSerializer
     model = Announcement
     success_message = "Announcement save successfully"
 
@@ -343,6 +378,7 @@ class AnnouncementGetannouncementGetView(ModelListView):
 
 class CenterSavecenterPostView(ModelSaveView):
     """Saves or updates a center and creates a guid when needed."""
+    serializer_class = api_serializers.CenterSaveCenterRequestSerializer
     model = Center
     guid_field = "center_guid_id"
     success_message = "Center save successfully"
@@ -350,11 +386,12 @@ class CenterSavecenterPostView(ModelSaveView):
 
 class CommonCheckusermobilenumberPostView(CenterSavecenterPostView):
     """Compatibility alias for the .NET Common/CheckUserMobileNumber route."""
-    pass
+    serializer_class = api_serializers.CenterSaveCenterRequestSerializer
 
 
 class CenterGetcenteryidGetView(ModelDetailView):
     """Returns a single center by the legacy centeId query parameter."""
+    serializer_class = api_serializers.CenterGetCenteryIdQuerySerializer
     model = Center
     id_names = ("centeId", "centerId", "CenterId")
     found_message = "center exists"
@@ -363,6 +400,7 @@ class CenterGetcenteryidGetView(ModelDetailView):
 
 class CenterGetallcentersGetView(ModelListView):
     """Lists centers, optionally narrowing the result to a teacher/user."""
+    serializer_class = api_serializers.CenterGetAllCentersQuerySerializer
     model = Center
     message = "List of centers"
 
@@ -374,6 +412,7 @@ class CenterGetallcentersGetView(ModelListView):
 
 class CenterGetallcentersbystatusGetView(ModelListView):
     """Lists centers filtered by active/inactive status."""
+    serializer_class = api_serializers.CenterGetAllCentersByStatusQuerySerializer
     model = Center
     message = "Student attendance of centers"
 
@@ -387,6 +426,8 @@ class CenterGetallcentersbystatusGetView(ModelListView):
 
 class CenterGetcenterbyteacheridGetView(DotNetAPIView):
     """Returns the center assigned to a teacher."""
+    serializer_class = api_serializers.CenterGetCenterByTeacherIdQuerySerializer
+
     def get(self, request, *args, **kwargs):
         user_id = request_value(request, "userId", "teacherId", "UserId")
         teacher = Teacher.objects.filter(pk=user_id).first()
@@ -398,6 +439,8 @@ class CenterGetcenterbyteacheridGetView(DotNetAPIView):
 
 class CenterGetallcenterattendanceGetView(DotNetAPIView):
     """Returns center records with attendance and student counts for a date."""
+    serializer_class = api_serializers.CenterGetAllCenterAttendanceQuerySerializer
+
     def get(self, request, *args, **kwargs):
         scan_date = parse_any_datetime(request_value(request, "date", "scanDate"))
         queryset = Center.objects.all().order_by("id")
@@ -415,6 +458,8 @@ class CenterGetallcenterattendanceGetView(DotNetAPIView):
 
 class CenterUpdatecenteractiveordeactiveGetView(DotNetAPIView):
     """Toggles or sets center status and records the reason in CenterLog."""
+    serializer_class = api_serializers.CenterUpdateCenterActiveOrDeactiveQuerySerializer
+
     def get(self, request, *args, **kwargs):
         center_id = request_value(request, "centerId", "CenterId")
         center = Center.objects.filter(pk=center_id).first()
@@ -433,6 +478,8 @@ class CenterUpdatecenteractiveordeactiveGetView(DotNetAPIView):
 
 class CenterGettotalattendancecountofcenterGetView(DotNetAPIView):
     """Returns aggregate attendance, student, and center counts."""
+    serializer_class = api_serializers.CenterGetTotalAttendanceCountOfCenterQuerySerializer
+
     def get(self, request, *args, **kwargs):
         scan_date = parse_any_datetime(request_value(request, "date", "scanDate"))
         attendance = StudentAttendance.objects.all()
@@ -448,6 +495,7 @@ class CenterGettotalattendancecountofcenterGetView(DotNetAPIView):
 
 class ClassSaveclassPostView(ModelSaveView):
     """Creates or updates a class and assigns default class identifiers/status."""
+    serializer_class = api_serializers.ClassSaveClassRequestSerializer
     model = ClassModel
     guid_field = "class_enrolment_id"
     success_message = "Class save successfully"
@@ -460,6 +508,8 @@ class ClassSaveclassPostView(ModelSaveView):
 
 class ClassCancelclassPostView(DotNetAPIView):
     """Cancels a class by setting status, reason, cancel user, and cancel date."""
+    serializer_class = api_serializers.ClassCancelClassRequestSerializer
+
     def post(self, request, *args, **kwargs):
         class_id = request_value(request, "classId", "ClassId", "id", "Id")
         obj = ClassModel.objects.filter(pk=class_id).first()
@@ -475,6 +525,8 @@ class ClassCancelclassPostView(DotNetAPIView):
 
 class ClassUpdateendclasstimePostView(DotNetAPIView):
     """Updates the end time for a class."""
+    serializer_class = api_serializers.ClassUpdateEndClassTimeRequestSerializer
+
     def post(self, request, *args, **kwargs):
         obj = get_by_id(ClassModel, request, "classId", "ClassId")
         if not obj:
@@ -486,6 +538,8 @@ class ClassUpdateendclasstimePostView(DotNetAPIView):
 
 class ClassUpdateclasssubstatusPostView(DotNetAPIView):
     """Updates the class sub-status value."""
+    serializer_class = api_serializers.ClassUpdateClassSubStatusRequestSerializer
+
     def post(self, request, *args, **kwargs):
         obj = get_by_id(ClassModel, request, "classId", "ClassId")
         if not obj:
@@ -497,12 +551,15 @@ class ClassUpdateclasssubstatusPostView(DotNetAPIView):
 
 class ClassCancelclassbyteacherPostView(ModelSaveView):
     """Records a teacher-requested class cancellation."""
+    serializer_class = api_serializers.ClassCancelClassByTeacherRequestSerializer
     model = ClassCancelByTeacher
     success_message = "Class cancelled"
 
 
 class ClassDeleteclassbyteacheridPostView(DotNetAPIView):
     """Deletes a class by class id for legacy API compatibility."""
+    serializer_class = api_serializers.ClassDeleteClassByTeacherIdQuerySerializer
+
     def post(self, request, *args, **kwargs):
         obj = get_by_id(ClassModel, request, "classId", "ClassId")
         if not obj:
@@ -513,6 +570,8 @@ class ClassDeleteclassbyteacheridPostView(DotNetAPIView):
 
 class ClassGetclasscurrentstatusGetView(DotNetAPIView):
     """Returns currently open classes for a center and optional teacher."""
+    serializer_class = api_serializers.ClassGetClassCurrentStatusQuerySerializer
+
     def get(self, request, *args, **kwargs):
         center_id = request_value(request, "centerId", "CenterId")
         teacher_id = request_value(request, "teacherId", "TeacherId")
@@ -524,6 +583,7 @@ class ClassGetclasscurrentstatusGetView(DotNetAPIView):
 
 class ClassGetliveclassdetailGetView(ModelDetailView):
     """Returns live class detail for a class id."""
+    serializer_class = api_serializers.ClassGetLiveClassDetailQuerySerializer
     model = ClassModel
     id_names = ("classId", "ClassId")
     found_message = "class detail exists"
@@ -532,12 +592,14 @@ class ClassGetliveclassdetailGetView(ModelDetailView):
 
 class DistrictGetalldistrictGetView(ModelListView):
     """Lists districts with optional offset/limit pagination."""
+    serializer_class = api_serializers.PaginationQuerySerializer
     model = District
     message = "List of district"
 
 
 class DistrictSavedistrictPostView(ModelSaveView):
     """Saves or updates a district and creates a guid when needed."""
+    serializer_class = api_serializers.DistrictSaveDistrictRequestSerializer
     model = District
     guid_field = "district_guid_id"
     success_message = "District save successfully"
@@ -545,12 +607,14 @@ class DistrictSavedistrictPostView(ModelSaveView):
 
 class VidhansabhaGetallvidhansabhaGetView(ModelListView):
     """Lists Vidhan Sabha records with optional pagination."""
+    serializer_class = api_serializers.PaginationQuerySerializer
     model = VidhanSabha
     message = "List of vidhanSabha"
 
 
 class VidhansabhaSavevidhansabhaPostView(ModelSaveView):
     """Saves or updates a Vidhan Sabha record."""
+    serializer_class = api_serializers.VidhanSabhaSaveVidhanSabhaRequestSerializer
     model = VidhanSabha
     guid_field = "vidhan_sabha_guid_id"
     success_message = "VidanSabha save successfully"
@@ -558,6 +622,7 @@ class VidhansabhaSavevidhansabhaPostView(ModelSaveView):
 
 class VidhansabhaGetvidhansabhabydistrictidGetView(ModelListView):
     """Lists Vidhan Sabha records for a district."""
+    serializer_class = api_serializers.VidhanSabhaByDistrictIdQuerySerializer
     model = VidhanSabha
     message = "VidanSabha exists"
 
@@ -567,6 +632,7 @@ class VidhansabhaGetvidhansabhabydistrictidGetView(ModelListView):
 
 class VidhansabhaCheckvidhansabhanamePostView(NameExistsView):
     """Checks whether a Vidhan Sabha name already exists."""
+    serializer_class = api_serializers.NameCheckQuerySerializer
     model = VidhanSabha
     exists_message = "VidhanSabha name already exists"
     missing_message = "VidhanSabha name doesn't exists"
@@ -574,12 +640,14 @@ class VidhansabhaCheckvidhansabhanamePostView(NameExistsView):
 
 class PanchayatGetallpanchayatGetView(ModelListView):
     """Lists panchayats with optional pagination."""
+    serializer_class = api_serializers.PaginationQuerySerializer
     model = Panchayat
     message = "List of panchayat"
 
 
 class PanchayatSavepanchayatPostView(ModelSaveView):
     """Saves or updates a panchayat record."""
+    serializer_class = api_serializers.PanchayatSavePanchayatRequestSerializer
     model = Panchayat
     guid_field = "panchayat_guid_id"
     success_message = "Panchayat save successfully"
@@ -587,6 +655,7 @@ class PanchayatSavepanchayatPostView(ModelSaveView):
 
 class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(ModelListView):
     """Lists panchayats for a district and Vidhan Sabha."""
+    serializer_class = api_serializers.PanchayatByDistrictAndVidhanSabhaQuerySerializer
     model = Panchayat
     message = "Panchayat exists"
 
@@ -599,6 +668,7 @@ class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(ModelListView):
 
 class PanchayatCheckpanchayatnamePostView(NameExistsView):
     """Checks whether a panchayat name already exists."""
+    serializer_class = api_serializers.NameCheckQuerySerializer
     model = Panchayat
     exists_message = "Panchayat name already exists"
     missing_message = "Panchayat name doesn't exists"
@@ -606,12 +676,14 @@ class PanchayatCheckpanchayatnamePostView(NameExistsView):
 
 class VillageGetallvillageGetView(ModelListView):
     """Lists villages with optional pagination."""
+    serializer_class = api_serializers.PaginationQuerySerializer
     model = Village
     message = "List of village"
 
 
 class VillageSavevillagePostView(ModelSaveView):
     """Saves or updates a village record."""
+    serializer_class = api_serializers.VillageSaveVillageRequestSerializer
     model = Village
     guid_field = "village_guid_id"
     success_message = "Village save successfully"
@@ -619,6 +691,7 @@ class VillageSavevillagePostView(ModelSaveView):
 
 class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(ModelListView):
     """Lists villages by district, Vidhan Sabha, and panchayat."""
+    serializer_class = api_serializers.VillageByDistrictVidhanSabhaAndPanchayatQuerySerializer
     model = Village
     message = "Village exists"
 
@@ -632,6 +705,7 @@ class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(ModelListView):
 
 class VillageCheckvillagenamePostView(NameExistsView):
     """Checks whether a village name already exists."""
+    serializer_class = api_serializers.NameCheckQuerySerializer
     model = Village
     exists_message = "Village name already exists"
     missing_message = "Village name doesn't exists"
@@ -639,6 +713,7 @@ class VillageCheckvillagenamePostView(NameExistsView):
 
 class SchoolSaveschoolPostView(ModelSaveView):
     """Saves or updates a school record."""
+    serializer_class = api_serializers.SchoolSaveSchoolRequestSerializer
     model = School
     success_message = "School save successfully"
 
@@ -651,12 +726,14 @@ class SchoolGetallschoolsGetView(ModelListView):
 
 class HolidaysSaveholidaysPostView(ModelSaveView):
     """Saves or updates holiday records."""
+    serializer_class = api_serializers.HolidaysSaveHolidaysRequestSerializer
     model = Holidays
     success_message = "Holiday save successfully"
 
 
 class HolidaysGetallholidaysGetView(ModelListView):
     """Lists holidays, optionally filtered by status."""
+    serializer_class = api_serializers.HolidaysGetAllHolidaysQuerySerializer
     model = Holidays
     message = "List of holidays"
 
@@ -670,6 +747,7 @@ class HolidaysGetallholidaysGetView(ModelListView):
 
 class HolidaysGetallholidaysbyteacheridGetView(ModelListView):
     """Lists holidays for the center assigned to a teacher."""
+    serializer_class = api_serializers.HolidaysTeacherIdQuerySerializer
     model = Holidays
     message = "List of holidays"
 
@@ -680,6 +758,7 @@ class HolidaysGetallholidaysbyteacheridGetView(ModelListView):
 
 class HolidaysGetallholidaysbycenteridGetView(ModelListView):
     """Lists holidays for a center."""
+    serializer_class = api_serializers.HolidaysCenterIdQuerySerializer
     model = Holidays
     message = "List of holidays"
 
@@ -689,6 +768,7 @@ class HolidaysGetallholidaysbycenteridGetView(ModelListView):
 
 class HolidaysGetallholidaysbyyearGetView(ModelListView):
     """Lists holidays whose start date falls in a year."""
+    serializer_class = api_serializers.HolidaysYearQuerySerializer
     model = Holidays
     message = "List of holidays"
 
@@ -699,6 +779,8 @@ class HolidaysGetallholidaysbyyearGetView(ModelListView):
 
 class HolidaysDeleteholidaybyidPostView(DotNetAPIView):
     """Deletes a holiday by id."""
+    serializer_class = api_serializers.HolidaysDeleteHolidayByIdQuerySerializer
+
     def post(self, request, *args, **kwargs):
         obj = get_by_id(Holidays, request, "holidayId", "HolidayId", "id", "Id")
         if not obj:
@@ -709,6 +791,7 @@ class HolidaysDeleteholidaybyidPostView(DotNetAPIView):
 
 class StudentSavestudentPostView(ModelSaveView):
     """Saves or updates student details and creates enrollment id when missing."""
+    serializer_class = api_serializers.StudentSaveStudentRequestSerializer
     model = Student
     success_message = "Student save successfully"
 
@@ -720,6 +803,7 @@ class StudentSavestudentPostView(ModelSaveView):
 
 class StudentGetstudentbyidGetView(ModelDetailView):
     """Returns a student by student id."""
+    serializer_class = api_serializers.StudentGetStudentByIdQuerySerializer
     model = Student
     id_names = ("studentId", "StudentId")
     found_message = "student exists"
@@ -728,6 +812,8 @@ class StudentGetstudentbyidGetView(ModelDetailView):
 
 class StudentUpdatestudentactiveorinactivePostView(DotNetAPIView):
     """Updates a student active/inactive status."""
+    serializer_class = api_serializers.StudentUpdateStudentActiveOrInactiveRequestSerializer
+
     def post(self, request, *args, **kwargs):
         student = get_by_id(Student, request, "studentId", "StudentId", "Id")
         if not student:
@@ -739,6 +825,8 @@ class StudentUpdatestudentactiveorinactivePostView(DotNetAPIView):
 
 class StudentGettotalstudentpresentGetView(DotNetAPIView):
     """Returns total present student attendance count for an optional date."""
+    serializer_class = api_serializers.StudentGetTotalStudentPresentQuerySerializer
+
     def get(self, request, *args, **kwargs):
         scan_date = parse_any_datetime(request_value(request, "scanDate", "ScanDate"))
         queryset = StudentAttendance.objects.all()
@@ -749,6 +837,7 @@ class StudentGettotalstudentpresentGetView(DotNetAPIView):
 
 class StudentGetallstudentsGetView(ModelListView):
     """Lists students filtered by optional location identifiers."""
+    serializer_class = api_serializers.StudentGetAllStudentsQuerySerializer
     model = Student
     message = "Total students"
 
@@ -763,22 +852,25 @@ class StudentGetallstudentsGetView(ModelListView):
 
 class StudentattendanceSavestudentattendancePostView(ModelSaveView):
     """Saves a student attendance record."""
+    serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
     model = StudentAttendance
     success_message = "Student attendance applied"
 
 
 class StudentattendanceSaveautomaticstudentattendancePostView(StudentattendanceSavestudentattendancePostView):
     """Compatibility view for automatic attendance save requests."""
-    pass
+    serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
 
 
 class StudentattendanceSavemanualstudentattendancePostView(StudentattendanceSavestudentattendancePostView):
     """Compatibility view for manual attendance save requests."""
-    pass
+    serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
 
 
 class StudentattendanceGetallstudentwihavgattendanceGetView(DotNetAPIView):
     """Lists center students with their average attendance value."""
+    serializer_class = api_serializers.StudentAttendanceCenterQuerySerializer
+
     def get(self, request, *args, **kwargs):
         center_id = request_value(request, "centerId", "CenterId")
         students = Student.objects.filter(center_id=center_id).annotate(avg_attendance=Avg("attendances__type"))
@@ -792,6 +884,7 @@ class StudentattendanceGetallstudentwihavgattendanceGetView(DotNetAPIView):
 
 class StudentattendanceGetallabsentattendanceGetView(ModelListView):
     """Lists active students without attendance for the selected center."""
+    serializer_class = api_serializers.StudentAttendanceCenterQuerySerializer
     model = Student
     message = "List of all active students exists"
 
@@ -803,6 +896,8 @@ class StudentattendanceGetallabsentattendanceGetView(ModelListView):
 
 class StudentattendanceGetallstudentattendancstatusGetView(DotNetAPIView):
     """Lists students with present/absent status for a center and date."""
+    serializer_class = api_serializers.StudentAttendanceStatusQuerySerializer
+
     def get(self, request, *args, **kwargs):
         center_id = request_value(request, "centerId", "CenterId")
         scan_date = parse_any_datetime(request_value(request, "scanDate", "ScanDate"))
@@ -820,6 +915,7 @@ class StudentattendanceGetallstudentattendancstatusGetView(DotNetAPIView):
 
 class StudentattendanceGetallstudentattendancbymonthGetView(ModelListView):
     """Lists attendance records filtered by center, student, month, and year."""
+    serializer_class = api_serializers.StudentAttendanceByMonthQuerySerializer
     model = StudentAttendance
     message = "Student exists"
 
@@ -838,23 +934,27 @@ class StudentattendanceGetallstudentattendancbymonthGetView(ModelListView):
 
 class UserSavesuperadminPostView(ModelSaveView):
     """Saves a super admin user with hashed password storage."""
+    serializer_class = api_serializers.UserSaveSuperAdminRequestSerializer
     model = User
     success_message = "SuperAdmin save successfully"
 
 
 class UserSaveuserPostView(ModelSaveView):
     """Saves a user record with hashed password storage."""
+    serializer_class = api_serializers.UserSaveUserRequestSerializer
     model = User
     success_message = "Data save successfully"
 
 
 class UserUpdatesuperadminuserPostView(UserSaveuserPostView):
     """Updates a super admin user using the same save behavior."""
-    pass
+    serializer_class = api_serializers.UserSaveUserRequestSerializer
 
 
 class UserUpdatedeviceidPostView(DotNetAPIView):
     """Updates the stored device id for a user."""
+    serializer_class = api_serializers.UserUpdateDeviceIdRequestSerializer
+
     def post(self, request, *args, **kwargs):
         user = get_by_id(User, request, "userId", "UserId")
         if not user:
@@ -866,6 +966,7 @@ class UserUpdatedeviceidPostView(DotNetAPIView):
 
 class UserGetuserbyidGetView(ModelDetailView):
     """Returns a user by user id."""
+    serializer_class = api_serializers.UserGetUserByIdQuerySerializer
     model = User
     id_names = ("userId", "UserId")
     found_message = "user exists"
@@ -874,6 +975,8 @@ class UserGetuserbyidGetView(ModelDetailView):
 
 class UserGetuserdetailbyphonenumberGetView(DotNetAPIView):
     """Returns user details for a phone number."""
+    serializer_class = api_serializers.UserGetUserDetailByPhoneNumberQuerySerializer
+
     def get(self, request, *args, **kwargs):
         phone = request_value(request, "phoneNumer", "phoneNumber", "PhoneNumber")
         user = User.objects.filter(phone_number=phone).first()
@@ -884,6 +987,8 @@ class UserGetuserdetailbyphonenumberGetView(DotNetAPIView):
 
 class UserUpdatepasswordGetView(DotNetAPIView):
     """Hashes and updates a user password."""
+    serializer_class = api_serializers.UserUpdatePasswordQuerySerializer
+
     def get(self, request, *args, **kwargs):
         user = get_by_id(User, request, "userId", "UserId")
         if not user:
@@ -895,6 +1000,7 @@ class UserUpdatepasswordGetView(DotNetAPIView):
 
 class UserGetallteachersGetView(ModelListView):
     """Lists teachers, optionally filtered by creator user id."""
+    serializer_class = api_serializers.UserGetAllTeachersQuerySerializer
     model = Teacher
     message = "List of assigned teachers"
 
@@ -923,6 +1029,8 @@ class UserGetallregionaladminsGetView(ModelListView):
 
 class UserSearchdataGetView(DotNetAPIView):
     """Searches users, teachers, regional admins, or students by name/phone."""
+    serializer_class = api_serializers.UserSearchDataQuerySerializer
+
     def get(self, request, *args, **kwargs):
         search_type = (request_value(request, "type", "Type") or "").lower()
         query = request_value(request, "queryString", "QueryString", default="")
@@ -934,7 +1042,9 @@ class UserSearchdataGetView(DotNetAPIView):
 
 class TeacherLoginteacherPostView(DotNetAPIView):
     """Authenticates a teacher using SHA-256 hashed password comparison."""
+    serializer_class = api_serializers.LoginRequestSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request, *args, **kwargs):
         mobile = request_value(request, "mobileNumber", "MobileNumber")
@@ -947,6 +1057,7 @@ class TeacherLoginteacherPostView(DotNetAPIView):
 
 class TeacherSaveteacherPostView(ModelSaveView):
     """Saves a teacher record with hashed password storage."""
+    serializer_class = api_serializers.TeacherSaveTeacherRequestSerializer
     model = Teacher
     guid_field = "teacher_guid_id"
     success_message = "Teacher save successfully"
@@ -960,7 +1071,9 @@ class RegionaladminGetallregionaladminGetView(ModelListView):
 
 class RegionaladminLoginregionaladminPostView(DotNetAPIView):
     """Authenticates a regional admin using hashed password comparison."""
+    serializer_class = api_serializers.LoginRequestSerializer
     permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request, *args, **kwargs):
         mobile = request_value(request, "mobileNumber", "MobileNumber")
@@ -973,6 +1086,7 @@ class RegionaladminLoginregionaladminPostView(DotNetAPIView):
 
 class RegionaladminSaveregionaladminPostView(ModelSaveView):
     """Saves a regional admin record with hashed password storage."""
+    serializer_class = api_serializers.RegionalAdminSaveRegionalAdminRequestSerializer
     model = RegionalAdmin
     guid_field = "regional_admin_guid_id"
     success_message = "RegionalAdmin save successfully"
@@ -980,12 +1094,16 @@ class RegionaladminSaveregionaladminPostView(ModelSaveView):
 
 class FileSendnotificationPostView(DotNetAPIView):
     """Accepts notification send requests as a compatibility endpoint."""
+    serializer_class = api_serializers.FileSendNotificationRequestSerializer
+
     def post(self, request, *args, **kwargs):
         return ok(message="Notification request accepted")
 
 
 class FileUploadprofileimagePostView(DotNetAPIView):
     """Stores uploaded profile image files and returns their URLs."""
+    serializer_class = api_serializers.FileUploadProfileImageRequestSerializer
+
     def post(self, request, *args, **kwargs):
         uploaded = []
         for file_obj in request.FILES.getlist("files") or request.FILES.values():
@@ -996,6 +1114,8 @@ class FileUploadprofileimagePostView(DotNetAPIView):
 
 class DashboardGetclasscountbymonthGetView(DotNetAPIView):
     """Returns class counts grouped by started month."""
+    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+
     def get(self, request, *args, **kwargs):
         queryset = ClassModel.objects.all()
         queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
@@ -1005,6 +1125,8 @@ class DashboardGetclasscountbymonthGetView(DotNetAPIView):
 
 class DashboardGettotalgenterratiobycenteridGetView(DotNetAPIView):
     """Returns student gender counts for a center."""
+    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+
     def get(self, request, *args, **kwargs):
         queryset = Student.objects.all()
         queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
@@ -1013,6 +1135,8 @@ class DashboardGettotalgenterratiobycenteridGetView(DotNetAPIView):
 
 class DashboardGettotalstudentofclassGetView(DotNetAPIView):
     """Returns total students for a center."""
+    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+
     def get(self, request, *args, **kwargs):
         center_id = request_value(request, "centerId", "CenterId")
         return ok({"total": Student.objects.filter(center_id=center_id).count()}, "Total students")
@@ -1020,6 +1144,8 @@ class DashboardGettotalstudentofclassGetView(DotNetAPIView):
 
 class DashboardGetcenterdetailbymonthGetView(DotNetAPIView):
     """Returns center details with class and student counts."""
+    serializer_class = api_serializers.DashboardGetCenterDetailByMonthQuerySerializer
+
     def get(self, request, *args, **kwargs):
         center = get_by_id(Center, request, "centerId", "CenterId")
         data = model_payload(center) if center else {}
@@ -1031,6 +1157,8 @@ class DashboardGetcenterdetailbymonthGetView(DotNetAPIView):
 
 class DashboardGettotalbplGetView(DotNetAPIView):
     """Returns total BPL students for optional center filter."""
+    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+
     def get(self, request, *args, **kwargs):
         queryset = Student.objects.filter(bpl=True)
         queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
@@ -1039,6 +1167,8 @@ class DashboardGettotalbplGetView(DotNetAPIView):
 
 class DashboardGettotalstudentcategoryofclassGetView(DotNetAPIView):
     """Returns student category counts for optional center filter."""
+    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+
     def get(self, request, *args, **kwargs):
         queryset = Student.objects.all()
         queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
@@ -1047,6 +1177,7 @@ class DashboardGettotalstudentcategoryofclassGetView(DotNetAPIView):
 
 class DashboardGetuserbyfilterGetView(ModelListView):
     """Lists students matching dashboard location filters."""
+    serializer_class = api_serializers.DashboardFilterQuerySerializer
     model = Student
     message = "Users by filter"
 
@@ -1061,30 +1192,39 @@ class DashboardGetuserbyfilterGetView(ModelListView):
 
 class DashboardGettotalbplbyfilterGetView(DashboardGetuserbyfilterGetView):
     """Returns BPL count for dashboard location filters."""
+    serializer_class = api_serializers.DashboardFilterQuerySerializer
+
     def get(self, request, *args, **kwargs):
         return ok({"total": self.get_queryset(request).filter(bpl=True).count()}, "Total BPL")
 
 
 class DashboardGettotalgenderratiobyfilterGetView(DashboardGetuserbyfilterGetView):
     """Returns gender counts for dashboard location filters."""
+    serializer_class = api_serializers.DashboardFilterQuerySerializer
+
     def get(self, request, *args, **kwargs):
         return ok(list(self.get_queryset(request).values("gender").annotate(total=Count("id"))), "Gender ratio")
 
 
 class DashboardGettotalstudentcategoryofclassbyfilterGetView(DashboardGetuserbyfilterGetView):
     """Returns category counts for dashboard location filters."""
+    serializer_class = api_serializers.DashboardFilterQuerySerializer
+
     def get(self, request, *args, **kwargs):
         return ok(list(self.get_queryset(request).values("category").annotate(total=Count("id"))), "Student category")
 
 
 class DashboardGettotalstudengradeofclassbyfilterGetView(DashboardGetuserbyfilterGetView):
     """Returns grade counts for dashboard location filters."""
+    serializer_class = api_serializers.DashboardFilterQuerySerializer
+
     def get(self, request, *args, **kwargs):
         return ok(list(self.get_queryset(request).values("grade").annotate(total=Count("id"))), "Student grade")
 
 
 class DashboardGetdistrictofcenterbyfilterGetView(ModelListView):
     """Lists centers matching district and Vidhan Sabha dashboard filters."""
+    serializer_class = api_serializers.DashboardDistrictOfCenterByFilterQuerySerializer
     model = Center
     message = "District of center"
 
