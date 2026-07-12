@@ -210,16 +210,6 @@ class CommonCheckusermobilenumberPostView(CenterSavecenterPostView):
     serializer_class = api_serializers.CenterSaveCenterRequestSerializer
 
 
-class CenterGetcenteryidGetView(ModelDetailView):
-    """Returns a single center by the legacy centeId query parameter."""
-    serializer_class = api_serializers.CenterGetCenteryIdQuerySerializer
-    model = Center
-    id_names = ("centeId", "centerId", "CenterId")
-    found_message = "center exists"
-    missing_message = "center not exists"
-
-
-
 class CenterGetAllCentersView(APIView):
     """Lists centers, optionally narrowing the result to a teacher/user."""
     
@@ -326,75 +316,308 @@ class CenterGetAllCentersByStatusView(APIView):
                 {"error": "An error occurred while processing your request"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+class CenterGetcenteryidGetView(APIView):
+    """Returns a single center by the centeId query parameter."""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetUser : Started")
+            
+            serializer = api_serializers.CenterGetCenteryIdQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            center_id = serializer.validated_data.get('centeId')
+            center = get_center_by_id(center_id)
+            
+            if center:
+                response_serializer = api_serializers.CenterDetailDtoSerializer(center)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "center exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "center not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetCenterById : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-
-class CenterGetcenterbyteacheridGetView(DotNetAPIView):
+class CenterGetcenterbyteacheridGetView(APIView):
     """Returns the center assigned to a teacher."""
-    serializer_class = api_serializers.CenterGetCenterByTeacherIdQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetStudentAttendanceOfCenter : Started")
+            
+            user_id = request.query_params.get('userId')
+            if not user_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "center detail not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            center = get_center_by_user_id(int(user_id))
+            
+            if center:
+                response_serializer = api_serializers.CenterDetailDtoSerializer(center)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "center detail",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "center detail not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetCenterByTeacherId : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def get(self, request, *args, **kwargs):
-        user_id = request_value(request, "userId", "teacherId", "UserId")
-        teacher = Teacher.objects.filter(pk=user_id).first()
-        center = teacher.center if teacher else None
-        if center:
-            return ok(model_payload(center), "center detail")
-        return fail("center detail not found", data=None)
-
-
-class CenterGetallcenterattendanceGetView(DotNetAPIView):
+class CenterGetallcenterattendanceGetView(APIView):
     """Returns center records with attendance and student counts for a date."""
-    serializer_class = api_serializers.CenterGetAllCenterAttendanceQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : UpdateCenterActiveOrDeactive : Started")
+            
+            serializer = api_serializers.CenterGetAllCenterAttendanceQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user_id = serializer.validated_data.get('userId')
+            date = serializer.validated_data.get('date')
+            offset = serializer.validated_data.get('offset', 0)
+            limit = serializer.validated_data.get('limit', 0)
+            
+            centers = get_all_center_attendance(user_id, date, offset, limit)
+            
+            if centers is not None and len(centers) > 0:
+                response_serializer = api_serializers.CenterAttendanceDtoSerializer(centers, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Centers avilable",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Centers not avilable",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllCenterAttendance : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def get(self, request, *args, **kwargs):
-        scan_date = parse_any_datetime(request_value(request, "date", "scanDate"))
-        queryset = Center.objects.all().order_by("id")
-        data = []
-        for center in apply_pagination(queryset, request):
-            attendance = StudentAttendance.objects.filter(center=center)
-            if scan_date:
-                attendance = attendance.filter(scan_date__date=scan_date)
-            payload = model_payload(center)
-            payload["attendance_count"] = attendance.count()
-            payload["student_count"] = Student.objects.filter(center=center).count()
-            data.append(payload)
-        return ok(data, "Centers avilable")
-
-
-class CenterUpdatecenteractiveordeactiveGetView(DotNetAPIView):
+class CenterUpdatecenteractiveordeactiveGetView(APIView):
     """Toggles or sets center status and records the reason in CenterLog."""
-    serializer_class = api_serializers.CenterUpdateCenterActiveOrDeactiveQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : UpdateCenterActiveOrDeactive : Started")
+            
+            center_id = request.query_params.get('centerId')
+            status_value = request.query_params.get('status')
+            user_id = request.query_params.get('userId')
+            reason = request.query_params.get('reason')
+            
+            if not center_id:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Center status not updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            
+            # Convert status to boolean
+            if status_value is not None:
+                status = to_bool(status_value)
+            else:
+                # Get current status and toggle
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT Status FROM Center WHERE Id = %s", [center_id])
+                    row = cursor.fetchone()
+                    if row:
+                        current_status = row[0]
+                        status = not current_status
+                    else:
+                        return Response(
+                            {
+                                "status": True,
+                                "message": "Center status not updated",
+                                "code": status.HTTP_200_OK
+                            },
+                            status=status.HTTP_200_OK
+                        )
+            
+            center_log_data = {
+                'centerId': int(center_id),
+                'status': status,
+                'userId': int(user_id) if user_id else None,
+                'reason': reason
+            }
+            
+            result = update_center_active_or_deactive(center_log_data)
+            
+            if result:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Center status updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Center status not updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : UpdateCenterActiveOrDeactive : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def get(self, request, *args, **kwargs):
-        center_id = request_value(request, "centerId", "CenterId")
-        center = Center.objects.filter(pk=center_id).first()
-        if not center:
-            return ok(message="Center status not updated")
-        status_value = request_value(request, "status", "Status")
-        center.status = to_bool(status_value) if status_value is not None else not bool(center.status)
-        center.save(update_fields=["status"])
-        CenterLog.objects.create(
-            center=center,
-            user_id=to_int(request_value(request, "userId", "UserId"), 0) or None,
-            reason=request_value(request, "reason", "Reason"),
-        )
-        return ok(message="Center status updated")
-
-
-class CenterGettotalattendancecountofcenterGetView(DotNetAPIView):
+class CenterGettotalattendancecountofcenterGetView(APIView):
     """Returns aggregate attendance, student, and center counts."""
-    serializer_class = api_serializers.CenterGetTotalAttendanceCountOfCenterQuerySerializer
-
-    def get(self, request, *args, **kwargs):
-        scan_date = parse_any_datetime(request_value(request, "date", "scanDate"))
-        attendance = StudentAttendance.objects.all()
-        if scan_date:
-            attendance = attendance.filter(scan_date__date=scan_date)
-        data = {
-            "totalAttendance": attendance.count(),
-            "totalStudents": Student.objects.count(),
-            "totalCenters": Center.objects.count(),
-        }
-        return ok(data, "Center exists")
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetTotalAttendanceCountOfCenter : Started")
+            
+            serializer = api_serializers.CenterGetTotalAttendanceCountOfCenterQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user_id = serializer.validated_data.get('userId')
+            date = serializer.validated_data.get('date')
+            
+            result = get_total_attendance_count_of_center(user_id, date)
+            
+            if result:
+                return Response(
+                    {
+                        "data": result,
+                        "status": True,
+                        "message": "Center exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Center not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetTotalAttendanceCountOfCenter : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
 
 class ClassSaveclassPostView(ModelSaveView):

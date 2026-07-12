@@ -169,6 +169,7 @@ class AnnouncementSaveAnnouncementRequestSerializer(RequestSerializer):
     CreatedOn = optional_datetime()
     CreatedBy = optional_int()
 
+# Center serializers ------------------------------------------------------------------------------------------------------------------------------
 
 class CenterSaveCenterRequestSerializer(RequestSerializer):
     foreign_key_fields = {
@@ -192,87 +193,64 @@ class CenterSaveCenterRequestSerializer(RequestSerializer):
     VillageId = optional_int()
 
 
-class CenterGetCenteryIdQuerySerializer(RequestSerializer):
-    centeId = required_int()
 
-
-
-class CenterGetAllCentersQuerySerializer(serializers.Serializer):
-    userId = serializers.IntegerField(required=False, default=0)
-    type = serializers.IntegerField(required=False, default=0)
-
-class AllCenterDtoSerializer(serializers.Serializer):
+class CenterDetailDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     centerName = serializers.CharField(allow_null=True, required=False)
-    date = serializers.CharField(allow_null=True, required=False)
-    classDate = serializers.DateTimeField(allow_null=True, required=False)
-    classEndDate = serializers.DateTimeField(allow_null=True, required=False)
     classStatus = serializers.BooleanField(allow_null=True, required=False)
     status = serializers.BooleanField(allow_null=True, required=False)
+    enrollmentDate = serializers.CharField(allow_null=True, required=False)
+    vidhanSabhaId = serializers.IntegerField()
+    districtId = serializers.IntegerField()
+    panchayatId = serializers.IntegerField()
+    villageId = serializers.IntegerField(allow_null=True, required=False)
     districtName = serializers.CharField(allow_null=True, required=False)
     vidhanSabhaName = serializers.CharField(allow_null=True, required=False)
-    totalPresentStudents = serializers.IntegerField(allow_null=True, required=False)
-    totalActiveStudents = serializers.IntegerField(allow_null=True, required=False)
-    totalStudents = serializers.IntegerField(allow_null=True, required=False)
-    panchayatName = serializers.CharField(allow_null=True, required=False)
     villageName = serializers.CharField(allow_null=True, required=False)
-    vidhanSabhaId = serializers.IntegerField(required=False)
-    villageId = serializers.IntegerField(allow_null=True, required=False)
-    districtId = serializers.IntegerField(required=False)
-    panchayatId = serializers.IntegerField(required=False)
-    assignedTeacher = serializers.IntegerField(allow_null=True, required=False)
-    teacherName = serializers.CharField(allow_null=True, required=False)
-    assignedRegionalAdmin = serializers.IntegerField(allow_null=True, required=False)
+    panchayatName = serializers.CharField(allow_null=True, required=False)
+    regionalAdminId = serializers.IntegerField(allow_null=True, required=False)
     regionalAdminName = serializers.CharField(allow_null=True, required=False)
+    totalStudents = serializers.IntegerField(allow_null=True, required=False)
+    teacher = serializers.DictField(allow_null=True, required=False)
 
-
-class CenterGetAllCentersByStatusQuerySerializer(serializers.Serializer):
-    status = serializers.IntegerField(required=True)
-    userId = serializers.IntegerField(required=True)
-
-class AllCenterStatusDtoSerializer(serializers.Serializer):
+class UserDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
-    centerName = serializers.CharField(source="center_name", allow_null=True, required=False)
-    date = serializers.CharField(allow_null=True, required=False)
-    classStartDate = serializers.CharField(source="class_start_date", allow_null=True, required=False)
-    classEndDate = serializers.CharField(source="class_end_date", allow_null=True, required=False)
-    classStatus = serializers.BooleanField(source="class_status", allow_null=True, required=False)
-    status = serializers.BooleanField(allow_null=True, required=False)
-    districtName = serializers.CharField(source="district_name", allow_null=True, required=False)
-    vidhanSabhaName = serializers.CharField(source="vidhan_sabha_name", allow_null=True, required=False)
-    villageName = serializers.CharField(source="village_name", allow_null=True, required=False)
-    totalPresentStudents = serializers.IntegerField(source="total_present_students", allow_null=True, required=False)
-    totalStudents = serializers.IntegerField(source="total_students", allow_null=True, required=False)
-    panchayatName = serializers.CharField(source="panchayat_name", allow_null=True, required=False)
-    vidhanSabhaId = serializers.IntegerField(source="vidhan_sabha_id", required=False)
-    districtId = serializers.IntegerField(source="district_id", required=False)
-    panchayatId = serializers.IntegerField(source="panchayat_id", required=False)
-    assignedTeacher = serializers.IntegerField(source="assigned_teacher", allow_null=True, required=False)
-    teacherName = serializers.CharField(source="teacher_name", allow_null=True, required=False)
-    assignedRegionalAdmin = serializers.IntegerField(source="assigned_regional_admin", allow_null=True, required=False)
-    regionalAdminName = serializers.CharField(source="regional_admin_name", allow_null=True, required=False)
+    name = serializers.CharField(allow_null=True, required=False)
+    phoneNumber = serializers.CharField(allow_null=True, required=False)
+    picture = serializers.CharField(allow_null=True, required=False)
 
+class CenterAttendanceDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    centerName = serializers.CharField(allow_null=True, required=False)
+    type = serializers.IntegerField()
+    classStartedDate = serializers.DateTimeField(allow_null=True, required=False)
+    classEndDate = serializers.DateTimeField(allow_null=True, required=False)
+    totalStudents = serializers.IntegerField(allow_null=True, required=False)
+    presentStudents = serializers.IntegerField(allow_null=True, required=False)
+    regionalAdminName = serializers.CharField(allow_null=True, required=False)
+    teacherName = serializers.CharField(allow_null=True, required=False)
+    startDate = serializers.DateTimeField(allow_null=True, required=False)
+    endDate = serializers.DateTimeField(allow_null=True, required=False)
+    reason = serializers.CharField(allow_null=True, required=False)
 
-class CenterGetCenterByTeacherIdQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"userId": Teacher}
+class CenterGetAllCenterAttendanceQuerySerializer(RequestSerializer):
     userId = required_int()
-
-
-class CenterGetAllCenterAttendanceQuerySerializer(PaginationQuerySerializer):
-    userId = optional_int()
-    date = optional_datetime()
-
-
-class CenterUpdateCenterActiveOrDeactiveQuerySerializer(RequestSerializer):
-    centerId = required_int()
-    status = optional_bool()
-    userId = optional_int()
-    reason = optional_char()
-
+    date = required_char()
+    offset = optional_int()
+    limit = optional_int()
 
 class CenterGetTotalAttendanceCountOfCenterQuerySerializer(RequestSerializer):
-    userId = optional_int()
-    date = optional_datetime()
+    userId = required_int()
+    date = required_char()
+
+class CenterLogDtoSerializer(serializers.Serializer):
+    centerId = serializers.IntegerField(required=True)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    userId = serializers.IntegerField(allow_null=True, required=False)
+    reason = serializers.CharField(allow_null=True, required=False)
+
+class CenterGetCenteryIdQuerySerializer(RequestSerializer):
+    centeId = required_int()
 
 
 class ClassSaveClassRequestSerializer(RequestSerializer):
@@ -647,6 +625,8 @@ class TeacherDtoSerializer(serializers.Serializer):
     assigned = serializers.BooleanField(allow_null=True, required=False)
     profile = serializers.CharField(allow_null=True, required=False)
     phoneNumber = serializers.CharField(allow_null=True, required=False)
+
+# user serializers
 
 class LoginSerializer(serializers.Serializer):
     mobileNumber = serializers.CharField(required=True)
