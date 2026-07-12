@@ -253,9 +253,59 @@ class CenterGetCenteryIdQuerySerializer(RequestSerializer):
     centeId = required_int()
 
 
-class ClassSaveClassRequestSerializer(RequestSerializer):
-    foreign_key_fields = {"CenterId": Center}
+# CLASS serializers ------------------------------------------------------------------------------------------------------------------------------
 
+# Class Serializers
+class ClassDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False)
+    classEnrolmentId = serializers.CharField(allow_null=True, required=False)
+    name = serializers.CharField(required=True)
+    centerId = serializers.IntegerField(required=True)
+    userId = serializers.IntegerField(required=True)
+    totalStudents = serializers.IntegerField(required=True)
+    avilableStudents = serializers.IntegerField(required=True)
+
+class CancelClassDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=True)
+    reason = serializers.CharField(required=True)
+    cancelBy = serializers.IntegerField(required=True)
+
+class EndClassDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=True)
+
+class UpdateClassSubStatusDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=True)
+
+class ClassCancelTeacherDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False)
+    centerId = serializers.IntegerField(required=True)
+    startingDate = serializers.DateTimeField(required=True)
+    endingDate = serializers.DateTimeField(required=True)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    usersId = serializers.IntegerField(required=True)
+    reason = serializers.CharField(allow_null=True, required=False)
+
+class ClassLiveDetailDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    status = serializers.IntegerField(allow_null=True, required=False)
+    startDate = serializers.DateTimeField(allow_null=True, required=False)
+    endDate = serializers.DateTimeField(allow_null=True, required=False)
+    totalStudents = serializers.IntegerField(allow_null=True, required=False)
+    avilableStudents = serializers.IntegerField(allow_null=True, required=False)
+    subStatus = serializers.IntegerField(allow_null=True, required=False)
+
+class ClassGetClassCurrentStatusQuerySerializer(RequestSerializer):
+    centerId = required_int()
+    teacherId = required_int()
+
+class ClassGetLiveClassDetailQuerySerializer(RequestSerializer):
+    classId = required_int()
+
+class ClassDeleteClassByTeacherIdQuerySerializer(RequestSerializer):
+    classId = required_int()
+
+class ClassSaveClassRequestSerializer(RequestSerializer):
     Id = optional_int()
     ClassEnrolmentId = optional_char()
     Name = required_char()
@@ -265,48 +315,7 @@ class ClassSaveClassRequestSerializer(RequestSerializer):
     AvilableStudents = required_int()
 
 
-class ClassCancelClassRequestSerializer(RequestSerializer):
-    Id = required_int()
-    Reason = required_char()
-    CancelBy = required_int()
-
-
-class ClassUpdateEndClassTimeRequestSerializer(RequestSerializer):
-    Id = required_int()
-
-
-class ClassUpdateClassSubStatusRequestSerializer(RequestSerializer):
-    Id = required_int()
-    SubStatus = optional_int()
-
-
-class ClassCancelClassByTeacherRequestSerializer(RequestSerializer):
-    foreign_key_fields = {"CenterId": Center}
-
-    Id = optional_int()
-    CenterId = required_int()
-    StartingDate = required_datetime()
-    EndingDate = required_datetime()
-    CreatedOn = optional_datetime()
-    UsersId = required_int()
-    Reason = optional_char()
-
-
-class ClassDeleteClassByTeacherIdQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"classId": ClassModel}
-    classId = required_int()
-
-
-class ClassGetClassCurrentStatusQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"centerId": Center, "teacherId": Teacher}
-    centerId = required_int()
-    teacherId = required_int()
-
-
-class ClassGetLiveClassDetailQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"classId": ClassModel}
-    classId = required_int()
-
+# DASHBOARD serializers ------------------------------------------------------------------------------------------------------------------------------
 
 class DashboardCenterDateRangeQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center}

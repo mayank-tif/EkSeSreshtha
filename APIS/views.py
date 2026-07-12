@@ -620,143 +620,414 @@ class CenterGettotalattendancecountofcenterGetView(APIView):
             )
 
 
-class ClassSaveclassPostView(ModelSaveView):
-    """Creates or updates a class and assigns default class identifiers/status."""
-    serializer_class = api_serializers.ClassSaveClassRequestSerializer
-    model = ClassModel
-    guid_field = "class_enrolment_id"
-    success_message = "Class save successfully"
+#---------------------------------------------------------
+# Class Views
+#---------------------------------------------------------
 
-    def post(self, request, *args, **kwargs):
-        data = self.validated_request_data
-        class_id = data.get("Id")
-        if class_id:
-            obj = ClassModel.objects.filter(pk=class_id).first()
-            if not obj:
-                return fail("Class not found", code=status.HTTP_404_NOT_FOUND)
-            obj.name = data["Name"]
-            obj.center_id = data["CenterId"]
-            obj.users_id = data["UserId"]
-            obj.total_students = data["TotalStudents"]
-            obj.avilable_students = data["AvilableStudents"]
-            obj.save()
-        else:
-            enrollment_id = data.get("ClassEnrolmentId") or str(uuid.uuid4())
-            # DAL allows one class per enrolment id, center, and day.
-            if ClassModel.objects.filter(class_enrolment_id=enrollment_id, center_id=data["CenterId"], started_date__date=now().date()).exists():
-                return fail("Class already exists", code=status.HTTP_409_CONFLICT)
-            obj = ClassModel.objects.create(
-                class_enrolment_id=enrollment_id,
-                name=data["Name"], center_id=data["CenterId"], users_id=data["UserId"],
-                total_students=data["TotalStudents"], avilable_students=data["AvilableStudents"],
-                started_date=now(), status=1, sub_status=0,
+class ClassSaveclassPostView(APIView):
+    """Saves a new class"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            serializer = api_serializers.ClassSaveClassRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            data = serializer.validated_data
+            class_data = {
+                'classEnrolmentId': data.get('ClassEnrolmentId') or str(uuid.uuid4()),
+                'name': data.get('Name'),
+                'centerId': data.get('CenterId'),
+                'userId': data.get('UserId'),
+                'totalStudents': data.get('TotalStudents'),
+                'avilableStudents': data.get('AvilableStudents')
+            }
+            
+            saved_class = save_class(class_data)
+            
+            if saved_class:
+                return Response(
+                    {
+                        "status": True,
+                        "data": saved_class,
+                        "message": "Class save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Class already exists",
+                        "code": status.HTTP_409_CONFLICT
+                    },
+                    status=status.HTTP_409_CONFLICT
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
             )
-        Center.objects.filter(pk=obj.center_id).update(class_status=True)
-        return ok(model_payload(obj), self.success_message)
 
+class ClassCancelclassPostView(APIView):
+    """Cancels a class"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : CancelClass : Started")
+            
+            serializer = api_serializers.CancelClassDtoSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            class_data = serializer.validated_data
+            result = cancel_class(class_data)
+            
+            if result:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Class canceled successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Class not canceled",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : CancelClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-class ClassCancelclassPostView(DotNetAPIView):
-    """Cancels a class by setting status, reason, cancel user, and cancel date."""
-    serializer_class = api_serializers.ClassCancelClassRequestSerializer
+class ClassUpdateendclasstimePostView(APIView):
+    """Updates end class time"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            serializer = api_serializers.EndClassDtoSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            class_id = serializer.validated_data.get('id')
+            result = update_end_class_time(class_id)
+            
+            if result:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Time updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Time not updated",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def post(self, request, *args, **kwargs):
-        class_id = request_value(request, "classId", "ClassId", "id", "Id")
-        obj = ClassModel.objects.filter(pk=class_id).first()
-        if not obj:
-            return fail("Class not canceled")
-        obj.status = 3
-        obj.reason = request_value(request, "reason", "Reason")
-        obj.cancel_by = to_int(request_value(request, "cancelBy", "CancelBy"), 0) or None
-        obj.cancel_date = now()
-        obj.save(update_fields=["status", "reason", "cancel_by", "cancel_date"])
-        return ok(message="Class canceled successfully")
+class ClassUpdateclasssubstatusPostView(APIView):
+    """Updates class sub status"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            serializer = api_serializers.UpdateClassSubStatusDtoSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            class_id = serializer.validated_data.get('id')
+            result = update_class_sub_status(class_id)
+            
+            if result:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Status updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Status not updated",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
+class ClassCancelclassbyteacherPostView(APIView):
+    """Cancel class by teacher"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            serializer = api_serializers.ClassCancelTeacherDtoSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            data = serializer.validated_data
+            result = cancel_class_by_teacher(data)
+            
+            if result:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Class cancelled",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Class not cancelled",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-class ClassUpdateendclasstimePostView(DotNetAPIView):
-    """Updates the end time for a class."""
-    serializer_class = api_serializers.ClassUpdateEndClassTimeRequestSerializer
+class ClassDeleteclassbyteacheridPostView(APIView):
+    """Delete class by teacher ID"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            serializer = api_serializers.ClassDeleteClassByTeacherIdQuerySerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            class_id = serializer.validated_data.get('classId')
+            result = delete_class_by_teacher_id(class_id)
+            
+            if result:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "class deleted",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "class not deleted",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def post(self, request, *args, **kwargs):
-        obj = get_by_id(ClassModel, request, "classId", "ClassId")
-        if not obj:
-            return fail("Time not updated")
-        obj.end_date = now()
-        obj.status = 2
-        obj.save(update_fields=["end_date", "status"])
-        # The DAL clears ActiveClassStatus for students that attended the
-        # centre when the class is completed.
-        attended_student_ids = StudentAttendance.objects.filter(center_id=obj.center_id).values_list("student_id", flat=True)
-        Student.objects.filter(center_id=obj.center_id, id__in=attended_student_ids).update(active_class_status=False)
-        return ok(message="Time updated")
+class ClassGetclasscurrentstatusGetView(APIView):
+    """Returns current class status"""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            serializer = api_serializers.ClassGetClassCurrentStatusQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            center_id = serializer.validated_data.get('centerId')
+            teacher_id = serializer.validated_data.get('teacherId')
+            
+            result = get_class_current_status(center_id, teacher_id)
+            
+            return Response(result, status=status.HTTP_200_OK)
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class ClassUpdateclasssubstatusPostView(DotNetAPIView):
-    """Updates the class sub-status value."""
-    serializer_class = api_serializers.ClassUpdateClassSubStatusRequestSerializer
-
-    def post(self, request, *args, **kwargs):
-        obj = get_by_id(ClassModel, request, "classId", "ClassId")
-        if not obj:
-            return fail("Status not updated")
-        obj.sub_status = 1
-        obj.save(update_fields=["sub_status"])
-        return ok(message="Status updated")
-
-
-class ClassCancelclassbyteacherPostView(ModelSaveView):
-    """Records a teacher-requested class cancellation."""
-    serializer_class = api_serializers.ClassCancelClassByTeacherRequestSerializer
-    model = ClassCancelByTeacher
-    success_message = "Class cancelled"
-
-
-class ClassDeleteclassbyteacheridPostView(DotNetAPIView):
-    """Deletes a class by class id for legacy API compatibility."""
-    serializer_class = api_serializers.ClassDeleteClassByTeacherIdQuerySerializer
-
-    def post(self, request, *args, **kwargs):
-        obj = get_by_id(ClassModel, request, "classId", "ClassId")
-        if not obj:
-            return fail("class  not deleted")
-        with transaction.atomic():
-            ClassCancelByTeacher.objects.filter(user_id=obj.users_id).delete()
-            StudentAttendance.objects.filter(class_obj=obj).delete()
-            obj.delete()
-        return ok(message="class deleted")
-
-
-class ClassGetclasscurrentstatusGetView(DotNetAPIView):
-    """Returns currently open classes for a center and optional teacher."""
-    serializer_class = api_serializers.ClassGetClassCurrentStatusQuerySerializer
-
-    def get(self, request, *args, **kwargs):
-        center_id = request_value(request, "centerId", "CenterId")
-        teacher_id = request_value(request, "teacherId", "TeacherId")
-        today = now().date()
-        data = []
-        holiday = Holidays.objects.filter(center_id=center_id, start_date__date__lte=today, end_date__date__gte=today).first()
-        if holiday:
-            data.append({"name": holiday.name, "type": 1, "startedDate": holiday.start_date, "endDate": holiday.end_date})
-        cancelled = ClassCancelByTeacher.objects.filter(user_id=teacher_id, starting_date__date__lte=today, ending_date__date__gte=today).first()
-        if cancelled:
-            data.append({"name": cancelled.reason, "type": 2, "startedDate": cancelled.starting_date, "endDate": cancelled.ending_date})
-        active = ClassModel.objects.filter(center_id=center_id, started_date__date=today, status=1).first()
-        if active:
-            data.append({"name": "Class is going on", "type": 3, "subStatus": active.sub_status, "id": active.id, "startedDate": active.started_date, "endDate": active.end_date})
-        completed = ClassModel.objects.filter(center_id=center_id, started_date__date=today, status=2).first()
-        if completed:
-            data.append({"name": "Class Ended", "type": 4, "id": completed.id, "startedDate": completed.started_date, "endDate": completed.end_date})
-        return Response({"data": data, "status": True})
-
-
-class ClassGetliveclassdetailGetView(ModelDetailView):
-    """Returns live class detail for a class id."""
-    serializer_class = api_serializers.ClassGetLiveClassDetailQuerySerializer
-    model = ClassModel
-    id_names = ("classId", "ClassId")
-    found_message = "class detail exists"
-    missing_message = "Class detail not exists"
-
+class ClassGetliveclassdetailGetView(APIView):
+    """Returns live class detail"""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            serializer = api_serializers.ClassGetLiveClassDetailQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            class_id = serializer.validated_data.get('classId')
+            class_data = get_live_class_detail(class_id)
+            
+            if class_data:
+                response_serializer = api_serializers.ClassLiveDetailDtoSerializer(class_data)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "class detail exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Class detail not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveClass : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class DistrictGetalldistrictGetView(ModelListView):
     """Lists districts with optional offset/limit pagination."""
