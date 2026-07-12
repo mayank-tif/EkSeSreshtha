@@ -799,6 +799,115 @@ def update_center_active_or_deactive(center_log_data):
     except Exception as e:
         logger.error(f"CenterRepository : UpdateCenterActiveOrDeactive : {str(e)}")
         raise e
+    
+def save_center(center_data):
+    """Save or update center with full .NET logic"""
+    logger.info(f"CenterRepository : SaveCenter : Started")
+    
+    try:
+        center_id = center_data.get('Id', 0)
+        
+        with connection.cursor() as cursor:
+            if center_id > 0:
+                # Update existing center
+                # Get existing values to preserve
+                select_sql = "SELECT Status, ClassStatus FROM Center WHERE Id = %s"
+                cursor.execute(select_sql, [center_id])
+                existing = cursor.fetchone()
+                
+                if existing:
+                    update_fields = []
+                    update_values = []
+                    
+                    for key, value in center_data.items():
+                        if key != 'Id' and value is not None:
+                            column_name = {
+                                'CenterName': 'CenterName',
+                                'AssignedTeachers': 'AssignedTeachers',
+                                'AssignedRegionalAdmin': 'AssignedRegionalAdmin',
+                                'StartedDate': 'StartedDate',
+                                'VidhanSabhaId': 'VidhanSabhaId',
+                                'DistrictId': 'DistrictId',
+                                'PanchayatId': 'PanchayatId',
+                                'VillageId': 'VillageId'
+                            }.get(key, key)
+                            
+                            update_fields.append(f"{column_name} = %s")
+                            update_values.append(value)
+                    
+                    # Preserve existing Status and ClassStatus
+                    update_fields.append("Status = %s")
+                    update_values.append(existing[0])
+                    
+                    update_fields.append("ClassStatus = %s")
+                    update_values.append(existing[1])
+                    
+                    update_values.append(center_id)
+                    sql = f"UPDATE Center SET {', '.join(update_fields)} WHERE Id = %s"
+                    cursor.execute(sql, update_values)
+            else:
+                # Insert new center
+                created_date = datetime.now()
+                
+                columns = ['Status', 'ClassStatus', 'CreatedDate']
+                values = [1, 0, created_date]
+                
+                field_mapping = {
+                    'CenterGuidId': 'CenterGuidId',
+                    'CenterName': 'CenterName',
+                    'AssignedTeachers': 'AssignedTeachers',
+                    'AssignedRegionalAdmin': 'AssignedRegionalAdmin',
+                    'StartedDate': 'StartedDate',
+                    'VidhanSabhaId': 'VidhanSabhaId',
+                    'DistrictId': 'DistrictId',
+                    'PanchayatId': 'PanchayatId',
+                    'VillageId': 'VillageId'
+                }
+                
+                for key, column in field_mapping.items():
+                    if key in center_data and center_data[key] is not None:
+                        columns.append(column)
+                        values.append(center_data[key])
+                
+                placeholders = ', '.join(['%s'] * len(columns))
+                sql = f"INSERT INTO Center ({', '.join(columns)}) VALUES ({placeholders})"
+                cursor.execute(sql, values)
+                
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                center_id = cursor.fetchone()[0]
+                
+                # Update assigned teacher status
+                assigned_teacher = center_data.get('AssignedTeachers')
+                assigned_regional_admin = center_data.get('AssignedRegionalAdmin')
+                
+                if assigned_teacher:
+                    update_user_sql = "UPDATE Users SET AssignedTeacherStatus = 1, AssignedRegionalAdminStatus = 1 WHERE Id = %s"
+                    cursor.execute(update_user_sql, [assigned_teacher])
+                
+                if assigned_regional_admin:
+                    update_user_sql = "UPDATE Users SET AssignedTeacherStatus = 1, AssignedRegionalAdminStatus = 1 WHERE Id = %s"
+                    cursor.execute(update_user_sql, [assigned_regional_admin])
+                
+                # Save history of user assign
+                if assigned_teacher:
+                    insert_assign_sql = """
+                        INSERT INTO CenterAssignUser (CenterId, UsersId, Date)
+                        VALUES (%s, %s, %s)
+                    """
+                    cursor.execute(insert_assign_sql, [center_id, assigned_teacher, datetime.now()])
+                
+                if assigned_regional_admin:
+                    insert_assign_sql = """
+                        INSERT INTO CenterAssignUser (CenterId, UsersId, Date)
+                        VALUES (%s, %s, %s)
+                    """
+                    cursor.execute(insert_assign_sql, [center_id, assigned_regional_admin, datetime.now()])
+        
+        return get_center_by_id(center_id)
+        
+    except Exception as e:
+        logger.error(f"CenterRepository : SaveCenter : {str(e)}")
+        raise e
 
 
 # TECHERS SECTION ----------------------------------------------------------

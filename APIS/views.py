@@ -281,13 +281,66 @@ class AnnouncementGetannouncementGetView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+#---------------------------------------------------------
+# Center Views
+#---------------------------------------------------------
 
-class CenterSavecenterPostView(ModelSaveView):
+class CenterSavecenterPostView(APIView):
     """Saves or updates a center and creates a guid when needed."""
-    serializer_class = api_serializers.CenterSaveCenterRequestSerializer
-    model = Center
-    guid_field = "center_guid_id"
-    success_message = "Center save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : LoginSuperAdmin : Started")
+            
+            serializer = api_serializers.CenterSaveCenterRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            center_data = serializer.validated_data
+            
+            # Generate CenterGuidId if not provided
+            if not center_data.get('CenterGuidId'):
+                center_data['CenterGuidId'] = str(uuid.uuid4())
+            
+            saved_center = save_center(center_data)
+            
+            if saved_center:
+                return Response(
+                    {
+                        "status": True,
+                        "data": saved_center,
+                        "message": "Center save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Center doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveCenter : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class CommonCheckusermobilenumberPostView(CenterSavecenterPostView):
