@@ -1094,8 +1094,60 @@ class TeacherDtoSerializer(serializers.Serializer):
 class LoginRequestSerializer(LoginSerializer):
     pass
 
+
+# RegionalAdmin Serializers
+class RegionalAdminSaveRegionalAdminRequestSerializer(RequestSerializer):
+    foreign_key_fields = {
+        "VidhanSabhaId": VidhanSabha,
+        "DistrictId": District,
+        "PanchayatId": Panchayat,
+        "CenterId": Center,
+        "VillageId": Village,
+    }
+    
+    Id = optional_int()
+    RegionalAdminGuidId = optional_char()
+    FullName = required_char()
+    Age = optional_int()
+    Gender = required_char()
+    DateOfBirth = optional_char()
+    PhoneNumber = required_char()
+    WhatsApp = optional_char()
+    Email = optional_char()
+    Status = optional_bool()
+    RoleId = optional_int()
+    Picture = optional_char()
+    Password = required_char()
+    FullAddress = optional_char()
+    Education = optional_char()
+    VidhanSabhaId = optional_int()
+    DistrictId = optional_int()
+    PanchayatId = optional_int()
+    CenterId = optional_int()
+    VillageId = optional_int()
+    Type = optional_int()
+    Contact = optional_char()
+
+class RegionalAdminLoginRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True)
+    password = serializers.CharField(required=True)
+
 class RegionalAdminDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
-    name = serializers.CharField(allow_null=True, required=False)
-    profile = serializers.CharField(allow_null=True, required=False)
-
+    regionalAdminGuidId = serializers.CharField(allow_null=True, required=False)
+    fullName = serializers.CharField(allow_null=True, required=False)
+    age = serializers.IntegerField(allow_null=True, required=False)
+    gender = serializers.CharField(allow_null=True, required=False)
+    dateOfBirth = serializers.CharField(allow_null=True, required=False)
+    phoneNumber = serializers.CharField(allow_null=True, required=False)
+    whatsApp = serializers.CharField(allow_null=True, required=False)
+    email = serializers.CharField(allow_null=True, required=False)
+    contact = serializers.CharField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    roleId = serializers.IntegerField(allow_null=True, required=False)
+    picture = serializers.CharField(allow_null=True, required=False)
+    lastLoginTime = serializers.CharField(allow_null=True, required=False)
+    password = serializers.CharField(allow_null=True, required=False)
+    fullAddress = serializers.CharField(allow_null=True, required=False)
+    type = serializers.IntegerField(allow_null=True, required=False)
+    token = serializers.CharField(allow_null=True, required=False)

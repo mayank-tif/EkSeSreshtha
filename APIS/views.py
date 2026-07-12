@@ -101,33 +101,6 @@ class GenerateAppTokenView(TokenObtainPairView):
         return Response({"access_token": str(token)}, status=status.HTTP_200_OK)
 
 
-# class LoginAPIView(DotNetAPIView):
-#     """Authenticates a user, teacher, or regional admin using the hashed password flow."""
-#     permission_classes = [AllowAny]
-#     authentication_classes = []
-#     serializer_class = LoginSerializer
-
-#     def post(self, request, *args, **kwargs):
-#         logger.info("LoginAPIView started")
-#         validate_app_and_device_with_token(request)
-#         serializer = self.serializer_class(data=request.data)
-#         serializer.is_valid(raise_exception=True)
-#         mobile_number = serializer.validated_data["mobileNumber"]
-#         password = hash_password(serializer.validated_data["password"])
-#         logger.info("Attempting login for mobile number: %s", mobile_number, password)
-
-#         account = User.objects.filter(phone_number=mobile_number, password=password).first()
-#         if account:
-#             return login_response(account, "super_admin", mobile_number)
-#         account = Teacher.objects.filter(phone_number=mobile_number, password=password).first()
-#         if account:
-#             return login_response(account, "teacher", mobile_number)
-#         account = RegionalAdmin.objects.filter(phone_number=mobile_number, password=password).first()
-#         if account:
-#             return login_response(account, "regional_admin", mobile_number)
-#         return fail("invalid credential", code=status.HTTP_404_NOT_FOUND)
-
-
 class ModelSaveView(DotNetAPIView):
     """Generic class-based create/update view for simple model-backed POST endpoints."""
     model = None
@@ -3568,33 +3541,164 @@ class TeacherSaveteacherPostView(APIView):
             )
 
 
-class RegionaladminGetallregionaladminGetView(ModelListView):
+#---------------------------------------------------------
+# RegionalAdmin Views
+#---------------------------------------------------------
+
+class RegionaladminGetallregionaladminGetView(APIView):
     """Lists all regional admin records."""
-    model = RegionalAdmin
-    message = "List of regional admins"
+    
+    def get(self, request):
+        try:
+            logger.info("RegionalAdminController : GetAllMasterAdmin : Started")
+            
+            regional_admins = get_all_regional_admins()
+            
+            if regional_admins is not None and len(regional_admins) > 0:
+                response_serializer = api_serializers.RegionalAdminDtoSerializer(regional_admins, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of regional admins",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "List of regional admins not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"RegionalAdminController : GetAllRegionalAdmin : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-
-class RegionaladminLoginregionaladminPostView(DotNetAPIView):
+class RegionaladminLoginregionaladminPostView(APIView):
     """Authenticates a regional admin using hashed password comparison."""
-    serializer_class = api_serializers.LoginRequestSerializer
     permission_classes = [AllowAny]
     authentication_classes = []
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : LoginRegionalAdmin : Started")
+            
+            name = request.data.get('name')
+            password = request.data.get('password')
+            
+            if not name or not password:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Name and password are required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            regional_admin = login_regional_admin(name, password)
+            
+            if regional_admin:
+                return Response(
+                    {
+                        "status": True,
+                        "data": regional_admin,
+                        "message": "Regional admin Login successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Regional admin doesn't exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : LoginRegionalAdmin : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def post(self, request, *args, **kwargs):
-        mobile = request_value(request, "mobileNumber", "MobileNumber")
-        password = hash_password(request_value(request, "password", "Password"))
-        admin = RegionalAdmin.objects.filter(phone_number=mobile, password=password).first()
-        if admin:
-            return login_response(admin, "regional_admin", mobile)
-        return fail("invalid credential", code=status.HTTP_404_NOT_FOUND)
-
-
-class RegionaladminSaveregionaladminPostView(ModelSaveView):
+class RegionaladminSaveregionaladminPostView(APIView):
     """Saves a regional admin record with hashed password storage."""
-    serializer_class = api_serializers.RegionalAdminSaveRegionalAdminRequestSerializer
-    model = RegionalAdmin
-    guid_field = "regional_admin_guid_id"
-    success_message = "RegionalAdmin save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("RegionalAdminController : SaveRegionalAdmin : Started")
+            
+            serializer = api_serializers.RegionalAdminSaveRegionalAdminRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            regional_admin_data = serializer.validated_data
+            
+            # Hash password
+            if regional_admin_data.get('Password'):
+                regional_admin_data['Password'] = hash_password(regional_admin_data['Password'])
+            
+            saved_regional_admin = save_regional_admin(regional_admin_data)
+            
+            if saved_regional_admin:
+                response_serializer = api_serializers.RegionalAdminDtoSerializer(saved_regional_admin)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Regional admin save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Regional admin doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"RegionalAdminController : SaveRegionalAdmin : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
 
 class FileSendnotificationPostView(DotNetAPIView):

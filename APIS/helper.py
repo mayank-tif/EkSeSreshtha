@@ -4488,3 +4488,188 @@ def check_village_name(name):
     except Exception as e:
         logger.error(f"VillageRepository : CheckVillageName : {str(e)}")
         raise e
+    
+#---------------------------------------------------------
+# RegionalAdmin APIs Helper Functions
+#---------------------------------------------------------
+
+def get_all_regional_admins():
+    """Get all regional admins"""
+    logger.info(f"RegionalAdminRepository : GetAllRegionalAdmin : Started")
+    
+    try:
+        sql = """
+            SELECT 
+                Id, RegionalAdminGuidId, FullName, Age, Gender, DateOfBirth,
+                PhoneNumber, WhatsApp, Email, Contact, Status, RoleId,
+                Picture, LastLoginTime, Password, FullAddress, Type, Token,
+                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
+                CreatedOn, CreatedBy
+            FROM RegionalAdmin
+            ORDER BY Id
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"RegionalAdminRepository : GetAllRegionalAdmin : {str(e)}")
+        raise e
+
+def login_regional_admin(name, password):
+    """Login regional admin by name and password"""
+    logger.info(f"RegionalAdminRepository : LoginRegionalAdmin : Started")
+    
+    try:
+        hashed_password = hash_password(password)
+        
+        sql = """
+            SELECT 
+                Id, RegionalAdminGuidId, FullName, Age, Gender, DateOfBirth,
+                PhoneNumber, WhatsApp, Email, Contact, Status, RoleId,
+                Picture, LastLoginTime, Password, FullAddress, Type, Token,
+                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
+                CreatedOn, CreatedBy
+            FROM RegionalAdmin
+            WHERE FullName = %s AND Password = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [name, hashed_password])
+            row = cursor.fetchone()
+            
+            if row:
+                columns = [col[0] for col in cursor.description]
+                regional_admin_dict = dict(zip(columns, row))
+                
+                # Generate token
+                token = AccessToken()
+                token['regional_admin_id'] = regional_admin_dict.get('Id')
+                token['regional_admin_name'] = regional_admin_dict.get('FullName')
+                token.set_exp(lifetime=timedelta(days=30))
+                regional_admin_dict['Token'] = str(token)
+                
+                return regional_admin_dict
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"RegionalAdminRepository : LoginRegionalAdmin : {str(e)}")
+        raise e
+
+def save_regional_admin(regional_admin_data):
+    """Save or update regional admin"""
+    logger.info(f"RegionalAdminRepository : SaveRegionalAdmin : Started")
+    
+    try:
+        regional_admin_id = regional_admin_data.get('Id', 0)
+        
+        if regional_admin_id > 0:
+            update_fields = []
+            update_values = []
+            
+            for key, value in regional_admin_data.items():
+                if key != 'Id' and value is not None:
+                    column_name = {
+                        'FullName': 'FullName',
+                        'Age': 'Age',
+                        'Gender': 'Gender',
+                        'DateOfBirth': 'DateOfBirth',
+                        'PhoneNumber': 'PhoneNumber',
+                        'WhatsApp': 'WhatsApp',
+                        'Email': 'Email',
+                        'Contact': 'Contact',
+                        'Status': 'Status',
+                        'RoleId': 'RoleId',
+                        'Picture': 'Picture',
+                        'Password': 'Password',
+                        'FullAddress': 'FullAddress',
+                        'Type': 'Type',
+                        'VidhanSabhaId': 'VidhanSabhaId',
+                        'DistrictId': 'DistrictId',
+                        'PanchayatId': 'PanchayatId',
+                        'CenterId': 'CenterId',
+                        'VillageId': 'VillageId'
+                    }.get(key, key)
+                    
+                    update_fields.append(f"{column_name} = %s")
+                    update_values.append(value)
+            
+            if update_fields:
+                update_values.append(regional_admin_id)
+                sql = f"UPDATE RegionalAdmin SET {', '.join(update_fields)} WHERE Id = %s"
+                with connection.cursor() as cursor:
+                    cursor.execute(sql, update_values)
+        else:
+            regional_admin_guid = str(uuid.uuid4())
+            created_on = datetime.now()
+            
+            columns = ['RegionalAdminGuidId', 'Type', 'CreatedOn']
+            values = [regional_admin_guid, 2, created_on]
+            
+            field_mapping = {
+                'FullName': 'FullName',
+                'Age': 'Age',
+                'Gender': 'Gender',
+                'DateOfBirth': 'DateOfBirth',
+                'PhoneNumber': 'PhoneNumber',
+                'WhatsApp': 'WhatsApp',
+                'Email': 'Email',
+                'Contact': 'Contact',
+                'Status': 'Status',
+                'RoleId': 'RoleId',
+                'Picture': 'Picture',
+                'Password': 'Password',
+                'FullAddress': 'FullAddress',
+                'VidhanSabhaId': 'VidhanSabhaId',
+                'DistrictId': 'DistrictId',
+                'PanchayatId': 'PanchayatId',
+                'CenterId': 'CenterId',
+                'VillageId': 'VillageId'
+            }
+            
+            for key, column in field_mapping.items():
+                if key in regional_admin_data and regional_admin_data[key] is not None:
+                    columns.append(column)
+                    values.append(regional_admin_data[key])
+            
+            placeholders = ', '.join(['%s'] * len(columns))
+            sql = f"INSERT INTO RegionalAdmin ({', '.join(columns)}) VALUES ({placeholders})"
+            with connection.cursor() as cursor:
+                cursor.execute(sql, values)
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                regional_admin_id = cursor.fetchone()[0]
+        
+        return get_regional_admin_by_id(regional_admin_id)
+        
+    except Exception as e:
+        logger.error(f"RegionalAdminRepository : SaveRegionalAdmin : {str(e)}")
+        raise e
+
+def get_regional_admin_by_id(regional_admin_id):
+    """Get regional admin by ID"""
+    try:
+        sql = """
+            SELECT 
+                Id, RegionalAdminGuidId, FullName, Age, Gender, DateOfBirth,
+                PhoneNumber, WhatsApp, Email, Contact, Status, RoleId,
+                Picture, LastLoginTime, Password, FullAddress, Type, Token,
+                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
+                CreatedOn, CreatedBy
+            FROM RegionalAdmin
+            WHERE Id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [regional_admin_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.error(f"RegionalAdminRepository : get_regional_admin_by_id : {str(e)}")
+        raise e
