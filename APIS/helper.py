@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from django.db.models import OuterRef, Subquery, Count
@@ -1905,6 +1906,861 @@ def check_district_name(name):
         raise e
 
 #---------------------------------------------------------
+
+#---------------------------------------------------------
+# Dashboard APIs Helper Functions
+#---------------------------------------------------------
+
+def get_class_count_by_month(center_id, start_date, end_date):
+    """Get class count by month for a center"""
+    logger.info(f"DashboardRepository : GetClassCountByMonth : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Get class count
+            class_sql = """
+                SELECT COUNT(*) 
+                FROM Class 
+                WHERE CenterId = %s 
+                AND DATE(StartedDate) >= %s 
+                AND DATE(EndDate) <= %s
+            """
+            cursor.execute(class_sql, [center_id, start_date.date(), end_date.date()])
+            class_count = cursor.fetchone()[0] or 0
+            
+            # Get holiday count
+            holiday_sql = """
+                SELECT COUNT(*) 
+                FROM Holidays 
+                WHERE CenterId = %s 
+                AND DATE(StartDate) >= %s 
+                AND DATE(EndDate) >= %s
+            """
+            cursor.execute(holiday_sql, [center_id, start_date.date(), end_date.date()])
+            holiday_count = cursor.fetchone()[0] or 0
+            
+            # Get class cancel by teacher count
+            cancel_sql = """
+                SELECT COUNT(*) 
+                FROM ClassCancelByTeacher 
+                WHERE CenterId = %s 
+                AND DATE(StartingDate) >= %s 
+                AND DATE(EndingDate) >= %s
+            """
+            cursor.execute(cancel_sql, [center_id, start_date.date(), end_date.date()])
+            cancel_count = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "data": [
+                    {
+                        "holidayCount": holiday_count,
+                        "classCount": class_count,
+                        "classCancelTeacherCount": cancel_count
+                    }
+                ]
+            }
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetClassCountByMonth : {str(e)}")
+        raise e
+
+def get_total_gender_ratio_by_center_id(center_id, start_date, end_date):
+    """Get total gender ratio by center ID"""
+    logger.info(f"DashboardRepository : GetTotalGenderRatioByCenterId : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Get total students
+            total_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s 
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+            """
+            cursor.execute(total_sql, [center_id, start_date.date(), end_date.date()])
+            total_students = cursor.fetchone()[0] or 0
+            
+            # Get female students
+            female_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s 
+                AND Gender = 'FeMale'
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+            """
+            cursor.execute(female_sql, [center_id, start_date.date(), end_date.date()])
+            female_count = cursor.fetchone()[0] or 0
+            
+            # Get male students
+            male_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s 
+                AND Gender = 'Male'
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+            """
+            cursor.execute(male_sql, [center_id, start_date.date(), end_date.date()])
+            male_count = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "data": [
+                    {
+                        "feMaleCount": female_count,
+                        "maleCount": male_count,
+                        "totalStudentCount": total_students
+                    }
+                ]
+            }
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalGenderRatioByCenterId : {str(e)}")
+        raise e
+
+def get_total_student_of_class(center_id, start_date, end_date):
+    """Get total student of class by center"""
+    logger.info(f"DashboardRepository : GetTotalStudentOfClass : Started")
+    
+    list_of_existing_grade = ["UKG", "LKG", "Pre Nursery", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"]
+    
+    try:
+        with connection.cursor() as cursor:
+            # Get students grouped by grade
+            student_sql = """
+                SELECT 
+                    Grade,
+                    COUNT(*) as Total,
+                    SUM(CASE WHEN Gender = 'FeMale' THEN 1 ELSE 0 END) as FeMaleCount,
+                    SUM(CASE WHEN Gender = 'Male' THEN 1 ELSE 0 END) as MaleCount
+                FROM Student
+                WHERE CenterId = %s 
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+                GROUP BY Grade
+                ORDER BY Grade
+            """
+            cursor.execute(student_sql, [center_id, start_date.date(), end_date.date()])
+            rows = cursor.fetchall()
+            
+            # Get total students
+            total_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s
+            """
+            cursor.execute(total_sql, [center_id])
+            total_students = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "totalStudents": total_students,
+                "data": []
+            }
+            
+            grade_list = []
+            for row in rows:
+                grade = row[0]
+                grade_list.append(grade)
+                result["data"].append({
+                    "grade": grade,
+                    "feMaleCount": row[2] or 0,
+                    "maleCount": row[3] or 0,
+                    "totalStudentCount": row[1] or 0
+                })
+            
+            # If no data, add all grades with 0
+            if len(rows) == 0:
+                for grade in list_of_existing_grade:
+                    result["data"].append({
+                        "grade": grade,
+                        "feMaleCount": 0,
+                        "maleCount": 0,
+                        "totalStudentCount": 0
+                    })
+            else:
+                # Add missing grades with 0
+                list_not_in_db = [g for g in list_of_existing_grade if g not in grade_list]
+                for grade in list_not_in_db:
+                    result["data"].append({
+                        "grade": grade,
+                        "feMaleCount": 0,
+                        "maleCount": 0,
+                        "totalStudentCount": 0
+                    })
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalStudentOfClass : {str(e)}")
+        raise e
+
+def get_center_detail_by_month(center_id, month, year):
+    """Get center detail by month and year"""
+    logger.info(f"DashboardRepository : GetCenterDetailByMonth : Started")
+    
+    try:
+        start_date = datetime(year, month, 1)
+        end_date = start_date.replace(day=1, month=start_date.month + 1) - timedelta(days=1)
+        
+        result = {
+            "status": True,
+            "data": []
+        }
+        
+        with connection.cursor() as cursor:
+            i = 0
+            current_date = start_date
+            
+            while current_date <= end_date:
+                data = {
+                    "date": current_date.strftime('%Y-%m-%d'),
+                    "type": i + 1,
+                    "detail": []
+                }
+                
+                if i == 0:
+                    data["detail"].append({
+                        "class": "Class1",
+                        "classId": 1,
+                        "startedDate": "2023-11-20",
+                        "endDate": "2023-11-20",
+                        "totalStudent": 25
+                    })
+                elif i == 1:
+                    data["detail"].append({
+                        "holidayName": "Holiday",
+                        "startDate": "2023-11-20",
+                        "endDate": "2023-11-20"
+                    })
+                elif i == 2:
+                    data["detail"].append({
+                        "classCancelBy": "Cancel by teacher",
+                        "reason": "Cancel by teacher",
+                        "startingDate": "2023-11-20",
+                        "endingDate": "2023-11-20"
+                    })
+                elif i == 3:
+                    data["detail"].append({
+                        "reason": "Center deactivate",
+                        "cancelBy": "Cancel by admin"
+                    })
+                else:
+                    data["detail"].append({
+                        "reason": "Upcoming"
+                    })
+                
+                result["data"].append(data)
+                current_date += timedelta(days=1)
+                i += 1
+        
+        return json.dumps(result)
+        
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetCenterDetailByMonth : {str(e)}")
+        raise e
+
+def get_total_bpl(center_id, start_date, end_date):
+    """Get total BPL students by center"""
+    logger.info(f"DashboardRepository : GetTotalBpl : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Get total BPL students
+            bpl_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s 
+                AND Bpl = 1
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+            """
+            cursor.execute(bpl_sql, [center_id, start_date.date(), end_date.date()])
+            bpl_count = cursor.fetchone()[0] or 0
+            
+            # Get female BPL students
+            female_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s 
+                AND Bpl = 1
+                AND Gender = 'FeMale'
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+            """
+            cursor.execute(female_sql, [center_id, start_date.date(), end_date.date()])
+            female_count = cursor.fetchone()[0] or 0
+            
+            # Get male BPL students
+            male_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s 
+                AND Bpl = 1
+                AND Gender = 'Male'
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+            """
+            cursor.execute(male_sql, [center_id, start_date.date(), end_date.date()])
+            male_count = cursor.fetchone()[0] or 0
+            
+            # Get total students
+            total_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s
+            """
+            cursor.execute(total_sql, [center_id])
+            total_students = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "totalStudents": total_students,
+                "data": [
+                    {
+                        "feMaleCount": female_count,
+                        "maleCount": male_count,
+                        "totalBplStudents": bpl_count
+                    }
+                ]
+            }
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalBpl : {str(e)}")
+        raise e
+
+def get_total_student_category_of_class(center_id, start_date, end_date):
+    """Get total student category of class"""
+    logger.info(f"DashboardRepository : GetTotalStudentCategoryOfClass : Started")
+    
+    categories = ["General", "OBC", "SC", "ST", "EWS", "Others"]
+    
+    try:
+        with connection.cursor() as cursor:
+            # Get students grouped by category
+            category_sql = """
+                SELECT 
+                    Category,
+                    COUNT(*) as Total
+                FROM Student
+                WHERE CenterId = %s 
+                AND DATE(CreatedOn) >= %s 
+                AND DATE(CreatedOn) <= %s
+                GROUP BY Category
+                ORDER BY Category
+            """
+            cursor.execute(category_sql, [center_id, start_date.date(), end_date.date()])
+            rows = cursor.fetchall()
+            
+            # Create dict for quick lookup
+            category_dict = {}
+            for row in rows:
+                category_dict[row[0]] = row[1]
+            
+            # Get total students
+            total_sql = """
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE CenterId = %s
+            """
+            cursor.execute(total_sql, [center_id])
+            total_students = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "totalStudents": total_students,
+                "data": []
+            }
+            
+            for category in categories:
+                result["data"].append({
+                    "category": category,
+                    "totalStudentCount": category_dict.get(category, 0)
+                })
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalStudentCategoryOfClass : {str(e)}")
+        raise e
+
+def get_user_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
+    """Get user by filter"""
+    logger.info(f"DashboardRepository : GetUserByFilter : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Build WHERE clause
+            where_conditions = [
+                "DATE(CreatedOn) >= %s",
+                "DATE(CreatedOn) <= %s",
+                "DistrictId = %s"
+            ]
+            params = [start_date.date(), end_date.date(), district_id]
+            
+            if vidhan_sabha_id:
+                where_conditions.append("(VidhanSabhaId IS NULL OR VidhanSabhaId = %s)")
+                params.append(vidhan_sabha_id)
+            if panchayta_id:
+                where_conditions.append("(PanchayatId IS NULL OR PanchayatId = %s)")
+                params.append(panchayta_id)
+            if village_id:
+                where_conditions.append("(VillageId IS NULL OR VillageId = %s)")
+                params.append(village_id)
+            
+            where_clause = " AND ".join(where_conditions)
+            
+            # Get users count
+            user_sql = f"""
+                SELECT COUNT(*) 
+                FROM Users 
+                WHERE {where_clause}
+            """
+            cursor.execute(user_sql, params)
+            user_count = cursor.fetchone()[0] or 0
+            
+            # Get centers count
+            center_where = where_clause.replace("DATE(CreatedOn)", "DATE(StartedDate)")
+            center_sql = f"""
+                SELECT COUNT(*) 
+                FROM Center 
+                WHERE {center_where}
+            """
+            cursor.execute(center_sql, params)
+            center_count = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "teacherCount": user_count,
+                "centerCount": center_count
+            }
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetUserByFilter : {str(e)}")
+        raise e
+
+def get_total_bpl_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
+    """Get total BPL by filter"""
+    logger.info(f"DashboardRepository : GetTotalBplByFilter : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Build WHERE clause
+            where_conditions = [
+                "DATE(CreatedOn) >= %s",
+                "DATE(CreatedOn) <= %s",
+                "Bpl = 1",
+                "DistrictId = %s"
+            ]
+            params = [start_date.date(), end_date.date(), district_id]
+            
+            if vidhan_sabha_id:
+                where_conditions.append("(VidhanSabhaId IS NULL OR VidhanSabhaId = %s)")
+                params.append(vidhan_sabha_id)
+            if panchayta_id:
+                where_conditions.append("(PanchayatId IS NULL OR PanchayatId = %s)")
+                params.append(panchayta_id)
+            if village_id:
+                where_conditions.append("(VillageId IS NULL OR VillageId = %s)")
+                params.append(village_id)
+            
+            where_clause = " AND ".join(where_conditions)
+            
+            # Get total BPL students
+            bpl_sql = f"""
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE {where_clause}
+            """
+            cursor.execute(bpl_sql, params)
+            bpl_count = cursor.fetchone()[0] or 0
+            
+            # Get female BPL students
+            female_params = params.copy()
+            female_sql = f"""
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE {where_clause} AND Gender = 'FeMale'
+            """
+            cursor.execute(female_sql, female_params)
+            female_count = cursor.fetchone()[0] or 0
+            
+            # Get male BPL students
+            male_sql = f"""
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE {where_clause} AND Gender = 'Male'
+            """
+            cursor.execute(male_sql, params)
+            male_count = cursor.fetchone()[0] or 0
+            
+            # Get total students
+            total_where = where_clause.replace("Bpl = 1 AND ", "")
+            total_sql = f"""
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE {total_where}
+            """
+            cursor.execute(total_sql, params[:3] + params[4:])
+            total_students = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "totalStudents": total_students,
+                "data": [
+                    {
+                        "feMaleCount": female_count,
+                        "maleCount": male_count,
+                        "totalBplStudents": bpl_count
+                    }
+                ]
+            }
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalBplByFilter : {str(e)}")
+        raise e
+
+def get_total_gender_ratio_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
+    """Get total gender ratio by filter"""
+    logger.info(f"DashboardRepository : GetTotalGenderRatioByFilter : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Build WHERE clause
+            where_conditions = [
+                "DATE(CreatedOn) >= %s",
+                "DATE(CreatedOn) <= %s",
+                "DistrictId = %s"
+            ]
+            params = [start_date.date(), end_date.date(), district_id]
+            
+            if vidhan_sabha_id:
+                where_conditions.append("(VidhanSabhaId IS NULL OR VidhanSabhaId = %s)")
+                params.append(vidhan_sabha_id)
+            if panchayta_id:
+                where_conditions.append("(PanchayatId IS NULL OR PanchayatId = %s)")
+                params.append(panchayta_id)
+            if village_id:
+                where_conditions.append("(VillageId IS NULL OR VillageId = %s)")
+                params.append(village_id)
+            
+            where_clause = " AND ".join(where_conditions)
+            
+            # Get total students
+            total_sql = f"""
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE {where_clause}
+            """
+            cursor.execute(total_sql, params)
+            total_students = cursor.fetchone()[0] or 0
+            
+            # Get female students
+            female_sql = f"""
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE {where_clause} AND Gender = 'FeMale'
+            """
+            cursor.execute(female_sql, params)
+            female_count = cursor.fetchone()[0] or 0
+            
+            # Get male students
+            male_sql = f"""
+                SELECT COUNT(*) 
+                FROM Student 
+                WHERE {where_clause} AND Gender = 'Male'
+            """
+            cursor.execute(male_sql, params)
+            male_count = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "data": [
+                    {
+                        "feMaleCount": female_count,
+                        "maleCount": male_count,
+                        "totalStudentCount": total_students
+                    }
+                ]
+            }
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalGenderRatioByFilter : {str(e)}")
+        raise e
+
+def get_total_student_category_of_class_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
+    """Get total student category of class by filter"""
+    logger.info(f"DashboardRepository : GetTotalStudentCategoryOfClassByFilter : Started")
+    
+    categories = ["General", "OBC", "SC", "ST", "EWS", "Others"]
+    
+    try:
+        with connection.cursor() as cursor:
+            # Build WHERE clause
+            where_conditions = [
+                "DATE(CreatedOn) >= %s",
+                "DATE(CreatedOn) <= %s",
+                "DistrictId = %s"
+            ]
+            params = [start_date.date(), end_date.date(), district_id]
+            
+            if vidhan_sabha_id:
+                where_conditions.append("(VidhanSabhaId IS NULL OR VidhanSabhaId = %s)")
+                params.append(vidhan_sabha_id)
+            if panchayta_id:
+                where_conditions.append("(PanchayatId IS NULL OR PanchayatId = %s)")
+                params.append(panchayta_id)
+            if village_id:
+                where_conditions.append("(VillageId IS NULL OR VillageId = %s)")
+                params.append(village_id)
+            
+            where_clause = " AND ".join(where_conditions)
+            
+            # Get students grouped by category
+            category_sql = f"""
+                SELECT 
+                    Category,
+                    COUNT(*) as Total
+                FROM Student
+                WHERE {where_clause}
+                GROUP BY Category
+                ORDER BY Category
+            """
+            cursor.execute(category_sql, params)
+            rows = cursor.fetchall()
+            
+            # Create dict for quick lookup
+            category_dict = {}
+            for row in rows:
+                category_dict[row[0]] = row[1]
+            
+            result = {
+                "status": True,
+                "data": []
+            }
+            
+            for category in categories:
+                result["data"].append({
+                    "category": category,
+                    "totalStudentCount": category_dict.get(category, 0)
+                })
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalStudentCategoryOfClassByFilter : {str(e)}")
+        raise e
+
+def get_total_student_grade_of_class_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
+    """Get total student grade of class by filter"""
+    logger.info(f"DashboardRepository : GetTotalStudenGradetOfClassByFilter : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Build WHERE clause
+            where_conditions = [
+                "DATE(CreatedOn) >= %s",
+                "DATE(CreatedOn) <= %s",
+                "DistrictId = %s"
+            ]
+            params = [start_date.date(), end_date.date(), district_id]
+            
+            if vidhan_sabha_id:
+                where_conditions.append("(VidhanSabhaId IS NULL OR VidhanSabhaId = %s)")
+                params.append(vidhan_sabha_id)
+            if panchayta_id:
+                where_conditions.append("(PanchayatId IS NULL OR PanchayatId = %s)")
+                params.append(panchayta_id)
+            if village_id:
+                where_conditions.append("(VillageId IS NULL OR VillageId = %s)")
+                params.append(village_id)
+            
+            where_clause = " AND ".join(where_conditions)
+            
+            # Get students grouped by grade
+            grade_sql = f"""
+                SELECT 
+                    Grade,
+                    COUNT(*) as Total,
+                    SUM(CASE WHEN Gender = 'FeMale' THEN 1 ELSE 0 END) as FeMaleCount,
+                    SUM(CASE WHEN Gender = 'Male' THEN 1 ELSE 0 END) as MaleCount
+                FROM Student
+                WHERE {where_clause}
+                GROUP BY Grade
+                ORDER BY Grade
+            """
+            cursor.execute(grade_sql, params)
+            rows = cursor.fetchall()
+            
+            result = {
+                "status": True,
+                "data": []
+            }
+            
+            for row in rows:
+                result["data"].append({
+                    "grade": row[0],
+                    "feMaleCount": row[2] or 0,
+                    "maleCount": row[3] or 0,
+                    "totalStudentCount": row[1] or 0
+                })
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetTotalStudenGradetOfClassByFilter : {str(e)}")
+        raise e
+
+def get_district_of_center_by_filter(district_id, vidhan_sabha_id, start_date, end_date):
+    """Get district of center by filter"""
+    logger.info(f"DashboardRepository : GetDistrictOfCenterByFilter : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Get total centers
+            total_sql = """
+                SELECT COUNT(*) 
+                FROM Center 
+                WHERE DATE(StartedDate) >= %s 
+                AND DATE(StartedDate) <= %s
+            """
+            cursor.execute(total_sql, [start_date.date(), end_date.date()])
+            total_centers = cursor.fetchone()[0] or 0
+            
+            result = {
+                "status": True,
+                "totalCenters": total_centers,
+                "data": []
+            }
+            
+            if district_id == 0 and vidhan_sabha_id == 0:
+                # Get centers grouped by district
+                center_sql = """
+                    SELECT 
+                        DistrictId,
+                        COUNT(*) as TotalCenterCount
+                    FROM Center
+                    WHERE DATE(StartedDate) >= %s 
+                    AND DATE(StartedDate) <= %s
+                    GROUP BY DistrictId
+                    ORDER BY DistrictId
+                """
+                cursor.execute(center_sql, [start_date.date(), end_date.date()])
+                rows = cursor.fetchall()
+                
+                # Get districts
+                district_sql = "SELECT Id, Name FROM District"
+                cursor.execute(district_sql)
+                districts = cursor.fetchall()
+                district_dict = {d[0]: d[1] for d in districts}
+                
+                for row in rows:
+                    result["data"].append({
+                        "districtId": row[0],
+                        "districtName": district_dict.get(row[0]),
+                        "totalCenterCount": row[1]
+                    })
+                    
+            elif district_id != 0 and vidhan_sabha_id != 0:
+                # Get centers by district and vidhan sabha
+                center_sql = """
+                    SELECT COUNT(*) 
+                    FROM Center 
+                    WHERE DistrictId = %s 
+                    AND VidhanSabhaId = %s
+                    AND DATE(StartedDate) >= %s 
+                    AND DATE(StartedDate) <= %s
+                """
+                cursor.execute(center_sql, [district_id, vidhan_sabha_id, start_date.date(), end_date.date()])
+                center_count = cursor.fetchone()[0] or 0
+                
+                # Get district name
+                dist_sql = "SELECT Name FROM District WHERE Id = %s"
+                cursor.execute(dist_sql, [district_id])
+                dist_row = cursor.fetchone()
+                district_name = dist_row[0] if dist_row else None
+                
+                result["totalCenterCount"] = center_count
+                result["districtName"] = district_name
+                result["vidhanSabhaName"] = district_name
+                result["districtId"] = district_id
+                result["vidhanSabhaId"] = vidhan_sabha_id
+                
+            elif district_id != 0:
+                # Get centers by district
+                center_sql = """
+                    SELECT 
+                        COUNT(*) as TotalCenterCount
+                    FROM Center 
+                    WHERE DistrictId = %s 
+                    AND DATE(StartedDate) >= %s 
+                    AND DATE(StartedDate) <= %s
+                """
+                cursor.execute(center_sql, [district_id, start_date.date(), end_date.date()])
+                row = cursor.fetchone()
+                
+                if row:
+                    # Get district name
+                    dist_sql = "SELECT Name FROM District WHERE Id = %s"
+                    cursor.execute(dist_sql, [district_id])
+                    dist_row = cursor.fetchone()
+                    district_name = dist_row[0] if dist_row else None
+                    
+                    result["data"].append({
+                        "districtName": district_name,
+                        "districtId": district_id,
+                        "totalCenterCount": row[0] or 0
+                    })
+            
+            return json.dumps(result)
+            
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetDistrictOfCenterByFilter : {str(e)}")
+        raise e
+
+def get_student_attendance_by_percentage():
+    """Get student attendance by percentage"""
+    logger.info(f"DashboardRepository : GetStudentAttendanceByPercentage : Started")
+    
+    try:
+        result = {
+            "data": [
+                {
+                    "tenPercentage": 10,
+                    "twentyPercentage": 20,
+                    "thrityPercentage": 30,
+                    "fourtyPercentage": 40,
+                    "fiftyPercentage": 50,
+                    "sixtyPercentage": 60,
+                    "seventyPercentage": 70,
+                    "eightyPercentage": 80,
+                    "nintyPercentage": 90,
+                    "hunderedPercentage": 100
+                }
+            ],
+            "totalStudent": 100
+        }
+        
+        return json.dumps(result)
+        
+    except Exception as e:
+        logger.error(f"DashboardRepository : GetStudentAttendanceByPercentage : {str(e)}")
+        raise e
 
 #---------------------------------------------------------
 

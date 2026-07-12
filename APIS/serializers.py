@@ -316,21 +316,20 @@ class ClassSaveClassRequestSerializer(RequestSerializer):
 
 
 # DASHBOARD serializers ------------------------------------------------------------------------------------------------------------------------------
-
 class DashboardCenterDateRangeQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center}
     centerId = optional_int()
     startDate = optional_datetime()
     endDate = optional_datetime()
 
-
+    
 class DashboardGetCenterDetailByMonthQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center}
     centerId = optional_int()
     month = optional_int()
     year = optional_int()
 
-
+    
 class DashboardFilterQuerySerializer(RequestSerializer):
     foreign_key_fields = {
         "districtId": District,
@@ -346,16 +345,15 @@ class DashboardFilterQuerySerializer(RequestSerializer):
     startDate = optional_datetime()
     endDate = optional_datetime()
 
-
 class DashboardDistrictOfCenterByFilterQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"districtId": District, "vidhanSabhaId": VidhanSabha}
     districtId = optional_int()
     vidhanSabhaId = optional_int()
     startDate = optional_datetime()
     endDate = optional_datetime()
 
 
-# District Serializers
+
+# District Serializers ---------------------------------------------------------------------------------------------------------------------
 class DistrictSaveDistrictRequestSerializer(RequestSerializer):
     Id = optional_int()
     DistrictGuidId = optional_char()

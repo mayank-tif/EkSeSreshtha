@@ -2137,137 +2137,435 @@ class FileUploadprofileimagePostView(DotNetAPIView):
         return ok(uploaded, "File uploaded successfully")
 
 
-class DashboardGetclasscountbymonthGetView(DotNetAPIView):
+#---------------------------------------------------------
+# Dashboard Views
+#---------------------------------------------------------
+
+class DashboardGetclasscountbymonthGetView(APIView):
     """Returns class counts grouped by started month."""
-    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetAllVillage : Started")
+            
+            center_id = request.query_params.get('centerId')
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not center_id or not start_date or not end_date:
+                return Response(
+                    {"error": "centerId, startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_class_count_by_month(int(center_id), start_date, end_date)
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetClassCountByMonth : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        queryset = ClassModel.objects.all()
-        queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
-        data = queryset.values("started_date__month").annotate(total=Count("id")).order_by("started_date__month")
-        return ok(list(data), "Class count")
-
-
-class DashboardGettotalgenterratiobycenteridGetView(DotNetAPIView):
+class DashboardGettotalgenterratiobycenteridGetView(APIView):
     """Returns student gender counts for a center."""
-    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetAllVillage : Started")
+            
+            center_id = request.query_params.get('centerId')
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not center_id or not start_date or not end_date:
+                return Response(
+                    {"error": "centerId, startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_gender_ratio_by_center_id(int(center_id), start_date, end_date)
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalGenterRatioByCenterId : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        queryset = Student.objects.all()
-        queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
-        return ok(list(queryset.values("gender").annotate(total=Count("id"))), "Gender ratio")
-
-
-class DashboardGettotalstudentofclassGetView(DotNetAPIView):
+class DashboardGettotalstudentofclassGetView(APIView):
     """Returns total students for a center."""
-    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetTotalStudentOfClass : Started")
+            
+            center_id = request.query_params.get('centerId')
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not center_id or not start_date or not end_date:
+                return Response(
+                    {"error": "centerId, startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_student_of_class(int(center_id), start_date, end_date)
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalStudentOfClass : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        center_id = request_value(request, "centerId", "CenterId")
-        return ok({"total": Student.objects.filter(center_id=center_id).count()}, "Total students")
-
-
-class DashboardGetcenterdetailbymonthGetView(DotNetAPIView):
+class DashboardGetcenterdetailbymonthGetView(APIView):
     """Returns center details with class and student counts."""
-    serializer_class = api_serializers.DashboardGetCenterDetailByMonthQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            
+            center_id = request.query_params.get('centerId')
+            month = request.query_params.get('month')
+            year = request.query_params.get('year')
+            
+            if not center_id or not month or not year:
+                return Response(
+                    {"error": "centerId, month and year are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            result = get_center_detail_by_month(int(center_id), int(month), int(year))
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetCenterDetailByMonth : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        center = get_by_id(Center, request, "centerId", "CenterId")
-        data = model_payload(center) if center else {}
-        if center:
-            data["class_count"] = ClassModel.objects.filter(center=center).count()
-            data["student_count"] = Student.objects.filter(center=center).count()
-        return ok(data, "Center detail")
-
-
-class DashboardGettotalbplGetView(DotNetAPIView):
+class DashboardGettotalbplGetView(APIView):
     """Returns total BPL students for optional center filter."""
-    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetTotalBpl : Started")
+            
+            center_id = request.query_params.get('centerId')
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not center_id or not start_date or not end_date:
+                return Response(
+                    {"error": "centerId, startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_bpl(int(center_id), start_date, end_date)
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalBpl : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        queryset = Student.objects.filter(bpl=True)
-        queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
-        return ok({"total": queryset.count()}, "Total BPL")
-
-
-class DashboardGettotalstudentcategoryofclassGetView(DotNetAPIView):
+class DashboardGettotalstudentcategoryofclassGetView(APIView):
     """Returns student category counts for optional center filter."""
-    serializer_class = api_serializers.DashboardCenterDateRangeQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetTotalBpl : Started")
+            
+            center_id = request.query_params.get('centerId')
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not center_id or not start_date or not end_date:
+                return Response(
+                    {"error": "centerId, startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_student_category_of_class(int(center_id), start_date, end_date)
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalStudentCategoryOfClass : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        queryset = Student.objects.all()
-        queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
-        return ok(list(queryset.values("category").annotate(total=Count("id"))), "Student category")
-
-
-class DashboardGetuserbyfilterGetView(ModelListView):
+class DashboardGetuserbyfilterGetView(APIView):
     """Lists students matching dashboard location filters."""
-    serializer_class = api_serializers.DashboardFilterQuerySerializer
-    model = Student
-    message = "Users by filter"
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            
+            district_id = request.query_params.get('districtId', 0)
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
+            panchayta_id = request.query_params.get('panchaytaId', 0)
+            village_id = request.query_params.get('villageId', 0)
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not start_date or not end_date:
+                return Response(
+                    {"error": "startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_user_by_filter(
+                int(district_id), int(vidhan_sabha_id), 
+                int(panchayta_id), int(village_id), 
+                start_date, end_date
+            )
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetUserByFilter : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        queryset = Student.objects.all()
-        queryset = filter_if_present(queryset, request, "district_id", "districtId", "DistrictId")
-        queryset = filter_if_present(queryset, request, "vidhan_sabha_id", "vidhanSabhaId", "VidhanSabhaId")
-        queryset = filter_if_present(queryset, request, "panchayat_id", "panchaytaId", "panchayatId", "PanchayatId")
-        queryset = filter_if_present(queryset, request, "village_id", "villageId", "VillageId")
-        return queryset
-
-
-class DashboardGettotalbplbyfilterGetView(DashboardGetuserbyfilterGetView):
+class DashboardGettotalbplbyfilterGetView(APIView):
     """Returns BPL count for dashboard location filters."""
-    serializer_class = api_serializers.DashboardFilterQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            
+            district_id = request.query_params.get('districtId', 0)
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
+            panchayta_id = request.query_params.get('panchaytaId', 0)
+            village_id = request.query_params.get('villageId', 0)
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not start_date or not end_date:
+                return Response(
+                    {"error": "startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_bpl_by_filter(
+                int(district_id), int(vidhan_sabha_id), 
+                int(panchayta_id), int(village_id), 
+                start_date, end_date
+            )
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalBplByFilter : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        return ok({"total": self.get_queryset(request).filter(bpl=True).count()}, "Total BPL")
-
-
-class DashboardGettotalgenderratiobyfilterGetView(DashboardGetuserbyfilterGetView):
+class DashboardGettotalgenderratiobyfilterGetView(APIView):
     """Returns gender counts for dashboard location filters."""
-    serializer_class = api_serializers.DashboardFilterQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            
+            district_id = request.query_params.get('districtId', 0)
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
+            panchayta_id = request.query_params.get('panchaytaId', 0)
+            village_id = request.query_params.get('villageId', 0)
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not start_date or not end_date:
+                return Response(
+                    {"error": "startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_gender_ratio_by_filter(
+                int(district_id), int(vidhan_sabha_id), 
+                int(panchayta_id), int(village_id), 
+                start_date, end_date
+            )
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalGenderRatioByFilter : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        return ok(list(self.get_queryset(request).values("gender").annotate(total=Count("id"))), "Gender ratio")
-
-
-class DashboardGettotalstudentcategoryofclassbyfilterGetView(DashboardGetuserbyfilterGetView):
+class DashboardGettotalstudentcategoryofclassbyfilterGetView(APIView):
     """Returns category counts for dashboard location filters."""
-    serializer_class = api_serializers.DashboardFilterQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            
+            district_id = request.query_params.get('districtId', 0)
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
+            panchayta_id = request.query_params.get('panchaytaId', 0)
+            village_id = request.query_params.get('villageId', 0)
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not start_date or not end_date:
+                return Response(
+                    {"error": "startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_student_category_of_class_by_filter(
+                int(district_id), int(vidhan_sabha_id), 
+                int(panchayta_id), int(village_id), 
+                start_date, end_date
+            )
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalStudentCategoryOfClassByFilter : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        return ok(list(self.get_queryset(request).values("category").annotate(total=Count("id"))), "Student category")
-
-
-class DashboardGettotalstudengradeofclassbyfilterGetView(DashboardGetuserbyfilterGetView):
+class DashboardGettotalstudengradeofclassbyfilterGetView(APIView):
     """Returns grade counts for dashboard location filters."""
-    serializer_class = api_serializers.DashboardFilterQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            
+            district_id = request.query_params.get('districtId', 0)
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
+            panchayta_id = request.query_params.get('panchaytaId', 0)
+            village_id = request.query_params.get('villageId', 0)
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not start_date or not end_date:
+                return Response(
+                    {"error": "startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_total_student_grade_of_class_by_filter(
+                int(district_id), int(vidhan_sabha_id), 
+                int(panchayta_id), int(village_id), 
+                start_date, end_date
+            )
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetTotalStudenGradetOfClassByFilter : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        return ok(list(self.get_queryset(request).values("grade").annotate(total=Count("id"))), "Student grade")
-
-
-class DashboardGetdistrictofcenterbyfilterGetView(ModelListView):
+class DashboardGetdistrictofcenterbyfilterGetView(APIView):
     """Lists centers matching district and Vidhan Sabha dashboard filters."""
-    serializer_class = api_serializers.DashboardDistrictOfCenterByFilterQuerySerializer
-    model = Center
-    message = "District of center"
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            
+            district_id = request.query_params.get('districtId', 0)
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            if not start_date or not end_date:
+                return Response(
+                    {"error": "startDate and endDate are required"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            start_date = parse_any_datetime(start_date)
+            end_date = parse_any_datetime(end_date)
+            
+            result = get_district_of_center_by_filter(
+                int(district_id), int(vidhan_sabha_id), 
+                start_date, end_date
+            )
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetDistrictOfCenterByFilter : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        queryset = Center.objects.all()
-        queryset = filter_if_present(queryset, request, "district_id", "districtId", "DistrictId")
-        queryset = filter_if_present(queryset, request, "vidhan_sabha_id", "vidhanSabhaId", "VidhanSabhaId")
-        return queryset
-
-
-class DashboardGetstudentattendancebypercentageGetView(DotNetAPIView):
+class DashboardGetstudentattendancebypercentageGetView(APIView):
     """Returns overall attendance percentage across students."""
-    def get(self, request, *args, **kwargs):
-        total_students = Student.objects.count()
-        present = StudentAttendance.objects.values("student_id").distinct().count()
-        percentage = (present / total_students * 100) if total_students else 0
-        return ok({"percentage": percentage, "present": present, "totalStudents": total_students}, "Attendance percentage")
-
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetStudentAttendanceByPercentage : Started")
+            
+            result = get_student_attendance_by_percentage()
+            
+            return Response(json.loads(result), status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"DashboardController : GetStudentAttendanceByPercentage : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class WeatherforecastGetView(DotNetAPIView):
     """Keeps the default .NET WeatherForecast sample route available."""
