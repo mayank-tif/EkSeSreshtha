@@ -23,22 +23,6 @@ class GenerateAppTokenSerializer(serializers.Serializer):
     deviceid = serializers.CharField(max_length=250, required=True, allow_blank=False)
 
 
-class LoginSerializer(serializers.Serializer):
-    mobileNumber = serializers.CharField(max_length=15, required=False, allow_blank=False)
-    mobile_number = serializers.CharField(max_length=15, required=False, allow_blank=False, write_only=True)
-    password = serializers.CharField(required=True, allow_blank=False, trim_whitespace=False)
-
-    def validate(self, attrs):
-        mobile_number = attrs.get("mobileNumber") or attrs.get("mobile_number")
-        if not mobile_number:
-            raise serializers.ValidationError({"mobileNumber": "Mobile number is required."})
-        attrs["mobileNumber"] = mobile_number
-
-        if not attrs.get("password"):
-            raise serializers.ValidationError({"password": "Password is required."})
-
-        return attrs
-
 
 def format_dotnet_datetime(value):
     if not value:
@@ -424,8 +408,7 @@ class HolidaysGetAllHolidaysQuerySerializer(RequestSerializer):
     status = optional_int()
     userId = optional_int()
 
-class HolidaysDeleteHolidayByIdQuerySerializer(RequestSerializer):
-    id = required_int()
+
 
 class HolidaysDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
@@ -645,26 +628,6 @@ class StudentAttendanceByMonthQuerySerializer(StudentAttendanceCenterQuerySerial
     month = required_int()
     year = required_int()
 
-class StudentAttendanceDetailDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    enrollmentId = serializers.CharField(allow_null=True, required=False)
-    fullName = serializers.CharField(allow_null=True, required=False)
-    attendanceStatus = serializers.CharField(allow_null=True, required=False)
-    averageAttendance = serializers.DecimalField(allow_null=True, required=False, max_digits=10, decimal_places=2)
-    date = serializers.DateTimeField(allow_null=True, required=False)
-
-class StudentAbsentClassDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField(allow_null=True, required=False)
-    enrollmentId = serializers.CharField(allow_null=True, required=False)
-    profileImage = serializers.CharField(allow_null=True, required=False)
-    manualAttendance = serializers.IntegerField(allow_null=True, required=False)
-
-class StudentAttendanceMonthDetailDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    fullName = serializers.CharField(allow_null=True, required=False)
-    attendanceStatus = serializers.CharField(allow_null=True, required=False)
-    date = serializers.DateTimeField(allow_null=True, required=False)
     
 # School Serializers
 class SchoolSaveSchoolRequestSerializer(RequestSerializer):
@@ -760,8 +723,20 @@ class UserGetAllTeachersQuerySerializer(serializers.Serializer):
 
 # User serializers
 class LoginSerializer(serializers.Serializer):
-    mobileNumber = serializers.CharField(required=True)
-    password = serializers.CharField(required=True)
+    mobileNumber = serializers.CharField(max_length=15, required=False, allow_blank=False)
+    mobile_number = serializers.CharField(max_length=15, required=False, allow_blank=False, write_only=True)
+    password = serializers.CharField(required=True, allow_blank=False, trim_whitespace=False)
+
+    def validate(self, attrs):
+        mobile_number = attrs.get("mobileNumber") or attrs.get("mobile_number")
+        if not mobile_number:
+            raise serializers.ValidationError({"mobileNumber": "Mobile number is required."})
+        attrs["mobileNumber"] = mobile_number
+
+        if not attrs.get("password"):
+            raise serializers.ValidationError({"password": "Password is required."})
+
+        return attrs
     
 class UserLoginResponseSerializer(serializers.ModelSerializer):
     enrolmentRollId = serializers.CharField(source="enrolment_roll_id", allow_null=True)
@@ -883,47 +858,6 @@ class UserLoginResponseSerializer(serializers.ModelSerializer):
 class UserDeviceDtoSerializer(serializers.Serializer):
     userId = serializers.IntegerField(required=True)
     deviceId = serializers.CharField(required=True)
-
-class UserSaveSuperAdminRequestSerializer(RequestSerializer):
-    Id = optional_int()
-    EnrolmentRollId = optional_char()
-    Name = required_char()
-    Password = required_char()
-    Token = optional_char()
-    Email = optional_char()
-    Type = required_int()
-    Age = optional_int()
-    Gender = required_char()
-    Contact = optional_char()
-    Status = optional_bool()
-    DateOfBirth = required_char()
-    PhoneNumber = required_char()
-    Picture = optional_char()
-    WhatsApp = optional_char()
-    LastLoginTime = optional_char()
-    FullAddress = optional_char()
-    RoleId = optional_int()
-    CreatedOn = optional_datetime()
-    EnrollmentDate = optional_datetime()
-    CreatedBy = required_int()
-
-class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
-    foreign_key_fields = {
-        "VidhanSabhaId": VidhanSabha,
-        "DistrictId": District,
-        "VillageId": Village,
-    }
-    DeviceId = optional_char()
-    Education = optional_char()
-    VidhanSabhaId = optional_int()
-    DistrictId = optional_int()
-    VillageId = optional_int()
-    AssignedTeacherStatus = optional_bool()
-    AssignedRegionalAdminStatus = optional_bool()
-    GuardianName = optional_char()
-    GuardianNumber = optional_char()
-    ListOfPanchayatIds = serializers.ListField(child=serializers.IntegerField(), required=False)
-    WhatsApp = required_char()
 
 class UserUpdatePasswordQuerySerializer(RequestSerializer):
     userId = required_int()
