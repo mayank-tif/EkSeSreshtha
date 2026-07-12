@@ -1029,19 +1029,118 @@ class ClassGetliveclassdetailGetView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class DistrictGetalldistrictGetView(ModelListView):
+#---------------------------------------------------------
+# District Views
+#---------------------------------------------------------
+
+class DistrictGetalldistrictGetView(APIView):
     """Lists districts with optional offset/limit pagination."""
-    serializer_class = api_serializers.PaginationQuerySerializer
-    model = District
-    message = "List of district"
+    
+    def get(self, request):
+        try:
+            logger.info("DistrictController : GetAllDistrict : Started")
+            
+            serializer = api_serializers.PaginationQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            offset = serializer.validated_data.get('offset', 0)
+            limit = serializer.validated_data.get('limit', 0)
+            
+            districts = get_all_districts(offset, limit)
+            
+            if districts is not None and len(districts) > 0:
+                response_serializer = api_serializers.DistrictDtoSerializer(districts, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "message": "List of district",
+                        "data": response_serializer.data,
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "List of district not found",
+                        "data": None,
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"DistrictController : GetAllDistrict : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class DistrictSavedistrictPostView(ModelSaveView):
+class DistrictSavedistrictPostView(APIView):
     """Saves or updates a district and creates a guid when needed."""
-    serializer_class = api_serializers.DistrictSaveDistrictRequestSerializer
-    model = District
-    guid_field = "district_guid_id"
-    success_message = "District save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("DistrictController : SaveDistrict : Started")
+            
+            serializer = api_serializers.DistrictSaveDistrictRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            district_data = serializer.validated_data
+            saved_district = save_district(district_data)
+            
+            if saved_district:
+                response_serializer = api_serializers.DistrictDtoSerializer(saved_district)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "District save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "District doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"DistrictController : SaveDistrict : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class VidhansabhaGetallvidhansabhaGetView(ModelListView):

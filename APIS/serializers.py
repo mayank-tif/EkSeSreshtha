@@ -355,6 +355,7 @@ class DashboardDistrictOfCenterByFilterQuerySerializer(RequestSerializer):
     endDate = optional_datetime()
 
 
+# District Serializers
 class DistrictSaveDistrictRequestSerializer(RequestSerializer):
     Id = optional_int()
     DistrictGuidId = optional_char()
@@ -362,6 +363,18 @@ class DistrictSaveDistrictRequestSerializer(RequestSerializer):
     Status = optional_bool()
     CreatedOn = optional_datetime()
     CreatedBy = optional_int()
+
+class DistrictDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    districtGuidId = serializers.CharField(allow_null=True, required=False)
+    name = serializers.CharField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    createdBy = serializers.IntegerField(allow_null=True, required=False)
+
+class PaginationQuerySerializer(RequestSerializer):
+    offset = optional_int()
+    limit = optional_int()
 
 
 class FileSendNotificationRequestSerializer(RequestSerializer):
