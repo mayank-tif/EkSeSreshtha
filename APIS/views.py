@@ -1143,38 +1143,211 @@ class DistrictSavedistrictPostView(APIView):
             )
 
 
-class VidhansabhaGetallvidhansabhaGetView(ModelListView):
+#---------------------------------------------------------
+# VidhanSabha Views
+#---------------------------------------------------------
+
+class VidhansabhaGetallvidhansabhaGetView(APIView):
     """Lists Vidhan Sabha records with optional pagination."""
-    serializer_class = api_serializers.PaginationQuerySerializer
-    model = VidhanSabha
-    message = "List of vidhanSabha"
+    
+    def get(self, request):
+        try:
+            logger.info("VidhanSabhaController : GetAllVidhanSabha : Started")
+            
+            offset = request.query_params.get('offset', 0)
+            limit = request.query_params.get('limit', 0)
+            
+            vidhan_sabhas = get_all_vidhan_sabhas(int(offset), int(limit))
+            
+            if vidhan_sabhas is not None and len(vidhan_sabhas) > 0:
+                response_serializer = api_serializers.VidhanSabhaDtoSerializer(vidhan_sabhas, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "message": "List of vidhanSabha",
+                        "data": response_serializer.data,
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "List of vidhanSabha not found",
+                        "data": None,
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"VidhanSabhaController : GetAllVidhanSabha : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class VidhansabhaSavevidhansabhaPostView(ModelSaveView):
+class VidhansabhaSavevidhansabhaPostView(APIView):
     """Saves or updates a Vidhan Sabha record."""
-    serializer_class = api_serializers.VidhanSabhaSaveVidhanSabhaRequestSerializer
-    model = VidhanSabha
-    guid_field = "vidhan_sabha_guid_id"
-    success_message = "VidanSabha save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("VidhanSabhaController : SaveVidhanSabha : Started")
+            
+            serializer = api_serializers.VidhanSabhaSaveVidhanSabhaRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            vidhan_sabha_data = serializer.validated_data
+            saved_vidhan_sabha = save_vidhan_sabha(vidhan_sabha_data)
+            
+            if saved_vidhan_sabha:
+                response_serializer = api_serializers.VidhanSabhaDtoSerializer(saved_vidhan_sabha)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "VidanSabha save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "VidanSabha doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"VidhanSabhaController : SaveVidhanSabha : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class VidhansabhaGetvidhansabhabydistrictidGetView(ModelListView):
+class VidhansabhaGetvidhansabhabydistrictidGetView(APIView):
     """Lists Vidhan Sabha records for a district."""
-    serializer_class = api_serializers.VidhanSabhaByDistrictIdQuerySerializer
-    model = VidhanSabha
-    message = "VidanSabha exists"
+    
+    def get(self, request):
+        try:
+            logger.info("VidhanSabhaController : GetVidhanSabhaByDistrictId : Started")
+            
+            district_id = request.query_params.get('districtId')
+            if not district_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "districtId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            vidhan_sabha = get_vidhan_sabha_by_district_id(int(district_id))
+            
+            if vidhan_sabha:
+                response_serializer = api_serializers.VidhanSabhaDtoSerializer(vidhan_sabha)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "VidanSabha exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "VidanSabha not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"VidhanSabhaController : GetVidhanSabhaByDistrictId : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_500_INTERNAL_SERVER_ERROR
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-    def get_queryset(self, request):
-        return VidhanSabha.objects.filter(district_id=request_value(request, "districtId", "DistrictId"))
-
-
-class VidhansabhaCheckvidhansabhanamePostView(NameExistsView):
+class VidhansabhaCheckvidhansabhanamePostView(APIView):
     """Checks whether a Vidhan Sabha name already exists."""
-    serializer_class = api_serializers.NameCheckQuerySerializer
-    model = VidhanSabha
-    exists_message = "VidhanSabha name already exists"
-    missing_message = "VidhanSabha name doesn't exists"
-
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : CheckVidhanSabhaName : Started")
+            
+            name = request.data.get('name')
+            if not name:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "name is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            exists = check_vidhan_sabha_name(name)
+            
+            if exists:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "VidhanSabha name already exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "VidhanSabha name doesn't exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : CheckVidhanSabhaName : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 #---------------------------------------------------------
 # Panchayat Views
@@ -1387,41 +1560,216 @@ class PanchayatCheckpanchayatnamePostView(APIView):
             )
 
 
-class VillageGetallvillageGetView(ModelListView):
+#---------------------------------------------------------
+# Village Views
+#---------------------------------------------------------
+
+class VillageGetallvillageGetView(APIView):
     """Lists villages with optional pagination."""
-    serializer_class = api_serializers.PaginationQuerySerializer
-    model = Village
-    message = "List of village"
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetAllVillage : Started")
+            
+            offset = request.query_params.get('offset', 0)
+            limit = request.query_params.get('limit', 0)
+            
+            villages = get_all_villages(int(offset), int(limit))
+            
+            if villages is not None and len(villages) > 0:
+                response_serializer = api_serializers.VillageDtoSerializer(villages, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "message": "List of villages",
+                        "data": response_serializer.data,
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "List of villages not found",
+                        "data": None,
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"VillageController : GetAllVillage : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class VillageSavevillagePostView(ModelSaveView):
+class VillageSavevillagePostView(APIView):
     """Saves or updates a village record."""
-    serializer_class = api_serializers.VillageSaveVillageRequestSerializer
-    model = Village
-    guid_field = "village_guid_id"
-    success_message = "Village save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("VillageController : SaveVillage : Started")
+            
+            serializer = api_serializers.VillageSaveVillageRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            village_data = serializer.validated_data
+            saved_village = save_village(village_data)
+            
+            if saved_village:
+                response_serializer = api_serializers.VillageDtoSerializer(saved_village)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Village save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Village doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"VillageController : SaveVillage : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(ModelListView):
+class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(APIView):
     """Lists villages by district, Vidhan Sabha, and panchayat."""
-    serializer_class = api_serializers.VillageByDistrictVidhanSabhaAndPanchayatQuerySerializer
-    model = Village
-    message = "Village exists"
+    
+    def get(self, request):
+        try:
+            logger.info("VillageController : GetVillageByDistrictVidhanSabhaAndPanchId : Started")
+            
+            district_id = request.query_params.get('districtId')
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId')
+            panchayat_id = request.query_params.get('panchayatId')
+            
+            if not district_id or not vidhan_sabha_id or not panchayat_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "districtId, vidhanSabhaId and panchayatId are required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            village = get_village_by_district_vidhan_sabha_and_panchayat(
+                int(district_id), int(vidhan_sabha_id), int(panchayat_id)
+            )
+            
+            if village:
+                response_serializer = api_serializers.VillageDtoSerializer(village)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Village exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Village not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"VillageController : GetVillageByDistrictVidhanSabhaAndPanchId : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        return Village.objects.filter(
-            district_id=request_value(request, "districtId", "DistrictId"),
-            vidhan_sabha_id=request_value(request, "vidhanSabhaId", "VidhanSabhaId"),
-            panchayat_id=request_value(request, "panchayatId", "PanchayatId"),
-        )
-
-
-class VillageCheckvillagenamePostView(NameExistsView):
+class VillageCheckvillagenamePostView(APIView):
     """Checks whether a village name already exists."""
-    serializer_class = api_serializers.NameCheckQuerySerializer
-    model = Village
-    exists_message = "Village name already exists"
-    missing_message = "Village name doesn't exists"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : CheckVillageName : Started")
+            
+            name = request.data.get('name')
+            if not name:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "name is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            exists = check_village_name(name)
+            
+            if exists:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Village name already exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": True,
+                        "error": "Village name doesn't exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : CheckVillageName : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 #---------------------------------------------------------
@@ -3102,27 +3450,122 @@ class UserSearchDataView(APIView):
             )
 
 
-class TeacherLoginteacherPostView(DotNetAPIView):
-    """Authenticates a teacher using SHA-256 hashed password comparison."""
-    serializer_class = api_serializers.LoginRequestSerializer
+#---------------------------------------------------------
+# Teacher Views
+#---------------------------------------------------------
+
+class TeacherLoginteacherPostView(APIView):
+    """Authenticates a teacher using hashed password comparison."""
     permission_classes = [AllowAny]
     authentication_classes = []
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : LoginSuperAdmin : Started")
+            
+            name = request.data.get('name')
+            password = request.data.get('password')
+            
+            if not name or not password:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Name and password are required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            teacher = login_teacher(name, password)
+            
+            if teacher:
+                return Response(
+                    {
+                        "status": True,
+                        "data": teacher,
+                        "message": "Teacher Login successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Teacher doesn't exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : LoginTeacher : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def post(self, request, *args, **kwargs):
-        mobile = request_value(request, "mobileNumber", "MobileNumber")
-        password = hash_password(request_value(request, "password", "Password"))
-        teacher = Teacher.objects.filter(phone_number=mobile, password=password).first()
-        if teacher:
-            return login_response(teacher, "teacher", mobile)
-        return fail("invalid credential", code=status.HTTP_404_NOT_FOUND)
-
-
-class TeacherSaveteacherPostView(ModelSaveView):
+class TeacherSaveteacherPostView(APIView):
     """Saves a teacher record with hashed password storage."""
-    serializer_class = api_serializers.TeacherSaveTeacherRequestSerializer
-    model = Teacher
-    guid_field = "teacher_guid_id"
-    success_message = "Teacher save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : LoginSuperAdmin : Started")
+            
+            serializer = api_serializers.TeacherSaveTeacherRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            teacher_data = serializer.validated_data
+            
+            # Hash password
+            if teacher_data.get('Password'):
+                teacher_data['Password'] = hash_password(teacher_data['Password'])
+            
+            saved_teacher = save_teacher(teacher_data)
+            
+            if saved_teacher:
+                response_serializer = api_serializers.TeacherDtoSerializer(saved_teacher)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Teacher save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Teacher doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveTeacher : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
 
 class RegionaladminGetallregionaladminGetView(ModelListView):
@@ -3604,19 +4047,37 @@ class DashboardGetstudentattendancebypercentageGetView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class WeatherforecastGetView(DotNetAPIView):
+#---------------------------------------------------------
+# WeatherForecast Views
+#---------------------------------------------------------
+
+class WeatherforecastGetView(APIView):
     """Keeps the default .NET WeatherForecast sample route available."""
     permission_classes = [AllowAny]
-
-    def get(self, request, *args, **kwargs):
-        return Response(
-            [
-                {
-                    "date": now().date(),
-                    "temperatureC": 25,
-                    "temperatureF": 76,
-                    "summary": "Warm",
-                }
-            ],
-            status=status.HTTP_200_OK,
-        )
+    
+    def get(self, request):
+        try:
+            summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"]
+            import random
+            
+            result = []
+            for i in range(1, 6):
+                result.append({
+                    "date": (datetime.now() + timedelta(days=i)).strftime('%Y-%m-%d'),
+                    "temperatureC": random.randint(-20, 55),
+                    "temperatureF": 0,
+                    "summary": random.choice(summaries)
+                })
+            
+            # Calculate Fahrenheit
+            for item in result:
+                item["temperatureF"] = int(32 + (item["temperatureC"] * 9 / 5))
+            
+            return Response(result, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"WeatherForecastController : GetWeatherForecast : {str(e)}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )

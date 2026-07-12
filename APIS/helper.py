@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime
+import uuid
 from django.db.models import OuterRef, Subquery, Count
 from .models import *
 from django.db import connection
@@ -220,7 +221,6 @@ def get_centers_for_regional_admin(status_param, user_id, today):
             all_centers.append(center_data)
     
     return all_centers
-
 
 
 
@@ -3952,4 +3952,539 @@ def get_all_student_attendance_by_month(center_id, student_id, month, year):
             
     except Exception as e:
         logger.error(f"StudentAttendanceRepository : GetAllStudentAttendancByMonth : {str(e)}")
+        raise e
+    
+    
+#---------------------------------------------------------
+# Teacher APIs Helper Functions
+#---------------------------------------------------------
+
+def login_teacher(name, password):
+    """Login teacher by name and password"""
+    logger.info(f"TeacherRepository : LoginTeacher : Started")
+    
+    try:
+        hashed_password = hash_password(password)
+        
+        sql = """
+            SELECT 
+                Id, TeacherGuidId, FullName, Age, Gender, DateOfBirth,
+                PhoneNumber, WhatsApp, Email, Status, Count, Picture,
+                Password, FullAddress, Education, Token,
+                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
+                CreatedOn, CreatedBy
+            FROM Teacher
+            WHERE FullName = %s AND Password = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [name, hashed_password])
+            row = cursor.fetchone()
+            
+            if row:
+                columns = [col[0] for col in cursor.description]
+                teacher_dict = dict(zip(columns, row))
+                
+                # Generate token
+                token = AccessToken()
+                token['teacher_id'] = teacher_dict.get('Id')
+                token['teacher_name'] = teacher_dict.get('FullName')
+                token.set_exp(lifetime=timedelta(days=30))
+                teacher_dict['Token'] = str(token)
+                
+                return teacher_dict
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"TeacherRepository : LoginTeacher : {str(e)}")
+        raise e
+
+def save_teacher(teacher_data):
+    """Save or update teacher"""
+    logger.info(f"TeacherRepository : SaveTeacher : Started")
+    
+    try:
+        teacher_id = teacher_data.get('Id', 0)
+        
+        if teacher_id > 0:
+            update_fields = []
+            update_values = []
+            
+            for key, value in teacher_data.items():
+                if key != 'Id' and value is not None:
+                    column_name = {
+                        'FullName': 'FullName',
+                        'Age': 'Age',
+                        'Gender': 'Gender',
+                        'DateOfBirth': 'DateOfBirth',
+                        'PhoneNumber': 'PhoneNumber',
+                        'WhatsApp': 'WhatsApp',
+                        'Email': 'Email',
+                        'Status': 'Status',
+                        'Count': 'Count',
+                        'Picture': 'Picture',
+                        'Password': 'Password',
+                        'FullAddress': 'FullAddress',
+                        'Education': 'Education',
+                        'VidhanSabhaId': 'VidhanSabhaId',
+                        'DistrictId': 'DistrictId',
+                        'PanchayatId': 'PanchayatId',
+                        'CenterId': 'CenterId',
+                        'VillageId': 'VillageId'
+                    }.get(key, key)
+                    
+                    update_fields.append(f"{column_name} = %s")
+                    update_values.append(value)
+            
+            if update_fields:
+                update_values.append(teacher_id)
+                sql = f"UPDATE Teacher SET {', '.join(update_fields)} WHERE Id = %s"
+                with connection.cursor() as cursor:
+                    cursor.execute(sql, update_values)
+        else:
+            teacher_guid = str(uuid.uuid4())
+            created_on = datetime.now()
+            
+            columns = ['TeacherGuidId', 'CreatedOn']
+            values = [teacher_guid, created_on]
+            
+            field_mapping = {
+                'FullName': 'FullName',
+                'Age': 'Age',
+                'Gender': 'Gender',
+                'DateOfBirth': 'DateOfBirth',
+                'PhoneNumber': 'PhoneNumber',
+                'WhatsApp': 'WhatsApp',
+                'Email': 'Email',
+                'Status': 'Status',
+                'Count': 'Count',
+                'Picture': 'Picture',
+                'Password': 'Password',
+                'FullAddress': 'FullAddress',
+                'Education': 'Education',
+                'VidhanSabhaId': 'VidhanSabhaId',
+                'DistrictId': 'DistrictId',
+                'PanchayatId': 'PanchayatId',
+                'CenterId': 'CenterId',
+                'VillageId': 'VillageId'
+            }
+            
+            for key, column in field_mapping.items():
+                if key in teacher_data and teacher_data[key] is not None:
+                    columns.append(column)
+                    values.append(teacher_data[key])
+            
+            placeholders = ', '.join(['%s'] * len(columns))
+            sql = f"INSERT INTO Teacher ({', '.join(columns)}) VALUES ({placeholders})"
+            with connection.cursor() as cursor:
+                cursor.execute(sql, values)
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                teacher_id = cursor.fetchone()[0]
+        
+        return get_teacher_by_id(teacher_id)
+        
+    except Exception as e:
+        logger.error(f"TeacherRepository : SaveTeacher : {str(e)}")
+        raise e
+
+def get_teacher_by_id(teacher_id):
+    """Get teacher by ID"""
+    try:
+        sql = """
+            SELECT 
+                Id, TeacherGuidId, FullName, Age, Gender, DateOfBirth,
+                PhoneNumber, WhatsApp, Email, Status, Count, Picture,
+                Password, FullAddress, Education, Token,
+                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
+                CreatedOn, CreatedBy
+            FROM Teacher
+            WHERE Id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [teacher_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.error(f"TeacherRepository : get_teacher_by_id : {str(e)}")
+        raise e
+    
+    
+#---------------------------------------------------------
+# VidhanSabha APIs Helper Functions
+#---------------------------------------------------------
+
+def get_all_vidhan_sabhas(offset, limit):
+    """Get all VidhanSabhas with pagination"""
+    logger.info(f"VidhanSabhaRepository : GetAllVidhanSabha : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            if offset == 0 and limit == 0:
+                sql = """
+                    SELECT 
+                        v.Id,
+                        v.VidhanSabhaGuidId,
+                        v.Name,
+                        v.DistrictId,
+                        d.Name as DistrictName,
+                        v.CreatedOn,
+                        v.CreatedBy,
+                        v.Status
+                    FROM VidhanSabha v
+                    INNER JOIN District d ON v.DistrictId = d.Id
+                    ORDER BY v.Id
+                """
+                cursor.execute(sql)
+            else:
+                sql = """
+                    SELECT 
+                        v.Id,
+                        v.VidhanSabhaGuidId,
+                        v.Name,
+                        v.DistrictId,
+                        d.Name as DistrictName,
+                        v.CreatedOn,
+                        v.CreatedBy,
+                        v.Status
+                    FROM VidhanSabha v
+                    INNER JOIN District d ON v.DistrictId = d.Id
+                    ORDER BY v.Id
+                    LIMIT %s OFFSET %s
+                """
+                cursor.execute(sql, [limit, offset])
+            
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"VidhanSabhaRepository : GetAllVidhanSabha : {str(e)}")
+        raise e
+
+def save_vidhan_sabha(vidhan_sabha_data):
+    """Save or update VidhanSabha"""
+    logger.info(f"VidhanSabhaRepository : SaveVidhanSabha : Started")
+    
+    try:
+        vidhan_sabha_id = vidhan_sabha_data.get('Id', 0)
+        
+        if vidhan_sabha_id > 0:
+            update_fields = []
+            update_values = []
+            
+            for key, value in vidhan_sabha_data.items():
+                if key != 'Id' and value is not None:
+                    column_name = {
+                        'Name': 'Name',
+                        'Status': 'Status',
+                        'CreatedBy': 'CreatedBy',
+                        'VidhanSabhaGuidId': 'VidhanSabhaGuidId',
+                        'DistrictId': 'DistrictId'
+                    }.get(key, key)
+                    
+                    update_fields.append(f"{column_name} = %s")
+                    update_values.append(value)
+            
+            if update_fields:
+                update_values.append(vidhan_sabha_id)
+                sql = f"UPDATE VidhanSabha SET {', '.join(update_fields)} WHERE Id = %s"
+                with connection.cursor() as cursor:
+                    cursor.execute(sql, update_values)
+        else:
+            vidhan_sabha_guid = str(uuid.uuid4())
+            created_on = datetime.now()
+            
+            sql = """
+                INSERT INTO VidhanSabha (
+                    VidhanSabhaGuidId, Name, Status, CreatedOn, CreatedBy, DistrictId
+                ) VALUES (%s, %s, %s, %s, %s, %s)
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [
+                    vidhan_sabha_guid,
+                    vidhan_sabha_data.get('Name'),
+                    vidhan_sabha_data.get('Status'),
+                    created_on,
+                    vidhan_sabha_data.get('CreatedBy'),
+                    vidhan_sabha_data.get('DistrictId')
+                ])
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                vidhan_sabha_id = cursor.fetchone()[0]
+        
+        return get_vidhan_sabha_by_id(vidhan_sabha_id)
+        
+    except Exception as e:
+        logger.error(f"VidhanSabhaRepository : SaveVidhanSabha : {str(e)}")
+        raise e
+
+def get_vidhan_sabha_by_id(vidhan_sabha_id):
+    """Get VidhanSabha by ID"""
+    try:
+        sql = """
+            SELECT 
+                v.Id,
+                v.VidhanSabhaGuidId,
+                v.Name,
+                v.DistrictId,
+                d.Name as DistrictName,
+                v.CreatedOn,
+                v.CreatedBy,
+                v.Status
+            FROM VidhanSabha v
+            INNER JOIN District d ON v.DistrictId = d.Id
+            WHERE v.Id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [vidhan_sabha_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.error(f"VidhanSabhaRepository : get_vidhan_sabha_by_id : {str(e)}")
+        raise e
+
+def get_vidhan_sabha_by_district_id(district_id):
+    """Get VidhanSabha by district ID"""
+    logger.info(f"VidhanSabhaRepository : GetVidhanSabhaByDistrictId : Started")
+    
+    try:
+        sql = """
+            SELECT 
+                Id, VidhanSabhaGuidId, Name, DistrictId, CreatedOn, CreatedBy, Status
+            FROM VidhanSabha
+            WHERE DistrictId = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [district_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+        
+    except Exception as e:
+        logger.error(f"VidhanSabhaRepository : GetVidhanSabhaByDistrictId : {str(e)}")
+        raise e
+
+def check_vidhan_sabha_name(name):
+    """Check if VidhanSabha name exists"""
+    logger.info(f"VidhanSabhaRepository : CheckVidhanSabhaName : Started")
+    
+    try:
+        sql = "SELECT Name FROM VidhanSabha WHERE Name = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [name])
+            row = cursor.fetchone()
+            return row[0] if row else None
+    except Exception as e:
+        logger.error(f"VidhanSabhaRepository : CheckVidhanSabhaName : {str(e)}")
+        raise e
+    
+    
+#---------------------------------------------------------
+# Village APIs Helper Functions
+#---------------------------------------------------------
+
+def get_all_villages(offset, limit):
+    """Get all villages with pagination"""
+    logger.info(f"VillageRepository : GetAllVillage : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            if offset == 0 and limit == 0:
+                sql = """
+                    SELECT 
+                        v.Id,
+                        v.VillageGuidId,
+                        v.Name,
+                        v.DistrictId,
+                        d.Name as DistrictName,
+                        v.VidhanSabhaId,
+                        vid.Name as VidhanSabhaName,
+                        v.PanchayatId,
+                        p.Name as PanchayatName,
+                        v.CreatedOn,
+                        v.CreatedBy,
+                        v.Status
+                    FROM Village v
+                    INNER JOIN Panchayat p ON v.PanchayatId = p.Id
+                    INNER JOIN District d ON v.DistrictId = d.Id
+                    INNER JOIN VidhanSabha vid ON v.VidhanSabhaId = vid.Id
+                    ORDER BY v.Id
+                """
+                cursor.execute(sql)
+            else:
+                sql = """
+                    SELECT 
+                        v.Id,
+                        v.VillageGuidId,
+                        v.Name,
+                        v.DistrictId,
+                        d.Name as DistrictName,
+                        v.VidhanSabhaId,
+                        vid.Name as VidhanSabhaName,
+                        v.PanchayatId,
+                        p.Name as PanchayatName,
+                        v.CreatedOn,
+                        v.CreatedBy,
+                        v.Status
+                    FROM Village v
+                    INNER JOIN Panchayat p ON v.PanchayatId = p.Id
+                    INNER JOIN District d ON v.DistrictId = d.Id
+                    INNER JOIN VidhanSabha vid ON v.VidhanSabhaId = vid.Id
+                    ORDER BY v.Id
+                    LIMIT %s OFFSET %s
+                """
+                cursor.execute(sql, [limit, offset])
+            
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"VillageRepository : GetAllVillage : {str(e)}")
+        raise e
+
+def save_village(village_data):
+    """Save or update village"""
+    logger.info(f"VillageRepository : SaveVillage : Started")
+    
+    try:
+        village_id = village_data.get('Id', 0)
+        
+        if village_id > 0:
+            update_fields = []
+            update_values = []
+            
+            for key, value in village_data.items():
+                if key != 'Id' and value is not None:
+                    column_name = {
+                        'Name': 'Name',
+                        'Status': 'Status',
+                        'CreatedBy': 'CreatedBy',
+                        'VillageGuidId': 'VillageGuidId',
+                        'DistrictId': 'DistrictId',
+                        'VidhanSabhaId': 'VidhanSabhaId',
+                        'PanchayatId': 'PanchayatId'
+                    }.get(key, key)
+                    
+                    update_fields.append(f"{column_name} = %s")
+                    update_values.append(value)
+            
+            if update_fields:
+                update_values.append(village_id)
+                sql = f"UPDATE Village SET {', '.join(update_fields)} WHERE Id = %s"
+                with connection.cursor() as cursor:
+                    cursor.execute(sql, update_values)
+        else:
+            village_guid = str(uuid.uuid4())
+            created_on = datetime.now()
+            
+            sql = """
+                INSERT INTO Village (
+                    VillageGuidId, Name, Status, CreatedOn, CreatedBy,
+                    DistrictId, VidhanSabhaId, PanchayatId
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [
+                    village_guid,
+                    village_data.get('Name'),
+                    village_data.get('Status'),
+                    created_on,
+                    village_data.get('CreatedBy'),
+                    village_data.get('DistrictId'),
+                    village_data.get('VidhanSabhaId'),
+                    village_data.get('PanchayatId')
+                ])
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                village_id = cursor.fetchone()[0]
+        
+        return get_village_by_id(village_id)
+        
+    except Exception as e:
+        logger.error(f"VillageRepository : SaveVillage : {str(e)}")
+        raise e
+
+def get_village_by_id(village_id):
+    """Get village by ID"""
+    try:
+        sql = """
+            SELECT 
+                v.Id,
+                v.VillageGuidId,
+                v.Name,
+                v.DistrictId,
+                d.Name as DistrictName,
+                v.VidhanSabhaId,
+                vid.Name as VidhanSabhaName,
+                v.PanchayatId,
+                p.Name as PanchayatName,
+                v.CreatedOn,
+                v.CreatedBy,
+                v.Status
+            FROM Village v
+            INNER JOIN Panchayat p ON v.PanchayatId = p.Id
+            INNER JOIN District d ON v.DistrictId = d.Id
+            INNER JOIN VidhanSabha vid ON v.VidhanSabhaId = vid.Id
+            WHERE v.Id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [village_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.error(f"VillageRepository : get_village_by_id : {str(e)}")
+        raise e
+
+def get_village_by_district_vidhan_sabha_and_panchayat(district_id, vidhan_sabha_id, panchayat_id):
+    """Get village by district, vidhan sabha and panchayat IDs"""
+    logger.info(f"VillageRepository : GetVillageByDistrictVidhanSabhaAndPanchId : Started")
+    
+    try:
+        sql = """
+            SELECT 
+                Id, VillageGuidId, Name, DistrictId, VidhanSabhaId, PanchayatId,
+                CreatedOn, CreatedBy, Status
+            FROM Village
+            WHERE DistrictId = %s AND VidhanSabhaId = %s AND PanchayatId = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [district_id, vidhan_sabha_id, panchayat_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+        
+    except Exception as e:
+        logger.error(f"VillageRepository : GetVillageByDistrictVidhanSabhaAndPanchId : {str(e)}")
+        raise e
+
+def check_village_name(name):
+    """Check if village name exists"""
+    logger.info(f"VillageRepository : CheckVillageName : Started")
+    
+    try:
+        sql = "SELECT Name FROM Village WHERE Name = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [name])
+            row = cursor.fetchone()
+            return row[0] if row else None
+    except Exception as e:
+        logger.error(f"VillageRepository : CheckVillageName : {str(e)}")
         raise e

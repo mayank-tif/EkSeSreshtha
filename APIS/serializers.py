@@ -748,15 +748,8 @@ class UserUpdatePasswordQuerySerializer(RequestSerializer):
 class UserGetAllTeachersQuerySerializer(serializers.Serializer):
     userId = serializers.IntegerField(required=False, default=0)
 
-class TeacherDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    name = serializers.CharField(allow_null=True, required=False)
-    assigned = serializers.BooleanField(allow_null=True, required=False)
-    profile = serializers.CharField(allow_null=True, required=False)
-    phoneNumber = serializers.CharField(allow_null=True, required=False)
 
-# user serializers
-
+# User serializers
 class LoginSerializer(serializers.Serializer):
     mobileNumber = serializers.CharField(required=True)
     password = serializers.CharField(required=True)
@@ -983,15 +976,39 @@ class VidhanSabhaSaveVidhanSabhaRequestSerializer(RequestSerializer):
 class VidhanSabhaByDistrictIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"districtId": District}
     districtId = required_int()
+    
+# VidhanSabha Serializers
+class VidhanSabhaSaveVidhanSabhaRequestSerializer(RequestSerializer):
+    foreign_key_fields = {"DistrictId": District}
+    
+    Id = optional_int()
+    VidhanSabhaGuidId = optional_char()
+    Name = required_char()
+    Status = optional_bool()
+    CreatedOn = optional_datetime()
+    CreatedBy = optional_int()
+    DistrictId = required_int()
 
 
+class VidhanSabhaDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    vidhanSabhaGuidId = serializers.CharField(allow_null=True, required=False)
+    name = serializers.CharField(allow_null=True, required=False)
+    districtId = serializers.IntegerField()
+    districtName = serializers.CharField(allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    createdBy = serializers.IntegerField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+
+
+# Village Serializers
 class VillageSaveVillageRequestSerializer(RequestSerializer):
     foreign_key_fields = {
         "DistrictId": District,
         "VidhanSabhaId": VidhanSabha,
         "PanchayatId": Panchayat,
     }
-
+    
     Id = optional_int()
     VillageGuidId = optional_char()
     Name = required_char()
@@ -1002,19 +1019,26 @@ class VillageSaveVillageRequestSerializer(RequestSerializer):
     VidhanSabhaId = required_int()
     PanchayatId = required_int()
 
-
 class VillageByDistrictVidhanSabhaAndPanchayatQuerySerializer(RequestSerializer):
-    foreign_key_fields = {
-        "districtId": District,
-        "vidhanSabhaId": VidhanSabha,
-        "panchayatId": Panchayat,
-    }
-
     districtId = required_int()
     vidhanSabhaId = required_int()
     panchayatId = required_int()
 
+class VillageDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    villageGuidId = serializers.CharField(allow_null=True, required=False)
+    name = serializers.CharField(allow_null=True, required=False)
+    districtId = serializers.IntegerField()
+    districtName = serializers.CharField(allow_null=True, required=False)
+    vidhanSabhaId = serializers.IntegerField()
+    vidhanSabhaName = serializers.CharField(allow_null=True, required=False)
+    panchayatId = serializers.IntegerField()
+    panchayatName = serializers.CharField(allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    createdBy = serializers.IntegerField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
 
+# Teacher Serializers
 class TeacherSaveTeacherRequestSerializer(RequestSerializer):
     foreign_key_fields = {
         "VidhanSabhaId": VidhanSabha,
@@ -1023,7 +1047,7 @@ class TeacherSaveTeacherRequestSerializer(RequestSerializer):
         "CenterId": Center,
         "VillageId": Village,
     }
-
+    
     Id = optional_int()
     TeacherGuidId = optional_char()
     FullName = required_char()
@@ -1045,12 +1069,26 @@ class TeacherSaveTeacherRequestSerializer(RequestSerializer):
     CenterId = optional_int()
     VillageId = optional_int()
 
+class TeacherLoginRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True)
+    password = serializers.CharField(required=True)
 
-class RegionalAdminSaveRegionalAdminRequestSerializer(TeacherSaveTeacherRequestSerializer):
-    RegionalAdminGuidId = optional_char()
-    RoleId = optional_int()
-    Contact = optional_char()
-    Type = optional_int()
+class TeacherDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    fullName = serializers.CharField(allow_null=True, required=False)
+    age = serializers.IntegerField(allow_null=True, required=False)
+    gender = serializers.CharField(allow_null=True, required=False)
+    dateOfBirth = serializers.CharField(allow_null=True, required=False)
+    phoneNumber = serializers.CharField(allow_null=True, required=False)
+    whatsApp = serializers.CharField(allow_null=True, required=False)
+    email = serializers.CharField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    count = serializers.IntegerField(allow_null=True, required=False)
+    picture = serializers.CharField(allow_null=True, required=False)
+    password = serializers.CharField(allow_null=True, required=False)
+    fullAddress = serializers.CharField(allow_null=True, required=False)
+    education = serializers.CharField(allow_null=True, required=False)
+    token = serializers.CharField(allow_null=True, required=False)
 
 
 class LoginRequestSerializer(LoginSerializer):
