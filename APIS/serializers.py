@@ -430,9 +430,10 @@ class HolidaysDtoSerializer(serializers.Serializer):
     centerId = serializers.IntegerField(allow_null=True, required=False)
     centerName = serializers.CharField(allow_null=True, required=False)
 
+# Panchayat Serializers -----------------------------------------------------------------------------------------------
 class PanchayatSavePanchayatRequestSerializer(RequestSerializer):
     foreign_key_fields = {"DistrictId": District, "VidhanSabhaId": VidhanSabha}
-
+    
     Id = optional_int()
     PanchayatGuidId = optional_char()
     Name = required_char()
@@ -442,11 +443,24 @@ class PanchayatSavePanchayatRequestSerializer(RequestSerializer):
     DistrictId = required_int()
     VidhanSabhaId = required_int()
 
-
 class PanchayatByDistrictAndVidhanSabhaQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"districtId": District, "vidhanSabhaId": VidhanSabha}
     districtId = required_int()
     vidhanSabhaId = required_int()
+
+class PanchayatDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    panchayatGuidId = serializers.CharField(allow_null=True, required=False)
+    name = serializers.CharField(allow_null=True, required=False)
+    districtId = serializers.IntegerField()
+    districtName = serializers.CharField(allow_null=True, required=False)
+    vidhanSabhaId = serializers.IntegerField()
+    vidhanSabhaName = serializers.CharField(allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    createdBy = serializers.IntegerField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+
+class NameCheckQuerySerializer(RequestSerializer):
+    name = required_char()
 
 
 class NameCheckQuerySerializer(RequestSerializer):

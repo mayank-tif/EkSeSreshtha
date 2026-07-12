@@ -1176,40 +1176,215 @@ class VidhansabhaCheckvidhansabhanamePostView(NameExistsView):
     missing_message = "VidhanSabha name doesn't exists"
 
 
-class PanchayatGetallpanchayatGetView(ModelListView):
+#---------------------------------------------------------
+# Panchayat Views
+#---------------------------------------------------------
+
+class PanchayatGetallpanchayatGetView(APIView):
     """Lists panchayats with optional pagination."""
-    serializer_class = api_serializers.PaginationQuerySerializer
-    model = Panchayat
-    message = "List of panchayat"
+    
+    def get(self, request):
+        try:
+            logger.info("PanchayatController : GetAllPanchayat : Started")
+            
+            offset = request.query_params.get('offset', 0)
+            limit = request.query_params.get('limit', 0)
+            
+            panchayats = get_all_panchayats(int(offset), int(limit))
+            
+            if panchayats is not None and len(panchayats) > 0:
+                response_serializer = api_serializers.PanchayatDtoSerializer(panchayats, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "message": "List of panchayat",
+                        "data": response_serializer.data,
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "List of panchayat not found",
+                        "data": None,
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"PanchayatController : GetAllPanchayat : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class PanchayatSavepanchayatPostView(ModelSaveView):
+class PanchayatSavepanchayatPostView(APIView):
     """Saves or updates a panchayat record."""
-    serializer_class = api_serializers.PanchayatSavePanchayatRequestSerializer
-    model = Panchayat
-    guid_field = "panchayat_guid_id"
-    success_message = "Panchayat save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("PanchayatController : SavePanchayat : Started")
+            
+            serializer = api_serializers.PanchayatSavePanchayatRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            panchayat_data = serializer.validated_data
+            saved_panchayat = save_panchayat(panchayat_data)
+            
+            if saved_panchayat:
+                response_serializer = api_serializers.PanchayatDtoSerializer(saved_panchayat)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Panchayat save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Panchayat doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"PanchayatController : SavePanchayat : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(ModelListView):
+class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(APIView):
     """Lists panchayats for a district and Vidhan Sabha."""
-    serializer_class = api_serializers.PanchayatByDistrictAndVidhanSabhaQuerySerializer
-    model = Panchayat
-    message = "Panchayat exists"
+    
+    def get(self, request):
+        try:
+            logger.info("VidhanSabhaController : GetPanchayatByDistrictAndVidhanSabhaId : Started")
+            
+            district_id = request.query_params.get('districtId')
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId')
+            
+            if not district_id or not vidhan_sabha_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "districtId and vidhanSabhaId are required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            panchayat = get_panchayat_by_district_and_vidhan_sabha_id(
+                int(district_id), int(vidhan_sabha_id)
+            )
+            
+            if panchayat:
+                response_serializer = api_serializers.PanchayatDtoSerializer(panchayat)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Panchayat exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Panchayat not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"VidhanSabhaController : GetPanchayatByDistrictAndVidhanSabhaId : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        return Panchayat.objects.filter(
-            district_id=request_value(request, "districtId", "DistrictId"),
-            vidhan_sabha_id=request_value(request, "vidhanSabhaId", "VidhanSabhaId"),
-        )
-
-
-class PanchayatCheckpanchayatnamePostView(NameExistsView):
+class PanchayatCheckpanchayatnamePostView(APIView):
     """Checks whether a panchayat name already exists."""
-    serializer_class = api_serializers.NameCheckQuerySerializer
-    model = Panchayat
-    exists_message = "Panchayat name already exists"
-    missing_message = "Panchayat name doesn't exists"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : CheckPanchayatName : Started")
+            
+            name = request.data.get('name')
+            if not name:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "name is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            exists = check_panchayat_name(name)
+            
+            if exists:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Panchayat name already exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": True,
+                        "error": "Panchayat name doesn't exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : CheckPanchayatName : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class VillageGetallvillageGetView(ModelListView):

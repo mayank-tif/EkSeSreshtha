@@ -3056,3 +3056,207 @@ def delete_holiday_by_id(holiday_id):
     except Exception as e:
         logger.error(f"HolidaysRepository : DeleteHolidayById : {str(e)}")
         raise e
+
+
+#---------------------------------------------------------
+# Panchayat APIs Helper Functions
+#---------------------------------------------------------
+
+def get_all_panchayats(offset, limit):
+    """Get all panchayats with pagination"""
+    logger.info(f"PanchayatRepository : GetAllPanchayat : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            if offset == 0 and limit == 0:
+                sql = """
+                    SELECT 
+                        p.Id,
+                        p.PanchayatGuidId,
+                        p.Name,
+                        p.DistrictId,
+                        d.Name as DistrictName,
+                        p.VidhanSabhaId,
+                        v.Name as VidhanSabhaName,
+                        p.CreatedOn,
+                        p.CreatedBy,
+                        p.Status
+                    FROM Panchayat p
+                    INNER JOIN VidhanSabha v ON p.VidhanSabhaId = v.Id
+                    INNER JOIN District d ON p.DistrictId = d.Id
+                    ORDER BY p.Id
+                """
+                cursor.execute(sql)
+            else:
+                sql = """
+                    SELECT 
+                        p.Id,
+                        p.PanchayatGuidId,
+                        p.Name,
+                        p.DistrictId,
+                        d.Name as DistrictName,
+                        p.VidhanSabhaId,
+                        v.Name as VidhanSabhaName,
+                        p.CreatedOn,
+                        p.CreatedBy,
+                        p.Status
+                    FROM Panchayat p
+                    INNER JOIN VidhanSabha v ON p.VidhanSabhaId = v.Id
+                    INNER JOIN District d ON p.DistrictId = d.Id
+                    ORDER BY p.Id
+                    LIMIT %s OFFSET %s
+                """
+                cursor.execute(sql, [limit, offset])
+            
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"PanchayatRepository : GetAllPanchayat : {str(e)}")
+        raise e
+
+def save_panchayat(panchayat_data):
+    """Save or update panchayat"""
+    logger.info(f"PanchayatRepository : SavePanchayat : Started")
+    
+    try:
+        panchayat_id = panchayat_data.get('Id', 0)
+        
+        if panchayat_id > 0:
+            # Update existing panchayat
+            update_fields = []
+            update_values = []
+            
+            for key, value in panchayat_data.items():
+                if key != 'Id' and value is not None:
+                    column_name = {
+                        'Name': 'Name',
+                        'Status': 'Status',
+                        'CreatedBy': 'CreatedBy',
+                        'PanchayatGuidId': 'PanchayatGuidId',
+                        'DistrictId': 'DistrictId',
+                        'VidhanSabhaId': 'VidhanSabhaId'
+                    }.get(key, key)
+                    
+                    update_fields.append(f"{column_name} = %s")
+                    update_values.append(value)
+            
+            if update_fields:
+                update_values.append(panchayat_id)
+                sql = f"""
+                    UPDATE Panchayat 
+                    SET {', '.join(update_fields)}
+                    WHERE Id = %s
+                """
+                with connection.cursor() as cursor:
+                    cursor.execute(sql, update_values)
+        else:
+            # Insert new panchayat
+            panchayat_guid = str(uuid.uuid4())
+            created_on = datetime.now()
+            
+            sql = """
+                INSERT INTO Panchayat (
+                    PanchayatGuidId, Name, Status, CreatedOn, CreatedBy, 
+                    DistrictId, VidhanSabhaId
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [
+                    panchayat_guid,
+                    panchayat_data.get('Name'),
+                    panchayat_data.get('Status'),
+                    created_on,
+                    panchayat_data.get('CreatedBy'),
+                    panchayat_data.get('DistrictId'),
+                    panchayat_data.get('VidhanSabhaId')
+                ])
+                
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                panchayat_id = cursor.fetchone()[0]
+        
+        # Get the saved panchayat
+        return get_panchayat_by_id(panchayat_id)
+        
+    except Exception as e:
+        logger.error(f"PanchayatRepository : SavePanchayat : {str(e)}")
+        raise e
+
+def get_panchayat_by_id(panchayat_id):
+    """Get panchayat by ID"""
+    try:
+        sql = """
+            SELECT 
+                p.Id,
+                p.PanchayatGuidId,
+                p.Name,
+                p.DistrictId,
+                d.Name as DistrictName,
+                p.VidhanSabhaId,
+                v.Name as VidhanSabhaName,
+                p.CreatedOn,
+                p.CreatedBy,
+                p.Status
+            FROM Panchayat p
+            INNER JOIN VidhanSabha v ON p.VidhanSabhaId = v.Id
+            INNER JOIN District d ON p.DistrictId = d.Id
+            WHERE p.Id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [panchayat_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.error(f"PanchayatRepository : get_panchayat_by_id : {str(e)}")
+        raise e
+
+def get_panchayat_by_district_and_vidhan_sabha_id(district_id, vidhan_sabha_id):
+    """Get panchayat by district and vidhan sabha ID"""
+    logger.info(f"PanchayatRepository : GetPanchayatByDistrictAndVidhanSabhaId : Started")
+    
+    try:
+        sql = """
+            SELECT 
+                Id,
+                PanchayatGuidId,
+                Name,
+                DistrictId,
+                VidhanSabhaId,
+                CreatedOn,
+                CreatedBy,
+                Status
+            FROM Panchayat
+            WHERE DistrictId = %s AND VidhanSabhaId = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [district_id, vidhan_sabha_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+        
+    except Exception as e:
+        logger.error(f"PanchayatRepository : GetPanchayatByDistrictAndVidhanSabhaId : {str(e)}")
+        raise e
+
+def check_panchayat_name(name):
+    """Check if panchayat name exists"""
+    logger.info(f"PanchayatRepository : CheckPanchayatName : Started")
+    
+    try:
+        sql = "SELECT Name FROM Panchayat WHERE Name = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [name])
+            row = cursor.fetchone()
+            return row[0] if row else None
+    except Exception as e:
+        logger.error(f"PanchayatRepository : CheckPanchayatName : {str(e)}")
+        raise e
