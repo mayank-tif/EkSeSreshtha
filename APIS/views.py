@@ -4,8 +4,9 @@ import uuid
 from datetime import timedelta
 
 from django.core.files.storage import default_storage
-from django.db import IntegrityError
-from django.db.models import Avg, Count, Q
+from django.db import IntegrityError, transaction
+from django.db.models import Avg, Count, F, Q
+from django.db.models.functions import Coalesce
 from django.forms.models import model_to_dict
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.decorators import method_decorator
@@ -24,6 +25,8 @@ from . import serializers as api_serializers
 from .models import *
 from .serializers import GenerateAppTokenSerializer, LoginSerializer, UserLoginResponseSerializer
 from .utils import validate_app_and_device_with_token
+
+from .helper import *
 
 
 logger = logging.getLogger(__name__)
@@ -293,7 +296,7 @@ class LoginAPIView(DotNetAPIView):
         serializer.is_valid(raise_exception=True)
         mobile_number = serializer.validated_data["mobileNumber"]
         password = hash_password(serializer.validated_data["password"])
-        logger.info("Attempting login for mobile number: %s", mobile_number)
+        logger.info("Attempting login for mobile number: %s", mobile_number, password)
 
         account = User.objects.filter(phone_number=mobile_number, password=password).first()
         if account:
@@ -398,30 +401,113 @@ class CenterGetcenteryidGetView(ModelDetailView):
     missing_message = "center not exists"
 
 
-class CenterGetallcentersGetView(ModelListView):
+
+class CenterGetAllCentersView(APIView):
     """Lists centers, optionally narrowing the result to a teacher/user."""
-    serializer_class = api_serializers.CenterGetAllCentersQuerySerializer
-    model = Center
-    message = "List of centers"
+    
+    def get(self, request):
+        try:
+            logger.info("CenterGetAllCentersView : GetAllCenters : Started")
+            
+            # Validate request parameters
+            serializer =api_serializers.CenterGetAllCentersQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            userId = serializer.validated_data.get('userId', 0)
+            type_param = serializer.validated_data.get('type', 0)
+            
+            # Get centers
+            all_centers = get_all_centers(userId, type_param)
+            
+            if all_centers is not None and len(all_centers) > 0:
+                # Serialize response
+                response_serializer = api_serializers.AllCenterDtoSerializer(all_centers, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of centers",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "List of centers not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"CenterGetAllCentersView : GetAllCenters : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "data": None,
+                    "message": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        queryset = filter_if_present(queryset, request, "teachers__id", "userId", "UserId")
-        return queryset.distinct()
+class CenterGetAllCentersByStatusView(APIView):
+    """Get student attendance of centers based on status and user"""
 
+    def get(self, request):
+        try:
+            # Validate request parameters
+            serializer = api_serializers.CenterGetAllCentersByStatusQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {"error": "Invalid parameters", "details": serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-class CenterGetallcentersbystatusGetView(ModelListView):
-    """Lists centers filtered by active/inactive status."""
-    serializer_class = api_serializers.CenterGetAllCentersByStatusQuerySerializer
-    model = Center
-    message = "Student attendance of centers"
+            status_param = serializer.validated_data['status']
+            user_id = serializer.validated_data['userId']
 
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        value = request_value(request, "status", "Status")
-        if value is not None:
-            queryset = queryset.filter(status=to_bool(value))
-        return queryset
+            logger.info(f"CenterGetAllCentersByStatusView : GetStudentAttendanceOfCenter : Started")
+
+            # Get user type
+            user_type = get_user_type(user_id)
+
+            TODAY = datetime.now().date()
+            all_centers = []
+            
+            print(f"User ID: {user_id}, User Type: {user_type}, Status Param: {status_param}, Today: {TODAY}")
+
+            # Admin user (Type == 1)
+            if user_type and user_type == 1:
+                all_centers = get_centers_for_admin(status_param, TODAY)
+            else:
+                # Regional admin
+                all_centers = get_centers_for_regional_admin(status_param, user_id, TODAY)
+
+            # Serialize response
+            response_serializer = api_serializers.AllCenterStatusDtoSerializer(all_centers, many=True)
+
+            logger.info(f"CenterGetAllCentersByStatusView : GetStudentAttendanceOfCenter : End")
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"CenterGetAllCentersByStatusView : GetStudentAttendanceOfCenter : {str(e)}")
+            return Response(
+                {"error": "An error occurred while processing your request"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class CenterGetcenterbyteacheridGetView(DotNetAPIView):
@@ -501,8 +587,30 @@ class ClassSaveclassPostView(ModelSaveView):
     success_message = "Class save successfully"
 
     def post(self, request, *args, **kwargs):
-        defaults = {"class_enrolment_id": str(uuid.uuid4()), "sub_status": 0}
-        obj = save_model_from_request(ClassModel, request, defaults=defaults)
+        data = self.validated_request_data
+        class_id = data.get("Id")
+        if class_id:
+            obj = ClassModel.objects.filter(pk=class_id).first()
+            if not obj:
+                return fail("Class not found", code=status.HTTP_404_NOT_FOUND)
+            obj.name = data["Name"]
+            obj.center_id = data["CenterId"]
+            obj.users_id = data["UserId"]
+            obj.total_students = data["TotalStudents"]
+            obj.avilable_students = data["AvilableStudents"]
+            obj.save()
+        else:
+            enrollment_id = data.get("ClassEnrolmentId") or str(uuid.uuid4())
+            # DAL allows one class per enrolment id, center, and day.
+            if ClassModel.objects.filter(class_enrolment_id=enrollment_id, center_id=data["CenterId"], started_date__date=now().date()).exists():
+                return fail("Class already exists", code=status.HTTP_409_CONFLICT)
+            obj = ClassModel.objects.create(
+                class_enrolment_id=enrollment_id,
+                name=data["Name"], center_id=data["CenterId"], users_id=data["UserId"],
+                total_students=data["TotalStudents"], avilable_students=data["AvilableStudents"],
+                started_date=now(), status=1, sub_status=0,
+            )
+        Center.objects.filter(pk=obj.center_id).update(class_status=True)
         return ok(model_payload(obj), self.success_message)
 
 
@@ -515,7 +623,7 @@ class ClassCancelclassPostView(DotNetAPIView):
         obj = ClassModel.objects.filter(pk=class_id).first()
         if not obj:
             return fail("Class not canceled")
-        obj.status = 0
+        obj.status = 3
         obj.reason = request_value(request, "reason", "Reason")
         obj.cancel_by = to_int(request_value(request, "cancelBy", "CancelBy"), 0) or None
         obj.cancel_date = now()
@@ -531,8 +639,13 @@ class ClassUpdateendclasstimePostView(DotNetAPIView):
         obj = get_by_id(ClassModel, request, "classId", "ClassId")
         if not obj:
             return fail("Time not updated")
-        obj.end_date = parse_any_datetime(request_value(request, "endDate", "EndDate")) or now()
-        obj.save(update_fields=["end_date"])
+        obj.end_date = now()
+        obj.status = 2
+        obj.save(update_fields=["end_date", "status"])
+        # The DAL clears ActiveClassStatus for students that attended the
+        # centre when the class is completed.
+        attended_student_ids = StudentAttendance.objects.filter(center_id=obj.center_id).values_list("student_id", flat=True)
+        Student.objects.filter(center_id=obj.center_id, id__in=attended_student_ids).update(active_class_status=False)
         return ok(message="Time updated")
 
 
@@ -544,7 +657,7 @@ class ClassUpdateclasssubstatusPostView(DotNetAPIView):
         obj = get_by_id(ClassModel, request, "classId", "ClassId")
         if not obj:
             return fail("Status not updated")
-        obj.sub_status = to_int(request_value(request, "subStatus", "SubStatus"), obj.sub_status)
+        obj.sub_status = 1
         obj.save(update_fields=["sub_status"])
         return ok(message="Status updated")
 
@@ -564,7 +677,10 @@ class ClassDeleteclassbyteacheridPostView(DotNetAPIView):
         obj = get_by_id(ClassModel, request, "classId", "ClassId")
         if not obj:
             return fail("class  not deleted")
-        obj.delete()
+        with transaction.atomic():
+            ClassCancelByTeacher.objects.filter(user_id=obj.users_id).delete()
+            StudentAttendance.objects.filter(class_obj=obj).delete()
+            obj.delete()
         return ok(message="class deleted")
 
 
@@ -575,10 +691,21 @@ class ClassGetclasscurrentstatusGetView(DotNetAPIView):
     def get(self, request, *args, **kwargs):
         center_id = request_value(request, "centerId", "CenterId")
         teacher_id = request_value(request, "teacherId", "TeacherId")
-        queryset = ClassModel.objects.filter(center_id=center_id, end_date__isnull=True)
-        if teacher_id:
-            queryset = queryset.filter(users_id=teacher_id)
-        return ok(queryset_payload(queryset), "class status")
+        today = now().date()
+        data = []
+        holiday = Holidays.objects.filter(center_id=center_id, start_date__date__lte=today, end_date__date__gte=today).first()
+        if holiday:
+            data.append({"name": holiday.name, "type": 1, "startedDate": holiday.start_date, "endDate": holiday.end_date})
+        cancelled = ClassCancelByTeacher.objects.filter(user_id=teacher_id, starting_date__date__lte=today, ending_date__date__gte=today).first()
+        if cancelled:
+            data.append({"name": cancelled.reason, "type": 2, "startedDate": cancelled.starting_date, "endDate": cancelled.ending_date})
+        active = ClassModel.objects.filter(center_id=center_id, started_date__date=today, status=1).first()
+        if active:
+            data.append({"name": "Class is going on", "type": 3, "subStatus": active.sub_status, "id": active.id, "startedDate": active.started_date, "endDate": active.end_date})
+        completed = ClassModel.objects.filter(center_id=center_id, started_date__date=today, status=2).first()
+        if completed:
+            data.append({"name": "Class Ended", "type": 4, "id": completed.id, "startedDate": completed.started_date, "endDate": completed.end_date})
+        return Response({"data": data, "status": True})
 
 
 class ClassGetliveclassdetailGetView(ModelDetailView):
@@ -850,21 +977,58 @@ class StudentGetallstudentsGetView(ModelListView):
         return queryset
 
 
-class StudentattendanceSavestudentattendancePostView(ModelSaveView):
-    """Saves a student attendance record."""
+class StudentattendanceSavestudentattendancePostView(DotNetAPIView):
+    """Implement the DAL's per-student, per-class attendance rules."""
     serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
-    model = StudentAttendance
-    success_message = "Student attendance applied"
+
+    automatic = False
+    manual = False
+
+    def post(self, request, *args, **kwargs):
+        data = self.validated_request_data
+        student_id = data["StudentIds"][0]  # the .NET DAL processes the first id
+        student = Student.objects.filter(pk=student_id, status=True).first()
+        if not student:
+            return self.attendance_result(0)
+        if student.center_id != data["CenterId"]:
+            return self.attendance_result(-2)
+        scan_date = now() if (self.automatic or self.manual) else data["ScanDate"]
+        if StudentAttendance.objects.filter(student_id=student_id, class_obj_id=data["ClassId"], scan_date__date=scan_date.date()).exists():
+            return self.attendance_result(-1)
+        if self.manual and (student.manual_attendance or 0) >= 360:
+            return self.attendance_result(0)
+        with transaction.atomic():
+            StudentAttendance.objects.create(class_obj_id=data["ClassId"], student=student, center=student.center, user_id=data["UserId"], scan_date=scan_date, type=self.manual)
+            Student.objects.filter(pk=student.pk).update(active_class_status=True)
+            if self.manual:
+                Student.objects.filter(pk=student.pk).update(manual_attendance=(student.manual_attendance or 0) + 1)
+            ClassModel.objects.filter(pk=data["ClassId"]).update(avilable_students=Coalesce(F("avilable_students"), 0) + 1)
+        return self.attendance_result(1)
+
+    def attendance_result(self, result):
+        if result == -1:
+            message = "Student attendance already exists"
+            response_status = status.HTTP_400_BAD_REQUEST if (self.automatic or self.manual) else status.HTTP_200_OK
+        elif result == 0:
+            message = "Manual attendance already exists with 6 times" if self.manual else "Student already inactive"
+            response_status = status.HTTP_404_NOT_FOUND if self.manual else (status.HTTP_406_NOT_ACCEPTABLE if self.automatic else status.HTTP_200_OK)
+        elif result == -2:
+            message, response_status = "student not exists in center", (status.HTTP_404_NOT_FOUND if self.automatic else status.HTTP_200_OK)
+        else:
+            message, response_status = "Student attendance applied", status.HTTP_200_OK
+        return ok(message=message, code=response_status)
 
 
 class StudentattendanceSaveautomaticstudentattendancePostView(StudentattendanceSavestudentattendancePostView):
     """Compatibility view for automatic attendance save requests."""
     serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
+    automatic = True
 
 
 class StudentattendanceSavemanualstudentattendancePostView(StudentattendanceSavestudentattendancePostView):
     """Compatibility view for manual attendance save requests."""
     serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
+    manual = True
 
 
 class StudentattendanceGetallstudentwihavgattendanceGetView(DotNetAPIView):
@@ -873,12 +1037,14 @@ class StudentattendanceGetallstudentwihavgattendanceGetView(DotNetAPIView):
 
     def get(self, request, *args, **kwargs):
         center_id = request_value(request, "centerId", "CenterId")
-        students = Student.objects.filter(center_id=center_id).annotate(avg_attendance=Avg("attendances__type"))
+        classes_count = ClassModel.objects.filter(center_id=center_id, status__in=[1, 2]).count()
+        students = Student.objects.filter(center_id=center_id)
         data = []
         for student in students:
-            payload = model_payload(student)
-            payload["avg_attendance"] = student.avg_attendance
-            data.append(payload)
+            attendance_count = StudentAttendance.objects.filter(student=student).count()
+            data.append({"id": student.id, "enrollmentId": student.enrollment_id, "fullName": student.full_name,
+                         "date": student.joining_date, "attendanceStatus": "1" if student.status else "0",
+                         "averageAttendance": round(attendance_count * 100 / classes_count, 2) if classes_count else 0})
         return ok(data, "Students exists")
 
 
@@ -890,7 +1056,7 @@ class StudentattendanceGetallabsentattendanceGetView(ModelListView):
 
     def get_queryset(self, request):
         center_id = request_value(request, "centerId", "CenterId")
-        present_ids = StudentAttendance.objects.filter(center_id=center_id).values_list("student_id", flat=True)
+        present_ids = StudentAttendance.objects.filter(center_id=center_id, scan_date__date=now().date()).values_list("student_id", flat=True)
         return Student.objects.filter(center_id=center_id, status=True).exclude(id__in=present_ids)
 
 
@@ -907,29 +1073,28 @@ class StudentattendanceGetallstudentattendancstatusGetView(DotNetAPIView):
             attendance = StudentAttendance.objects.filter(center_id=center_id, student=student)
             if scan_date:
                 attendance = attendance.filter(scan_date__date=scan_date)
-            payload = model_payload(student)
-            payload["is_present"] = attendance.exists()
-            data.append(payload)
+            data.append({"id": student.id, "enrollmentId": student.enrollment_id, "fullName": student.full_name,
+                         "attendanceStatus": "Present" if attendance.exists() else "Absent"})
         return ok(data, "Student status exists")
 
 
-class StudentattendanceGetallstudentattendancbymonthGetView(ModelListView):
+class StudentattendanceGetallstudentattendancbymonthGetView(DotNetAPIView):
     """Lists attendance records filtered by center, student, month, and year."""
     serializer_class = api_serializers.StudentAttendanceByMonthQuerySerializer
-    model = StudentAttendance
-    message = "Student exists"
-
-    def get_queryset(self, request):
-        queryset = StudentAttendance.objects.all().order_by("scan_date")
-        queryset = filter_if_present(queryset, request, "center_id", "centerId", "CenterId")
-        queryset = filter_if_present(queryset, request, "student_id", "studentId", "StudentId")
-        month = to_int(request_value(request, "month", "Month"), 0)
-        year = to_int(request_value(request, "year", "Year"), 0)
-        if month:
-            queryset = queryset.filter(scan_date__month=month)
-        if year:
-            queryset = queryset.filter(scan_date__year=year)
-        return queryset
+    def get(self, request, *args, **kwargs):
+        import calendar
+        center_id = request_value(request, "centerId", "CenterId")
+        student_id = to_int(request_value(request, "studentId", "StudentId"))
+        month, year = to_int(request_value(request, "month", "Month")), to_int(request_value(request, "year", "Year"))
+        student = Student.objects.filter(pk=student_id, center_id=center_id, status=True).first()
+        if not student or not month or not year:
+            return ok([], "Student exists")
+        data = []
+        for day in range(1, calendar.monthrange(year, month)[1] + 1):
+            date = datetime(year, month, day).date()
+            present = StudentAttendance.objects.filter(student=student, scan_date__date=date).exists()
+            data.append({"id": student.id, "fullName": student.full_name, "date": date, "attendanceStatus": "Present" if present else "Absent"})
+        return ok(data, "Student exists")
 
 
 class UserSavesuperadminPostView(ModelSaveView):

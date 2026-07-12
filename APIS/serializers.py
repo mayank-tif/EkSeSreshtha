@@ -223,9 +223,30 @@ def optional_datetime():
     return FlexibleDateTimeField(required=False, allow_null=True)
 
 
-class SwaggerRequestSerializer(serializers.Serializer):
+class RequestSerializer(serializers.Serializer):
     foreign_key_fields = {}
     foreign_key_list_fields = {}
+
+    def to_internal_value(self, data):
+        """Match ASP.NET Core's case-insensitive form/JSON DTO binding.
+
+        The mobile clients use both ``CenterId`` and ``centerId`` (and the
+        occasional all-lowercase form key).  DRF normally treats those as
+        different fields, whereas the source API does not.
+        """
+        if data is not None:
+            supplied = data.lists() if hasattr(data, "lists") else data.items()
+            supplied = dict(supplied)
+            fields_by_casefold = {name.casefold(): name for name in self.fields}
+            normalised = {}
+            for key, value in supplied.items():
+                field_name = fields_by_casefold.get(str(key).casefold(), key)
+                # QueryDict.list() values are only needed for ListField inputs.
+                if isinstance(value, (list, tuple)) and not isinstance(self.fields.get(field_name), serializers.ListField):
+                    value = value[-1] if value else None
+                normalised[field_name] = value
+            data = normalised
+        return super().to_internal_value(data)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -247,16 +268,16 @@ class SwaggerRequestSerializer(serializers.Serializer):
         return attrs
 
 
-class PaginationQuerySerializer(SwaggerRequestSerializer):
+class PaginationQuerySerializer(RequestSerializer):
     offset = optional_int()
     limit = optional_int()
 
 
-class IdQuerySerializer(SwaggerRequestSerializer):
+class IdQuerySerializer(RequestSerializer):
     id = required_int()
 
 
-class AnnouncementSaveAnnouncementRequestSerializer(SwaggerRequestSerializer):
+class AnnouncementSaveAnnouncementRequestSerializer(RequestSerializer):
     Id = optional_int()
     Title = required_char()
     Description = required_char()
@@ -266,7 +287,7 @@ class AnnouncementSaveAnnouncementRequestSerializer(SwaggerRequestSerializer):
     CreatedBy = optional_int()
 
 
-class CenterSaveCenterRequestSerializer(SwaggerRequestSerializer):
+class CenterSaveCenterRequestSerializer(RequestSerializer):
     foreign_key_fields = {
         "AssignedTeachers": Teacher,
         "AssignedRegionalAdmin": RegionalAdmin,
@@ -288,21 +309,68 @@ class CenterSaveCenterRequestSerializer(SwaggerRequestSerializer):
     VillageId = optional_int()
 
 
-class CenterGetCenteryIdQuerySerializer(SwaggerRequestSerializer):
+class CenterGetCenteryIdQuerySerializer(RequestSerializer):
     centeId = required_int()
 
 
-class CenterGetAllCentersQuerySerializer(SwaggerRequestSerializer):
-    userId = optional_int()
-    type = optional_int()
+
+class CenterGetAllCentersQuerySerializer(serializers.Serializer):
+    userId = serializers.IntegerField(required=False, default=0)
+    type = serializers.IntegerField(required=False, default=0)
+
+class AllCenterDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    centerName = serializers.CharField(allow_null=True, required=False)
+    date = serializers.CharField(allow_null=True, required=False)
+    classDate = serializers.DateTimeField(allow_null=True, required=False)
+    classEndDate = serializers.DateTimeField(allow_null=True, required=False)
+    classStatus = serializers.BooleanField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    districtName = serializers.CharField(allow_null=True, required=False)
+    vidhanSabhaName = serializers.CharField(allow_null=True, required=False)
+    totalPresentStudents = serializers.IntegerField(allow_null=True, required=False)
+    totalActiveStudents = serializers.IntegerField(allow_null=True, required=False)
+    totalStudents = serializers.IntegerField(allow_null=True, required=False)
+    panchayatName = serializers.CharField(allow_null=True, required=False)
+    villageName = serializers.CharField(allow_null=True, required=False)
+    vidhanSabhaId = serializers.IntegerField(required=False)
+    villageId = serializers.IntegerField(allow_null=True, required=False)
+    districtId = serializers.IntegerField(required=False)
+    panchayatId = serializers.IntegerField(required=False)
+    assignedTeacher = serializers.IntegerField(allow_null=True, required=False)
+    teacherName = serializers.CharField(allow_null=True, required=False)
+    assignedRegionalAdmin = serializers.IntegerField(allow_null=True, required=False)
+    regionalAdminName = serializers.CharField(allow_null=True, required=False)
 
 
-class CenterGetAllCentersByStatusQuerySerializer(SwaggerRequestSerializer):
-    status = optional_bool()
-    userId = optional_int()
+class CenterGetAllCentersByStatusQuerySerializer(serializers.Serializer):
+    status = serializers.IntegerField(required=True)
+    userId = serializers.IntegerField(required=True)
+
+class AllCenterStatusDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    centerName = serializers.CharField(source="center_name", allow_null=True, required=False)
+    date = serializers.CharField(allow_null=True, required=False)
+    classStartDate = serializers.CharField(source="class_start_date", allow_null=True, required=False)
+    classEndDate = serializers.CharField(source="class_end_date", allow_null=True, required=False)
+    classStatus = serializers.BooleanField(source="class_status", allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    districtName = serializers.CharField(source="district_name", allow_null=True, required=False)
+    vidhanSabhaName = serializers.CharField(source="vidhan_sabha_name", allow_null=True, required=False)
+    villageName = serializers.CharField(source="village_name", allow_null=True, required=False)
+    totalPresentStudents = serializers.IntegerField(source="total_present_students", allow_null=True, required=False)
+    totalStudents = serializers.IntegerField(source="total_students", allow_null=True, required=False)
+    panchayatName = serializers.CharField(source="panchayat_name", allow_null=True, required=False)
+    vidhanSabhaId = serializers.IntegerField(source="vidhan_sabha_id", required=False)
+    districtId = serializers.IntegerField(source="district_id", required=False)
+    panchayatId = serializers.IntegerField(source="panchayat_id", required=False)
+    assignedTeacher = serializers.IntegerField(source="assigned_teacher", allow_null=True, required=False)
+    teacherName = serializers.CharField(source="teacher_name", allow_null=True, required=False)
+    assignedRegionalAdmin = serializers.IntegerField(source="assigned_regional_admin", allow_null=True, required=False)
+    regionalAdminName = serializers.CharField(source="regional_admin_name", allow_null=True, required=False)
 
 
-class CenterGetCenterByTeacherIdQuerySerializer(SwaggerRequestSerializer):
+class CenterGetCenterByTeacherIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"userId": Teacher}
     userId = required_int()
 
@@ -312,19 +380,19 @@ class CenterGetAllCenterAttendanceQuerySerializer(PaginationQuerySerializer):
     date = optional_datetime()
 
 
-class CenterUpdateCenterActiveOrDeactiveQuerySerializer(SwaggerRequestSerializer):
+class CenterUpdateCenterActiveOrDeactiveQuerySerializer(RequestSerializer):
     centerId = required_int()
     status = optional_bool()
     userId = optional_int()
     reason = optional_char()
 
 
-class CenterGetTotalAttendanceCountOfCenterQuerySerializer(SwaggerRequestSerializer):
+class CenterGetTotalAttendanceCountOfCenterQuerySerializer(RequestSerializer):
     userId = optional_int()
     date = optional_datetime()
 
 
-class ClassSaveClassRequestSerializer(SwaggerRequestSerializer):
+class ClassSaveClassRequestSerializer(RequestSerializer):
     foreign_key_fields = {"CenterId": Center}
 
     Id = optional_int()
@@ -336,22 +404,22 @@ class ClassSaveClassRequestSerializer(SwaggerRequestSerializer):
     AvilableStudents = required_int()
 
 
-class ClassCancelClassRequestSerializer(SwaggerRequestSerializer):
+class ClassCancelClassRequestSerializer(RequestSerializer):
     Id = required_int()
     Reason = required_char()
     CancelBy = required_int()
 
 
-class ClassUpdateEndClassTimeRequestSerializer(SwaggerRequestSerializer):
+class ClassUpdateEndClassTimeRequestSerializer(RequestSerializer):
     Id = required_int()
 
 
-class ClassUpdateClassSubStatusRequestSerializer(SwaggerRequestSerializer):
+class ClassUpdateClassSubStatusRequestSerializer(RequestSerializer):
     Id = required_int()
     SubStatus = optional_int()
 
 
-class ClassCancelClassByTeacherRequestSerializer(SwaggerRequestSerializer):
+class ClassCancelClassByTeacherRequestSerializer(RequestSerializer):
     foreign_key_fields = {"CenterId": Center}
 
     Id = optional_int()
@@ -363,37 +431,37 @@ class ClassCancelClassByTeacherRequestSerializer(SwaggerRequestSerializer):
     Reason = optional_char()
 
 
-class ClassDeleteClassByTeacherIdQuerySerializer(SwaggerRequestSerializer):
+class ClassDeleteClassByTeacherIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"classId": ClassModel}
     classId = required_int()
 
 
-class ClassGetClassCurrentStatusQuerySerializer(SwaggerRequestSerializer):
+class ClassGetClassCurrentStatusQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center, "teacherId": Teacher}
     centerId = required_int()
     teacherId = required_int()
 
 
-class ClassGetLiveClassDetailQuerySerializer(SwaggerRequestSerializer):
+class ClassGetLiveClassDetailQuerySerializer(RequestSerializer):
     foreign_key_fields = {"classId": ClassModel}
     classId = required_int()
 
 
-class DashboardCenterDateRangeQuerySerializer(SwaggerRequestSerializer):
+class DashboardCenterDateRangeQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center}
     centerId = optional_int()
     startDate = optional_datetime()
     endDate = optional_datetime()
 
 
-class DashboardGetCenterDetailByMonthQuerySerializer(SwaggerRequestSerializer):
+class DashboardGetCenterDetailByMonthQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center}
     centerId = optional_int()
     month = optional_int()
     year = optional_int()
 
 
-class DashboardFilterQuerySerializer(SwaggerRequestSerializer):
+class DashboardFilterQuerySerializer(RequestSerializer):
     foreign_key_fields = {
         "districtId": District,
         "vidhanSabhaId": VidhanSabha,
@@ -409,7 +477,7 @@ class DashboardFilterQuerySerializer(SwaggerRequestSerializer):
     endDate = optional_datetime()
 
 
-class DashboardDistrictOfCenterByFilterQuerySerializer(SwaggerRequestSerializer):
+class DashboardDistrictOfCenterByFilterQuerySerializer(RequestSerializer):
     foreign_key_fields = {"districtId": District, "vidhanSabhaId": VidhanSabha}
     districtId = optional_int()
     vidhanSabhaId = optional_int()
@@ -417,7 +485,7 @@ class DashboardDistrictOfCenterByFilterQuerySerializer(SwaggerRequestSerializer)
     endDate = optional_datetime()
 
 
-class DistrictSaveDistrictRequestSerializer(SwaggerRequestSerializer):
+class DistrictSaveDistrictRequestSerializer(RequestSerializer):
     Id = optional_int()
     DistrictGuidId = optional_char()
     Name = required_char()
@@ -426,7 +494,7 @@ class DistrictSaveDistrictRequestSerializer(SwaggerRequestSerializer):
     CreatedBy = optional_int()
 
 
-class FileSendNotificationRequestSerializer(SwaggerRequestSerializer):
+class FileSendNotificationRequestSerializer(RequestSerializer):
     userId = optional_int()
     DeviceId = optional_char()
     ListOfDeviceIds = serializers.ListField(child=serializers.CharField(), required=False)
@@ -435,11 +503,11 @@ class FileSendNotificationRequestSerializer(SwaggerRequestSerializer):
     Body = optional_char()
 
 
-class FileUploadProfileImageRequestSerializer(SwaggerRequestSerializer):
+class FileUploadProfileImageRequestSerializer(RequestSerializer):
     files = serializers.ListField(child=serializers.FileField(), required=False)
 
 
-class HolidaysSaveHolidaysRequestSerializer(SwaggerRequestSerializer):
+class HolidaysSaveHolidaysRequestSerializer(RequestSerializer):
     foreign_key_list_fields = {"ListCenterIds": Center}
 
     Id = optional_int()
@@ -453,31 +521,31 @@ class HolidaysSaveHolidaysRequestSerializer(SwaggerRequestSerializer):
     ListCenterIds = serializers.ListField(child=serializers.IntegerField(), required=True, allow_empty=False)
 
 
-class HolidaysTeacherIdQuerySerializer(SwaggerRequestSerializer):
+class HolidaysTeacherIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"teacherId": Teacher}
     teacherId = required_int()
 
 
-class HolidaysCenterIdQuerySerializer(SwaggerRequestSerializer):
+class HolidaysCenterIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center}
     centerId = required_int()
 
 
-class HolidaysYearQuerySerializer(SwaggerRequestSerializer):
+class HolidaysYearQuerySerializer(RequestSerializer):
     year = required_int()
 
 
-class HolidaysGetAllHolidaysQuerySerializer(SwaggerRequestSerializer):
+class HolidaysGetAllHolidaysQuerySerializer(RequestSerializer):
     status = optional_bool()
     userId = optional_int()
 
 
-class HolidaysDeleteHolidayByIdQuerySerializer(SwaggerRequestSerializer):
+class HolidaysDeleteHolidayByIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"id": Holidays}
     id = required_int()
 
 
-class PanchayatSavePanchayatRequestSerializer(SwaggerRequestSerializer):
+class PanchayatSavePanchayatRequestSerializer(RequestSerializer):
     foreign_key_fields = {"DistrictId": District, "VidhanSabhaId": VidhanSabha}
 
     Id = optional_int()
@@ -490,24 +558,24 @@ class PanchayatSavePanchayatRequestSerializer(SwaggerRequestSerializer):
     VidhanSabhaId = required_int()
 
 
-class PanchayatByDistrictAndVidhanSabhaQuerySerializer(SwaggerRequestSerializer):
+class PanchayatByDistrictAndVidhanSabhaQuerySerializer(RequestSerializer):
     foreign_key_fields = {"districtId": District, "vidhanSabhaId": VidhanSabha}
     districtId = required_int()
     vidhanSabhaId = required_int()
 
 
-class NameCheckQuerySerializer(SwaggerRequestSerializer):
+class NameCheckQuerySerializer(RequestSerializer):
     name = required_char()
 
 
-class SchoolSaveSchoolRequestSerializer(SwaggerRequestSerializer):
+class SchoolSaveSchoolRequestSerializer(RequestSerializer):
     Id = optional_int()
     SchoolName = required_char()
     CreatedOn = optional_datetime()
     CreatedBy = optional_int()
 
 
-class StudentSaveStudentRequestSerializer(SwaggerRequestSerializer):
+class StudentSaveStudentRequestSerializer(RequestSerializer):
     foreign_key_fields = {
         "VidhanSabhaId": VidhanSabha,
         "DistrictId": District,
@@ -552,23 +620,23 @@ class StudentSaveStudentRequestSerializer(SwaggerRequestSerializer):
     SchoolName = optional_char()
 
 
-class StudentGetStudentByIdQuerySerializer(SwaggerRequestSerializer):
+class StudentGetStudentByIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"studentId": Student}
     studentId = required_int()
 
 
-class StudentUpdateStudentActiveOrInactiveRequestSerializer(SwaggerRequestSerializer):
+class StudentUpdateStudentActiveOrInactiveRequestSerializer(RequestSerializer):
     foreign_key_fields = {"Id": Student}
     Id = required_int()
     Status = required_bool()
 
 
-class StudentGetTotalStudentPresentQuerySerializer(SwaggerRequestSerializer):
+class StudentGetTotalStudentPresentQuerySerializer(RequestSerializer):
     scanDate = optional_datetime()
     userId = optional_int()
 
 
-class StudentGetAllStudentsQuerySerializer(SwaggerRequestSerializer):
+class StudentGetAllStudentsQuerySerializer(RequestSerializer):
     userId = optional_int()
     districtId = optional_int()
     vidhanSabhaId = optional_int()
@@ -576,7 +644,7 @@ class StudentGetAllStudentsQuerySerializer(SwaggerRequestSerializer):
     villageId = optional_int()
 
 
-class StudentAttendanceSaveRequestSerializer(SwaggerRequestSerializer):
+class StudentAttendanceSaveRequestSerializer(RequestSerializer):
     foreign_key_fields = {"ClassId": ClassModel, "CenterId": Center}
     foreign_key_list_fields = {"StudentIds": Student}
 
@@ -587,8 +655,18 @@ class StudentAttendanceSaveRequestSerializer(SwaggerRequestSerializer):
     ScanDate = required_datetime()
     CenterId = required_int()
 
+    def to_internal_value(self, data):
+        # StudentAttendanceDto exposes StudentIds as a comma-separated string;
+        # JSON callers commonly send the equivalent integer array.
+        if data is not None:
+            data = data.copy() if hasattr(data, "copy") else dict(data)
+            student_ids_key = next((key for key in data if str(key).casefold() == "studentids"), None)
+            if student_ids_key is not None and isinstance(data[student_ids_key], str):
+                data[student_ids_key] = [value.strip() for value in data[student_ids_key].split(",") if value.strip()]
+        return super().to_internal_value(data)
 
-class StudentAttendanceCenterQuerySerializer(SwaggerRequestSerializer):
+
+class StudentAttendanceCenterQuerySerializer(RequestSerializer):
     foreign_key_fields = {"centerId": Center}
     centerId = required_int()
 
@@ -603,7 +681,7 @@ class StudentAttendanceByMonthQuerySerializer(StudentAttendanceCenterQuerySerial
     year = optional_int()
 
 
-class UserSaveSuperAdminRequestSerializer(SwaggerRequestSerializer):
+class UserSaveSuperAdminRequestSerializer(RequestSerializer):
     Id = optional_int()
     EnrolmentRollId = optional_char()
     Name = required_char()
@@ -627,7 +705,7 @@ class UserSaveSuperAdminRequestSerializer(SwaggerRequestSerializer):
     CreatedBy = required_int()
 
 
-class UserUpdateDeviceIdRequestSerializer(SwaggerRequestSerializer):
+class UserUpdateDeviceIdRequestSerializer(RequestSerializer):
     foreign_key_fields = {"userId": User}
     userId = required_int()
     DeviceId = required_char()
@@ -662,31 +740,31 @@ class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
         return attrs
 
 
-class UserGetUserByIdQuerySerializer(SwaggerRequestSerializer):
+class UserGetUserByIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"userId": User}
     userId = required_int()
 
 
-class UserGetUserDetailByPhoneNumberQuerySerializer(SwaggerRequestSerializer):
+class UserGetUserDetailByPhoneNumberQuerySerializer(RequestSerializer):
     phoneNumer = required_char()
 
 
-class UserUpdatePasswordQuerySerializer(SwaggerRequestSerializer):
+class UserUpdatePasswordQuerySerializer(RequestSerializer):
     foreign_key_fields = {"userId": User}
     userId = required_int()
     newPassword = required_char()
 
 
-class UserGetAllTeachersQuerySerializer(SwaggerRequestSerializer):
+class UserGetAllTeachersQuerySerializer(RequestSerializer):
     userId = optional_int()
 
 
-class UserSearchDataQuerySerializer(SwaggerRequestSerializer):
+class UserSearchDataQuerySerializer(RequestSerializer):
     type = optional_char()
     queryString = optional_char()
 
 
-class VidhanSabhaSaveVidhanSabhaRequestSerializer(SwaggerRequestSerializer):
+class VidhanSabhaSaveVidhanSabhaRequestSerializer(RequestSerializer):
     foreign_key_fields = {"DistrictId": District}
 
     Id = optional_int()
@@ -698,12 +776,12 @@ class VidhanSabhaSaveVidhanSabhaRequestSerializer(SwaggerRequestSerializer):
     DistrictId = required_int()
 
 
-class VidhanSabhaByDistrictIdQuerySerializer(SwaggerRequestSerializer):
+class VidhanSabhaByDistrictIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"districtId": District}
     districtId = required_int()
 
 
-class VillageSaveVillageRequestSerializer(SwaggerRequestSerializer):
+class VillageSaveVillageRequestSerializer(RequestSerializer):
     foreign_key_fields = {
         "DistrictId": District,
         "VidhanSabhaId": VidhanSabha,
@@ -721,7 +799,7 @@ class VillageSaveVillageRequestSerializer(SwaggerRequestSerializer):
     PanchayatId = required_int()
 
 
-class VillageByDistrictVidhanSabhaAndPanchayatQuerySerializer(SwaggerRequestSerializer):
+class VillageByDistrictVidhanSabhaAndPanchayatQuerySerializer(RequestSerializer):
     foreign_key_fields = {
         "districtId": District,
         "vidhanSabhaId": VidhanSabha,
@@ -733,7 +811,7 @@ class VillageByDistrictVidhanSabhaAndPanchayatQuerySerializer(SwaggerRequestSeri
     panchayatId = required_int()
 
 
-class TeacherSaveTeacherRequestSerializer(SwaggerRequestSerializer):
+class TeacherSaveTeacherRequestSerializer(RequestSerializer):
     foreign_key_fields = {
         "VidhanSabhaId": VidhanSabha,
         "DistrictId": District,
