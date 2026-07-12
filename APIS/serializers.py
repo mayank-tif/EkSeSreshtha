@@ -388,9 +388,10 @@ class FileUploadProfileImageRequestSerializer(RequestSerializer):
     files = serializers.ListField(child=serializers.FileField(), required=False)
 
 
+# Holidays Serializers
 class HolidaysSaveHolidaysRequestSerializer(RequestSerializer):
     foreign_key_list_fields = {"ListCenterIds": Center}
-
+    
     Id = optional_int()
     Name = required_char()
     Description = optional_char()
@@ -401,30 +402,33 @@ class HolidaysSaveHolidaysRequestSerializer(RequestSerializer):
     CreatedOn = optional_datetime()
     ListCenterIds = serializers.ListField(child=serializers.IntegerField(), required=True, allow_empty=False)
 
-
 class HolidaysTeacherIdQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"teacherId": Teacher}
     teacherId = required_int()
 
-
 class HolidaysCenterIdQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"centerId": Center}
     centerId = required_int()
-
 
 class HolidaysYearQuerySerializer(RequestSerializer):
     year = required_int()
 
-
 class HolidaysGetAllHolidaysQuerySerializer(RequestSerializer):
-    status = optional_bool()
+    status = optional_int()
     userId = optional_int()
 
-
 class HolidaysDeleteHolidayByIdQuerySerializer(RequestSerializer):
-    foreign_key_fields = {"id": Holidays}
     id = required_int()
 
+class HolidaysDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    description = serializers.CharField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    startDate = serializers.DateTimeField(allow_null=True, required=False)
+    endDate = serializers.DateTimeField(allow_null=True, required=False)
+    createdBy = serializers.IntegerField(allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    centerId = serializers.IntegerField(allow_null=True, required=False)
+    centerName = serializers.CharField(allow_null=True, required=False)
 
 class PanchayatSavePanchayatRequestSerializer(RequestSerializer):
     foreign_key_fields = {"DistrictId": District, "VidhanSabhaId": VidhanSabha}

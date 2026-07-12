@@ -1262,69 +1262,323 @@ class SchoolGetallschoolsGetView(ModelListView):
     message = "List of schools"
 
 
-class HolidaysSaveholidaysPostView(ModelSaveView):
+#---------------------------------------------------------
+# Holidays Views
+#---------------------------------------------------------
+
+class HolidaysSaveholidaysPostView(APIView):
     """Saves or updates holiday records."""
-    serializer_class = api_serializers.HolidaysSaveHolidaysRequestSerializer
-    model = Holidays
-    success_message = "Holiday save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveHolidays : Started")
+            
+            serializer = api_serializers.HolidaysSaveHolidaysRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            holidays_data = serializer.validated_data
+            result = save_holidays(holidays_data)
+            
+            if result:
+                holiday_id = holidays_data.get('Id', 0)
+                if holiday_id > 0:
+                    message = "Holdays update successfully"
+                else:
+                    message = "Holdays save successfully"
+                
+                return Response(
+                    {
+                        "status": True,
+                        "message": message,
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Holdays doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveHolidays : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class HolidaysGetallholidaysGetView(ModelListView):
-    """Lists holidays, optionally filtered by status."""
-    serializer_class = api_serializers.HolidaysGetAllHolidaysQuerySerializer
-    model = Holidays
-    message = "List of holidays"
-
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        status_value = request_value(request, "status", "Status")
-        if status_value not in (None, "", "-1"):
-            queryset = queryset.filter(status=to_bool(status_value))
-        return queryset
-
-
-class HolidaysGetallholidaysbyteacheridGetView(ModelListView):
+class HolidaysGetallholidaysbyteacheridGetView(APIView):
     """Lists holidays for the center assigned to a teacher."""
-    serializer_class = api_serializers.HolidaysTeacherIdQuerySerializer
-    model = Holidays
-    message = "List of holidays"
+    
+    def get(self, request):
+        try:
+            logger.info("DistrictController : GetAllDistrict : Started")
+            
+            teacher_id = request.query_params.get('teacherId')
+            if not teacher_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "teacherId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            holidays = get_all_holidays_by_teacher_id(int(teacher_id))
+            
+            if holidays is not None and len(holidays) > 0:
+                response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of Holidays",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "List of Holidays not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"DistrictController : GetAllHolidaysByTeacherId : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        teacher = Teacher.objects.filter(pk=request_value(request, "teacherId", "TeacherId")).first()
-        return Holidays.objects.filter(center=teacher.center) if teacher and teacher.center_id else Holidays.objects.none()
-
-
-class HolidaysGetallholidaysbycenteridGetView(ModelListView):
+class HolidaysGetallholidaysbycenteridGetView(APIView):
     """Lists holidays for a center."""
-    serializer_class = api_serializers.HolidaysCenterIdQuerySerializer
-    model = Holidays
-    message = "List of holidays"
+    
+    def get(self, request):
+        try:
+            logger.info("DistrictController : GetAllDistrict : Started")
+            
+            center_id = request.query_params.get('centerId')
+            if not center_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "centerId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            holidays = get_all_holidays_by_center_id(int(center_id))
+            
+            if holidays is not None and len(holidays) > 0:
+                response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of Holidays exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Holidays not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"DistrictController : GetAllHolidaysByCenterId : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        return Holidays.objects.filter(center_id=request_value(request, "centerId", "CenterId"))
-
-
-class HolidaysGetallholidaysbyyearGetView(ModelListView):
+class HolidaysGetallholidaysbyyearGetView(APIView):
     """Lists holidays whose start date falls in a year."""
-    serializer_class = api_serializers.HolidaysYearQuerySerializer
-    model = Holidays
-    message = "List of holidays"
+    
+    def get(self, request):
+        try:
+            logger.info("DistrictController : GetAllHolidaysByYear : Started")
+            
+            year = request.query_params.get('year')
+            if not year:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "year is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            holidays = get_all_holidays_by_year(int(year))
+            
+            if holidays is not None and len(holidays) > 0:
+                response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of Holidays",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "List of Holidays not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"DistrictController : GetAllHolidaysByYear : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def get_queryset(self, request):
-        year = to_int(request_value(request, "year", "Year"), 0)
-        return Holidays.objects.filter(start_date__year=year) if year else Holidays.objects.all()
+class HolidaysGetallholidaysGetView(APIView):
+    """Lists holidays, optionally filtered by status."""
+    
+    def get(self, request):
+        try:
+            logger.info("DistrictController : GetAllHolidaysByYear : Started")
+            
+            status_param = request.query_params.get('status', 1)
+            user_id = request.query_params.get('userId', 0)
+            
+            holidays = get_all_holidays(int(status_param), int(user_id))
+            
+            if holidays is not None and len(holidays) > 0:
+                response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of Holidays",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "List of Holidays not found",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"DistrictController : GetAllHolidays : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-
-class HolidaysDeleteholidaybyidPostView(DotNetAPIView):
+class HolidaysDeleteholidaybyidPostView(APIView):
     """Deletes a holiday by id."""
-    serializer_class = api_serializers.HolidaysDeleteHolidayByIdQuerySerializer
-
-    def post(self, request, *args, **kwargs):
-        obj = get_by_id(Holidays, request, "holidayId", "HolidayId", "id", "Id")
-        if not obj:
-            return fail("Holiday not deleted")
-        obj.delete()
-        return ok(message="Holiday deleted")
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveClass : Started")
+            
+            holiday_id = request.data.get('id')
+            if not holiday_id:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "id is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            result = delete_holiday_by_id(int(holiday_id))
+            
+            if result:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "holiday deleted",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "holiday not deleted",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : DeleteHolidayById : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class StudentSavestudentPostView(ModelSaveView):

@@ -2763,4 +2763,296 @@ def get_student_attendance_by_percentage():
         raise e
 
 #---------------------------------------------------------
+# Holidays APIs Helper Functions
+#---------------------------------------------------------
 
+def save_holidays(holidays_data):
+    """Save or update holidays"""
+    logger.info(f"HolidaysRepository : SaveHolidays : Started")
+    
+    try:
+        holiday_id = holidays_data.get('Id', 0)
+        center_ids = holidays_data.get('ListCenterIds', [])
+        
+        with connection.cursor() as cursor:
+            if holiday_id > 0:
+                # Get existing holidays with same name
+                existing_sql = """
+                    SELECT Id, CenterId, StartDate, EndDate, Name, Status, CreatedBy
+                    FROM Holidays
+                    WHERE Name = %s
+                """
+                cursor.execute(existing_sql, [holidays_data.get('Name')])
+                existing_rows = cursor.fetchall()
+                
+                existing_center_ids = [row[1] for row in existing_rows]
+                
+                # Remove holidays that are not in the new list
+                center_ids_to_remove = [cid for cid in existing_center_ids if cid not in center_ids]
+                if center_ids_to_remove:
+                    remove_sql = """
+                        DELETE FROM Holidays 
+                        WHERE Name = %s AND CenterId IN ({})
+                    """.format(','.join(['%s'] * len(center_ids_to_remove)))
+                    params = [holidays_data.get('Name')] + center_ids_to_remove
+                    cursor.execute(remove_sql, params)
+                
+                # Add new holidays
+                center_ids_to_add = [cid for cid in center_ids if cid not in existing_center_ids]
+                for center_id in center_ids_to_add:
+                    insert_sql = """
+                        INSERT INTO Holidays (
+                            StartDate, EndDate, Name, Status, CenterId, CreatedOn, CreatedBy
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(insert_sql, [
+                        holidays_data.get('StartDate'),
+                        holidays_data.get('EndDate'),
+                        holidays_data.get('Name'),
+                        holidays_data.get('Status'),
+                        center_id,
+                        datetime.now(),
+                        holidays_data.get('CreatedBy')
+                    ])
+                
+                # Update existing holidays
+                for center_id in existing_center_ids:
+                    if center_id in center_ids:
+                        update_sql = """
+                            UPDATE Holidays 
+                            SET StartDate = %s, EndDate = %s, Name = %s, Status = %s
+                            WHERE Name = %s AND CenterId = %s
+                        """
+                        cursor.execute(update_sql, [
+                            holidays_data.get('StartDate'),
+                            holidays_data.get('EndDate'),
+                            holidays_data.get('Name'),
+                            holidays_data.get('Status'),
+                            holidays_data.get('Name'),
+                            center_id
+                        ])
+                        
+            else:
+                # Insert new holidays
+                for center_id in center_ids:
+                    insert_sql = """
+                        INSERT INTO Holidays (
+                            StartDate, EndDate, Name, Status, CenterId, CreatedOn, CreatedBy
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(insert_sql, [
+                        holidays_data.get('StartDate'),
+                        holidays_data.get('EndDate'),
+                        holidays_data.get('Name'),
+                        holidays_data.get('Status'),
+                        center_id,
+                        datetime.now(),
+                        holidays_data.get('CreatedBy')
+                    ])
+        
+        logger.info(f"HolidaysRepository : SaveHolidays : End")
+        return {'status': True, 'message': 'Holidays saved successfully'}
+        
+    except Exception as e:
+        logger.error(f"HolidaysRepository : SaveHolidays : {str(e)}")
+        raise e
+
+def get_all_holidays_by_teacher_id(teacher_id):
+    """Get all holidays by teacher ID"""
+    logger.info(f"HolidaysRepository : GetAllHolidaysByTeacherId : Started")
+    
+    try:
+        today = datetime.now().date()
+        sql = """
+            SELECT 
+                h.Id,
+                h.Name,
+                h.CenterId,
+                h.Description
+            FROM Holidays h
+            INNER JOIN Center c ON h.CenterId = c.Id
+            WHERE c.AssignedTeachers = %s 
+            AND DATE(h.StartDate) >= %s 
+            AND DATE(h.EndDate) <= %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [teacher_id, today, today])
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"HolidaysRepository : GetAllHolidaysByTeacherId : {str(e)}")
+        raise e
+
+def get_all_holidays_by_year(year):
+    """Get all holidays by year"""
+    logger.info(f"HolidaysRepository : GetAllHolidaysByYear : Started")
+    
+    try:
+        sql = """
+            SELECT 
+                Id, Name, Description, Status, StartDate, EndDate, CenterId, CreatedOn, CreatedBy
+            FROM Holidays
+            WHERE YEAR(StartDate) = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [year])
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"HolidaysRepository : GetAllHolidaysByYear : {str(e)}")
+        raise e
+
+def get_all_holidays_by_center_id(center_id):
+    """Get all holidays by center ID"""
+    logger.info(f"HolidaysRepository : GetAllHolidaysByCenterId : Started")
+    
+    try:
+        sql = """
+            SELECT 
+                Id, Name, Description, Status, StartDate, EndDate, CenterId, CreatedOn, CreatedBy
+            FROM Holidays
+            WHERE CenterId = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [center_id])
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"HolidaysRepository : GetAllHolidaysByCenterId : {str(e)}")
+        raise e
+
+def get_all_holidays(status, user_id=0):
+    """Get all holidays with optional status and user filter"""
+    logger.info(f"HolidaysRepository : GetAllHolidays : Started")
+    
+    try:
+        today = datetime.now().date()
+        result = []
+        
+        with connection.cursor() as cursor:
+            if user_id == 0:
+                # SuperAdmin - get all holidays
+                if status == 1:
+                    # All holidays
+                    sql = """
+                        SELECT 
+                            h.Id,
+                            h.Name,
+                            h.StartDate,
+                            h.EndDate,
+                            h.CreatedBy,
+                            h.CreatedOn,
+                            h.CenterId,
+                            c.CenterName
+                        FROM Holidays h
+                        INNER JOIN Center c ON h.CenterId = c.Id
+                        ORDER BY h.StartDate
+                    """
+                    cursor.execute(sql)
+                else:
+                    # Upcoming holidays
+                    sql = """
+                        SELECT 
+                            h.Id,
+                            h.Name,
+                            h.StartDate,
+                            h.EndDate,
+                            h.CreatedBy,
+                            h.CreatedOn,
+                            h.CenterId,
+                            c.CenterName
+                        FROM Holidays h
+                        INNER JOIN Center c ON h.CenterId = c.Id
+                        WHERE DATE(h.StartDate) >= %s
+                        ORDER BY h.StartDate
+                    """
+                    cursor.execute(sql, [today])
+            else:
+                # Regional Admin - filter by created_by
+                if status == 1:
+                    # All holidays
+                    sql = """
+                        SELECT 
+                            h.Id,
+                            h.Name,
+                            h.StartDate,
+                            h.EndDate,
+                            h.CreatedBy,
+                            h.CreatedOn,
+                            h.CenterId,
+                            c.CenterName
+                        FROM Holidays h
+                        INNER JOIN Center c ON h.CenterId = c.Id
+                        WHERE h.CreatedBy = %s
+                        ORDER BY h.StartDate
+                    """
+                    cursor.execute(sql, [user_id])
+                else:
+                    # Upcoming holidays
+                    sql = """
+                        SELECT 
+                            h.Id,
+                            h.Name,
+                            h.StartDate,
+                            h.EndDate,
+                            h.CreatedBy,
+                            h.CreatedOn,
+                            h.CenterId,
+                            c.CenterName
+                        FROM Holidays h
+                        INNER JOIN Center c ON h.CenterId = c.Id
+                        WHERE h.CreatedBy = %s 
+                        AND DATE(h.StartDate) >= %s
+                        ORDER BY h.StartDate
+                    """
+                    cursor.execute(sql, [user_id, today])
+            
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            
+            return result
+            
+    except Exception as e:
+        logger.error(f"HolidaysRepository : GetAllHolidays : {str(e)}")
+        raise e
+
+def delete_holiday_by_id(holiday_id):
+    """Delete holiday by ID"""
+    logger.info(f"HolidaysRepository : DeleteHolidayById : Started")
+    
+    try:
+        with connection.cursor() as cursor:
+            # Check if holiday exists
+            check_sql = "SELECT Id FROM Holidays WHERE Id = %s"
+            cursor.execute(check_sql, [holiday_id])
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+            
+            # Delete holiday
+            delete_sql = "DELETE FROM Holidays WHERE Id = %s"
+            cursor.execute(delete_sql, [holiday_id])
+            
+            return {'id': holiday_id, 'deleted': True}
+            
+    except Exception as e:
+        logger.error(f"HolidaysRepository : DeleteHolidayById : {str(e)}")
+        raise e
