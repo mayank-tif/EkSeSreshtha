@@ -157,17 +157,129 @@ class NameExistsView(DotNetAPIView):
         return fail(self.missing_message)
 
 
-class AnnouncementSaveannouncementPostView(ModelSaveView):
+#---------------------------------------------------------
+# Announcement Views
+#---------------------------------------------------------
+
+class AnnouncementSaveannouncementPostView(APIView):
     """Saves or updates announcement records from form or JSON data."""
-    serializer_class = api_serializers.AnnouncementSaveAnnouncementRequestSerializer
-    model = Announcement
-    success_message = "Announcement save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveHolidays : Started")
+            
+            # Handle file upload
+            image_files = request.FILES.getlist('ImageFile')
+            image_paths = []
+            
+            if image_files:
+                # Upload images
+                for image_file in image_files:
+                    if image_file:
+                        import os
+                        from django.core.files.storage import default_storage
+                        from django.core.files.base import ContentFile
+                        
+                        file_extension = os.path.splitext(image_file.name)[1]
+                        file_name = f"announcement_{uuid.uuid4()}{file_extension}"
+                        file_path = f"AnnouncementImages/{file_name}"
+                        
+                        saved_path = default_storage.save(file_path, ContentFile(image_file.read()))
+                        image_paths.append(default_storage.url(saved_path))
+            
+            # Prepare data for serializer
+            data = request.data.copy()
+            if image_paths:
+                data['Image'] = ','.join(image_paths)
+            
+            serializer = api_serializers.AnnouncementSaveAnnouncementRequestSerializer(data=data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "details": serializer.errors,
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            announcement_data = serializer.validated_data
+            saved_announcement = save_announcement(announcement_data)
+            
+            if saved_announcement:
+                response_serializer = api_serializers.AnnouncementDtoSerializer(saved_announcement)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Announcement save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Announcement doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveAnnouncement : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class AnnouncementGetannouncementGetView(ModelListView):
+class AnnouncementGetannouncementGetView(APIView):
     """Returns the announcement list ordered by the model defaults."""
-    model = Announcement
-    message = "List of announcement"
+    
+    def get(self, request):
+        try:
+            logger.info("DistrictController : GetAnnouncement : Started")
+            
+            announcements = get_all_announcements()
+            
+            if announcements is not None and len(announcements) > 0:
+                response_serializer = api_serializers.AnnouncementDtoSerializer(announcements, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of announcements",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "List of announcements not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"DistrictController : GetAnnouncement : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class CenterSavecenterPostView(ModelSaveView):

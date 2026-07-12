@@ -159,7 +159,8 @@ class PaginationQuerySerializer(RequestSerializer):
 class IdQuerySerializer(RequestSerializer):
     id = required_int()
 
-
+    
+# Announcement Serializers-----------------------------------------------------------------------------------------------
 class AnnouncementSaveAnnouncementRequestSerializer(RequestSerializer):
     Id = optional_int()
     Title = required_char()
@@ -168,6 +169,14 @@ class AnnouncementSaveAnnouncementRequestSerializer(RequestSerializer):
     Image = optional_char()
     CreatedOn = optional_datetime()
     CreatedBy = optional_int()
+
+class AnnouncementDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField(allow_null=True, required=False)
+    description = serializers.CharField(allow_null=True, required=False)
+    image = serializers.CharField(allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    createdBy = serializers.IntegerField(allow_null=True, required=False)
 
 # Center serializers ------------------------------------------------------------------------------------------------------------------------------
 

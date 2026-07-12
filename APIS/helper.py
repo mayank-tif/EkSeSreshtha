@@ -8,6 +8,9 @@ from django.db import connection
 from .utils import *
 from rest_framework_simplejwt.tokens import AccessToken
 from datetime import timedelta
+import os
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
 
 
 logger = logging.getLogger(__name__)
@@ -4673,3 +4676,115 @@ def get_regional_admin_by_id(regional_admin_id):
     except Exception as e:
         logger.error(f"RegionalAdminRepository : get_regional_admin_by_id : {str(e)}")
         raise e
+    
+#---------------------------------------------------------
+# Announcement APIs Helper Functions
+#---------------------------------------------------------
+
+def save_announcement(announcement_data):
+    """Save or update announcement"""
+    logger.info(f"AnnouncementRepository : SaveAnnouncement : Started")
+    
+    try:
+        announcement_id = announcement_data.get('Id', 0)
+        
+        if announcement_id > 0:
+            # Update existing announcement
+            update_fields = []
+            update_values = []
+            
+            for key, value in announcement_data.items():
+                if key != 'Id' and value is not None:
+                    column_name = {
+                        'Title': 'Title',
+                        'Description': 'Description',
+                        'Image': 'Image',
+                        'CreatedOn': 'CreatedOn',
+                        'CreatedBy': 'CreatedBy'
+                    }.get(key, key)
+                    
+                    update_fields.append(f"{column_name} = %s")
+                    update_values.append(value)
+            
+            if update_fields:
+                update_values.append(announcement_id)
+                sql = f"UPDATE Announcement SET {', '.join(update_fields)} WHERE Id = %s"
+                with connection.cursor() as cursor:
+                    cursor.execute(sql, update_values)
+        else:
+            # Insert new announcement
+            sql = """
+                INSERT INTO Announcement (Title, Description, Image, CreatedOn, CreatedBy)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [
+                    announcement_data.get('Title'),
+                    announcement_data.get('Description'),
+                    announcement_data.get('Image'),
+                    announcement_data.get('CreatedOn') or datetime.now(),
+                    announcement_data.get('CreatedBy')
+                ])
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                announcement_id = cursor.fetchone()[0]
+        
+        return get_announcement_by_id(announcement_id)
+        
+    except Exception as e:
+        logger.error(f"AnnouncementRepository : SaveAnnouncement : {str(e)}")
+        raise e
+
+def get_announcement_by_id(announcement_id):
+    """Get announcement by ID"""
+    try:
+        sql = "SELECT Id, Title, Description, Image, CreatedOn, CreatedBy FROM Announcement WHERE Id = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [announcement_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.error(f"AnnouncementRepository : get_announcement_by_id : {str(e)}")
+        raise e
+
+def get_all_announcements():
+    """Get all announcements"""
+    logger.info(f"AnnouncementRepository : GetAnnouncement : Started")
+    
+    try:
+        sql = "SELECT Id, Title, Description, Image, CreatedOn, CreatedBy FROM Announcement ORDER BY Id"
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+    except Exception as e:
+        logger.error(f"AnnouncementRepository : GetAnnouncement : {str(e)}")
+        raise e
+
+def upload_announcement_images(image_files):
+    """Upload announcement images"""
+    try:
+        file_paths = []
+        for image_file in image_files:
+            if image_file:
+                # Create unique filename
+                file_extension = os.path.splitext(image_file.name)[1]
+                file_name = f"announcement_{uuid.uuid4()}{file_extension}"
+                file_path = f"AnnouncementImages/{file_name}"
+                
+                # Save file
+                saved_path = default_storage.save(file_path, ContentFile(image_file.read()))
+                file_paths.append(default_storage.url(saved_path))
+        
+        return file_paths
+    except Exception as e:
+        logger.error(f"AnnouncementController : UploadImages : {str(e)}")
+        raise e
+    
+    
