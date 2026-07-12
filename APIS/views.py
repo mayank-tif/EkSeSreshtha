@@ -1424,17 +1424,104 @@ class VillageCheckvillagenamePostView(NameExistsView):
     missing_message = "Village name doesn't exists"
 
 
-class SchoolSaveschoolPostView(ModelSaveView):
+#---------------------------------------------------------
+# School Views
+#---------------------------------------------------------
+
+class SchoolSaveschoolPostView(APIView):
     """Saves or updates a school record."""
-    serializer_class = api_serializers.SchoolSaveSchoolRequestSerializer
-    model = School
-    success_message = "School save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : LoginSuperAdmin : Started")
+            
+            serializer = api_serializers.SchoolSaveSchoolRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            school_data = serializer.validated_data
+            saved_school = save_school(school_data)
+            
+            if saved_school:
+                response_serializer = api_serializers.SchoolDtoSerializer(saved_school)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "School save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "School doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveSchool : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-
-class SchoolGetallschoolsGetView(ModelListView):
+class SchoolGetallschoolsGetView(APIView):
     """Returns all school records."""
-    model = School
-    message = "List of schools"
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetUser : Started")
+            
+            schools = get_all_schools()
+            
+            if schools is not None and len(schools) > 0:
+                response_serializer = api_serializers.SchoolDtoSerializer(schools, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "school exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "school not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllSchools : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
 
 #---------------------------------------------------------
@@ -1756,189 +1843,710 @@ class HolidaysDeleteholidaybyidPostView(APIView):
             )
 
 
-class StudentSavestudentPostView(ModelSaveView):
+#---------------------------------------------------------
+# Student Views
+#---------------------------------------------------------
+
+class StudentSavestudentPostView(APIView):
     """Saves or updates student details and creates enrollment id when missing."""
-    serializer_class = api_serializers.StudentSaveStudentRequestSerializer
-    model = Student
-    success_message = "Student save successfully"
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : LoginSuperAdmin : Started")
+            
+            serializer = api_serializers.StudentSaveStudentRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            student_data = serializer.validated_data
+            saved_student = save_student(student_data)
+            
+            if saved_student:
+                response_serializer = api_serializers.StudentDtoSerializer(saved_student)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Student save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Student doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveStudent : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def post(self, request, *args, **kwargs):
-        defaults = {"enrollment_id": request_value(request, "EnrollmentId", "enrollmentId") or str(uuid.uuid4())}
-        obj = save_model_from_request(Student, request, defaults=defaults)
-        return ok(model_payload(obj), self.success_message)
-
-
-class StudentGetstudentbyidGetView(ModelDetailView):
+class StudentGetstudentbyidGetView(APIView):
     """Returns a student by student id."""
-    serializer_class = api_serializers.StudentGetStudentByIdQuerySerializer
-    model = Student
-    id_names = ("studentId", "StudentId")
-    found_message = "student exists"
-    missing_message = "student not exists"
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetUser : Started")
+            
+            student_id = request.query_params.get('studentId')
+            if not student_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "studentId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            student = get_student_by_id(int(student_id))
+            
+            if student:
+                response_serializer = api_serializers.StudentDetailDtoSerializer(student)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "student exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "student not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetStudentById : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-
-class StudentUpdatestudentactiveorinactivePostView(DotNetAPIView):
+class StudentUpdatestudentactiveorinactivePostView(APIView):
     """Updates a student active/inactive status."""
-    serializer_class = api_serializers.StudentUpdateStudentActiveOrInactiveRequestSerializer
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : UpdateStudentActiveOrInactive : Started")
+            
+            serializer = api_serializers.StudentUpdateStudentActiveOrInactiveRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            student_id = serializer.validated_data.get('Id')
+            status_val = serializer.validated_data.get('Status')
+            
+            student = update_student_active_or_inactive(student_id, status_val)
+            
+            if student:
+                response_serializer = api_serializers.StudentDtoSerializer(student)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Status updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Status not updated",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : UpdateStudentActiveOrInactive : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
 
-    def post(self, request, *args, **kwargs):
-        student = get_by_id(Student, request, "studentId", "StudentId", "Id")
-        if not student:
-            return fail("Status not updated")
-        student.status = to_bool(request_value(request, "status", "Status"))
-        student.save(update_fields=["status"])
-        return ok(model_payload(student), "Status updated")
-
-
-class StudentGettotalstudentpresentGetView(DotNetAPIView):
+class StudentGettotalstudentpresentGetView(APIView):
     """Returns total present student attendance count for an optional date."""
-    serializer_class = api_serializers.StudentGetTotalStudentPresentQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetTotalStudentPresent : Started")
+            
+            scan_date = request.query_params.get('scanDate')
+            user_id = request.query_params.get('userId')
+            
+            if not scan_date or not user_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "scanDate and userId are required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            scan_date = parse_any_datetime(scan_date)
+            result = get_total_student_present(scan_date, int(user_id))
+            
+            if result:
+                response_serializer = api_serializers.StudentPresentClassDtoSerializer(result)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Total count",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "Not found",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetTotalStudentPresent : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        scan_date = parse_any_datetime(request_value(request, "scanDate", "ScanDate"))
-        queryset = StudentAttendance.objects.all()
-        if scan_date:
-            queryset = queryset.filter(scan_date__date=scan_date)
-        return ok({"total": queryset.count()}, "Total count")
-
-
-class StudentGetallstudentsGetView(ModelListView):
+class StudentGetallstudentsGetView(APIView):
     """Lists students filtered by optional location identifiers."""
-    serializer_class = api_serializers.StudentGetAllStudentsQuerySerializer
-    model = Student
-    message = "Total students"
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetTotalStudentPresent : Started")
+            
+            user_id = request.query_params.get('userId')
+            if not user_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "userId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            district_id = request.query_params.get('districtId', 0)
+            vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
+            panchayat_id = request.query_params.get('panchayatId', 0)
+            village_id = request.query_params.get('villageId', 0)
+            
+            students = get_all_students(
+                int(user_id),
+                int(district_id),
+                int(vidhan_sabha_id),
+                int(panchayat_id),
+                int(village_id)
+            )
+            
+            if students is not None and len(students) > 0:
+                response_serializer = api_serializers.StudentDtoSerializer(students, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Total students",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "Not found",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllStudents : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        queryset = Student.objects.all().order_by("id")
-        queryset = filter_if_present(queryset, request, "district_id", "districtId", "DistrictId")
-        queryset = filter_if_present(queryset, request, "vidhan_sabha_id", "vidhanSabhaId", "VidhanSabhaId")
-        queryset = filter_if_present(queryset, request, "panchayat_id", "panchayatId", "PanchayatId")
-        queryset = filter_if_present(queryset, request, "village_id", "villageId", "VillageId")
-        return queryset
+#---------------------------------------------------------
+# StudentAttendance Views
+#---------------------------------------------------------
 
+class StudentattendanceSavestudentattendancePostView(APIView):
+    """Saves student attendance"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveStudentAttendance : Started")
+            
+            serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            attendance_data = serializer.validated_data
+            result = save_student_attendance(attendance_data, is_automatic=False, is_manual=False)
+            
+            if result == -1:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student attendance already exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            elif result == 0:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student already inactive",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            elif result == -2:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "student not exists in center",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student attendance applied",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveStudentAttendance : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-class StudentattendanceSavestudentattendancePostView(DotNetAPIView):
-    """Implement the DAL's per-student, per-class attendance rules."""
-    serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
+class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
+    """Saves automatic student attendance"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveStudentAttendance : Started")
+            
+            serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            attendance_data = serializer.validated_data
+            result = save_student_attendance(attendance_data, is_automatic=True, is_manual=False)
+            
+            if result == -1:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student attendance already exists",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            elif result == 0:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student already inactive",
+                        "code": status.HTTP_406_NOT_ACCEPTABLE
+                    },
+                    status=status.HTTP_406_NOT_ACCEPTABLE
+                )
+            elif result == -2:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "student not exists in center",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            else:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student attendance applied",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveAutomaticStudentAttendance : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    automatic = False
-    manual = False
+class StudentattendanceSavemanualstudentattendancePostView(APIView):
+    """Saves manual student attendance"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveStudentAttendance : Started")
+            
+            serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            attendance_data = serializer.validated_data
+            result = save_student_attendance(attendance_data, is_automatic=False, is_manual=True)
+            
+            if result == -1:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student attendance already exists",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            elif result == 0:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Manual attendance already exists with 6 times",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            else:
+                return Response(
+                    {
+                        "status": True,
+                        "message": "Student attendance applied",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveManualStudentAttendance : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def post(self, request, *args, **kwargs):
-        data = self.validated_request_data
-        student_id = data["StudentIds"][0]  # the .NET DAL processes the first id
-        student = Student.objects.filter(pk=student_id, status=True).first()
-        if not student:
-            return self.attendance_result(0)
-        if student.center_id != data["CenterId"]:
-            return self.attendance_result(-2)
-        scan_date = now() if (self.automatic or self.manual) else data["ScanDate"]
-        if StudentAttendance.objects.filter(student_id=student_id, class_obj_id=data["ClassId"], scan_date__date=scan_date.date()).exists():
-            return self.attendance_result(-1)
-        if self.manual and (student.manual_attendance or 0) >= 360:
-            return self.attendance_result(0)
-        with transaction.atomic():
-            StudentAttendance.objects.create(class_obj_id=data["ClassId"], student=student, center=student.center, user_id=data["UserId"], scan_date=scan_date, type=self.manual)
-            Student.objects.filter(pk=student.pk).update(active_class_status=True)
-            if self.manual:
-                Student.objects.filter(pk=student.pk).update(manual_attendance=(student.manual_attendance or 0) + 1)
-            ClassModel.objects.filter(pk=data["ClassId"]).update(avilable_students=Coalesce(F("avilable_students"), 0) + 1)
-        return self.attendance_result(1)
-
-    def attendance_result(self, result):
-        if result == -1:
-            message = "Student attendance already exists"
-            response_status = status.HTTP_400_BAD_REQUEST if (self.automatic or self.manual) else status.HTTP_200_OK
-        elif result == 0:
-            message = "Manual attendance already exists with 6 times" if self.manual else "Student already inactive"
-            response_status = status.HTTP_404_NOT_FOUND if self.manual else (status.HTTP_406_NOT_ACCEPTABLE if self.automatic else status.HTTP_200_OK)
-        elif result == -2:
-            message, response_status = "student not exists in center", (status.HTTP_404_NOT_FOUND if self.automatic else status.HTTP_200_OK)
-        else:
-            message, response_status = "Student attendance applied", status.HTTP_200_OK
-        return ok(message=message, code=response_status)
-
-
-class StudentattendanceSaveautomaticstudentattendancePostView(StudentattendanceSavestudentattendancePostView):
-    """Compatibility view for automatic attendance save requests."""
-    serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
-    automatic = True
-
-
-class StudentattendanceSavemanualstudentattendancePostView(StudentattendanceSavestudentattendancePostView):
-    """Compatibility view for manual attendance save requests."""
-    serializer_class = api_serializers.StudentAttendanceSaveRequestSerializer
-    manual = True
-
-
-class StudentattendanceGetallstudentwihavgattendanceGetView(DotNetAPIView):
+class StudentattendanceGetallstudentwihavgattendanceGetView(APIView):
     """Lists center students with their average attendance value."""
-    serializer_class = api_serializers.StudentAttendanceCenterQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : SaveStudentAttendance : Started")
+            
+            center_id = request.query_params.get('centerId')
+            if not center_id:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "centerId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            students = get_all_student_with_avg_attendance(int(center_id))
+            
+            if students is not None and len(students) > 0:
+                return Response(
+                    {
+                        "status": True,
+                        "data": students,
+                        "message": "Students exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Students not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllStudentWihAvgAttendance : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        center_id = request_value(request, "centerId", "CenterId")
-        classes_count = ClassModel.objects.filter(center_id=center_id, status__in=[1, 2]).count()
-        students = Student.objects.filter(center_id=center_id)
-        data = []
-        for student in students:
-            attendance_count = StudentAttendance.objects.filter(student=student).count()
-            data.append({"id": student.id, "enrollmentId": student.enrollment_id, "fullName": student.full_name,
-                         "date": student.joining_date, "attendanceStatus": "1" if student.status else "0",
-                         "averageAttendance": round(attendance_count * 100 / classes_count, 2) if classes_count else 0})
-        return ok(data, "Students exists")
-
-
-class StudentattendanceGetallabsentattendanceGetView(ModelListView):
+class StudentattendanceGetallabsentattendanceGetView(APIView):
     """Lists active students without attendance for the selected center."""
-    serializer_class = api_serializers.StudentAttendanceCenterQuerySerializer
-    model = Student
-    message = "List of all active students exists"
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : SaveStudentAttendance : Started")
+            
+            center_id = request.query_params.get('centerId')
+            if not center_id:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "centerId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            students = get_all_absent_attendance(int(center_id))
+            
+            if students is not None and len(students) > 0:
+                return Response(
+                    {
+                        "status": True,
+                        "data": students,
+                        "message": "List of all active students exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Active students not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllAbsentAttendance : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        center_id = request_value(request, "centerId", "CenterId")
-        present_ids = StudentAttendance.objects.filter(center_id=center_id, scan_date__date=now().date()).values_list("student_id", flat=True)
-        return Student.objects.filter(center_id=center_id, status=True).exclude(id__in=present_ids)
-
-
-class StudentattendanceGetallstudentattendancstatusGetView(DotNetAPIView):
+class StudentattendanceGetallstudentattendancstatusGetView(APIView):
     """Lists students with present/absent status for a center and date."""
-    serializer_class = api_serializers.StudentAttendanceStatusQuerySerializer
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : SaveStudentAttendance : Started")
+            
+            center_id = request.query_params.get('centerId')
+            scan_date = request.query_params.get('scanDate')
+            
+            if not center_id or not scan_date:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "centerId and scanDate are required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            students = get_all_student_attendance_status(int(center_id), scan_date)
+            
+            if students is not None and len(students) > 0:
+                return Response(
+                    {
+                        "status": True,
+                        "data": students,
+                        "message": "Student status exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Student status not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllStudentAttendancStatus : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get(self, request, *args, **kwargs):
-        center_id = request_value(request, "centerId", "CenterId")
-        scan_date = parse_any_datetime(request_value(request, "scanDate", "ScanDate"))
-        students = Student.objects.filter(center_id=center_id)
-        data = []
-        for student in students:
-            attendance = StudentAttendance.objects.filter(center_id=center_id, student=student)
-            if scan_date:
-                attendance = attendance.filter(scan_date__date=scan_date)
-            data.append({"id": student.id, "enrollmentId": student.enrollment_id, "fullName": student.full_name,
-                         "attendanceStatus": "Present" if attendance.exists() else "Absent"})
-        return ok(data, "Student status exists")
-
-
-class StudentattendanceGetallstudentattendancbymonthGetView(DotNetAPIView):
+class StudentattendanceGetallstudentattendancbymonthGetView(APIView):
     """Lists attendance records filtered by center, student, month, and year."""
-    serializer_class = api_serializers.StudentAttendanceByMonthQuerySerializer
-    def get(self, request, *args, **kwargs):
-        import calendar
-        center_id = request_value(request, "centerId", "CenterId")
-        student_id = to_int(request_value(request, "studentId", "StudentId"))
-        month, year = to_int(request_value(request, "month", "Month")), to_int(request_value(request, "year", "Year"))
-        student = Student.objects.filter(pk=student_id, center_id=center_id, status=True).first()
-        if not student or not month or not year:
-            return ok([], "Student exists")
-        data = []
-        for day in range(1, calendar.monthrange(year, month)[1] + 1):
-            date = datetime(year, month, day).date()
-            present = StudentAttendance.objects.filter(student=student, scan_date__date=date).exists()
-            data.append({"id": student.id, "fullName": student.full_name, "date": date, "attendanceStatus": "Present" if present else "Absent"})
-        return ok(data, "Student exists")
-
-
-
-
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : SaveStudentAttendance : Started")
+            
+            center_id = request.query_params.get('centerId')
+            student_id = request.query_params.get('studentId')
+            month = request.query_params.get('month')
+            year = request.query_params.get('year')
+            
+            if not center_id or not student_id or not month or not year:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "centerId, studentId, month and year are required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            students = get_all_student_attendance_by_month(int(center_id), int(student_id), int(month), int(year))
+            
+            if students is not None and len(students) > 0:
+                return Response(
+                    {
+                        "status": True,
+                        "data": students,
+                        "message": "Student exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Student not exists",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllStudentAttendancByMonth : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+#---------------------------------------------------------
+# User Views
+#---------------------------------------------------------
 class UserGetAllTeachersView(APIView):
     """Lists teachers, optionally filtered by creator user id."""
     

@@ -3260,3 +3260,696 @@ def check_panchayat_name(name):
     except Exception as e:
         logger.error(f"PanchayatRepository : CheckPanchayatName : {str(e)}")
         raise e
+    
+    
+#---------------------------------------------------------
+# Student APIs Helper Functions
+#---------------------------------------------------------
+
+def save_student(student_data):
+    """Save or update student"""
+    logger.info(f"StudentRepository : SaveStudent : Started")
+    
+    try:
+        student_id = student_data.get('Id', 0)
+        
+        with connection.cursor() as cursor:
+            if student_id > 0:
+                # Get existing student
+                select_sql = "SELECT Status, LastClass, ActiveClassStatus, Counter FROM Student WHERE Id = %s"
+                cursor.execute(select_sql, [student_id])
+                existing = cursor.fetchone()
+                
+                if existing:
+                    update_fields = []
+                    update_values = []
+                    
+                    for key, value in student_data.items():
+                        if key != 'Id' and value is not None:
+                            column_name = {
+                                'EnrollmentId': 'EnrollmentId',
+                                'FullName': 'FullName',
+                                'MotherName': 'MotherName',
+                                'FatherName': 'FatherName',
+                                'Age': 'Age',
+                                'Gender': 'Gender',
+                                'Contact': 'Contact',
+                                'DateOfBirth': 'DateOfBirth',
+                                'Email': 'Email',
+                                'Remarks': 'Remarks',
+                                'Grade': 'Grade',
+                                'PhoneNumber': 'PhoneNumber',
+                                'ProfileImage': 'ProfileImage',
+                                'WhatsApp': 'WhatsApp',
+                                'FullAddress': 'FullAddress',
+                                'JoiningDate': 'JoiningDate',
+                                'VidhanSabhaId': 'VidhanSabhaId',
+                                'DistrictId': 'DistrictId',
+                                'PanchayatId': 'PanchayatId',
+                                'CenterId': 'CenterId',
+                                'CreatedBy': 'CreatedBy',
+                                'VillageId': 'VillageId',
+                                'Education': 'Education',
+                                'FatherMobileNumber': 'FatherMobileNumber',
+                                'FatherOccupation': 'FatherOccupation',
+                                'MotherMobileNumber': 'MotherMobileNumber',
+                                'MotherOccupation': 'MotherOccupation',
+                                'Category': 'Category',
+                                'Bpl': 'Bpl',
+                                'SchoolId': 'SchoolId',
+                                'SchoolName': 'SchoolName'
+                            }.get(key, key)
+                            
+                            update_fields.append(f"{column_name} = %s")
+                            update_values.append(value)
+                    
+                    # Keep existing values for certain fields
+                    update_fields.append("Status = %s")
+                    update_values.append(existing[0])
+                    
+                    update_fields.append("LastClass = %s")
+                    update_values.append(existing[1])
+                    
+                    update_fields.append("ActiveClassStatus = %s")
+                    update_values.append(existing[2])
+                    
+                    update_fields.append("Counter = %s")
+                    update_values.append(existing[3])
+                    
+                    update_fields.append("CreatedOn = %s")
+                    update_values.append(datetime.now())
+                    
+                    update_fields.append("ManualAttendance = %s")
+                    update_values.append(0)
+                    
+                    update_values.append(student_id)
+                    sql = f"UPDATE Student SET {', '.join(update_fields)} WHERE Id = %s"
+                    cursor.execute(sql, update_values)
+            else:
+                # Insert new student
+                enrollment_id = student_data.get('EnrollmentId') or str(uuid.uuid4())
+                created_on = datetime.now()
+                
+                columns = ['EnrollmentId', 'Status', 'CreatedOn', 'ActiveClassStatus', 'ManualAttendance']
+                values = [enrollment_id, 1, created_on, 0, 0]
+                
+                field_mapping = {
+                    'FullName': 'FullName',
+                    'MotherName': 'MotherName',
+                    'FatherName': 'FatherName',
+                    'Age': 'Age',
+                    'Gender': 'Gender',
+                    'Contact': 'Contact',
+                    'DateOfBirth': 'DateOfBirth',
+                    'Email': 'Email',
+                    'Remarks': 'Remarks',
+                    'Grade': 'Grade',
+                    'PhoneNumber': 'PhoneNumber',
+                    'ProfileImage': 'ProfileImage',
+                    'WhatsApp': 'WhatsApp',
+                    'FullAddress': 'FullAddress',
+                    'JoiningDate': 'JoiningDate',
+                    'VidhanSabhaId': 'VidhanSabhaId',
+                    'DistrictId': 'DistrictId',
+                    'PanchayatId': 'PanchayatId',
+                    'CenterId': 'CenterId',
+                    'CreatedBy': 'CreatedBy',
+                    'VillageId': 'VillageId',
+                    'Education': 'Education',
+                    'FatherMobileNumber': 'FatherMobileNumber',
+                    'FatherOccupation': 'FatherOccupation',
+                    'MotherMobileNumber': 'MotherMobileNumber',
+                    'MotherOccupation': 'MotherOccupation',
+                    'Category': 'Category',
+                    'Bpl': 'Bpl',
+                    'SchoolId': 'SchoolId',
+                    'SchoolName': 'SchoolName'
+                }
+                
+                for key, column in field_mapping.items():
+                    if key in student_data and student_data[key] is not None:
+                        columns.append(column)
+                        values.append(student_data[key])
+                
+                placeholders = ', '.join(['%s'] * len(columns))
+                sql = f"INSERT INTO Student ({', '.join(columns)}) VALUES ({placeholders})"
+                cursor.execute(sql, values)
+                
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                student_id = cursor.fetchone()[0]
+        
+        return get_student_by_id(student_id)
+        
+    except Exception as e:
+        logger.error(f"StudentRepository : SaveStudent : {str(e)}")
+        raise e
+
+def get_student_by_id(student_id):
+    """Get student by ID"""
+    logger.info(f"StudentRepository : GetStudentById : Started")
+    
+    try:
+        sql = """
+            SELECT 
+                s.Id,
+                s.EnrollmentId,
+                s.FullName,
+                s.MotherName,
+                s.FatherName,
+                s.Age,
+                s.Gender,
+                s.Contact,
+                s.DateOfBirth,
+                s.Email,
+                s.Remarks,
+                s.Grade,
+                s.PhoneNumber,
+                s.ProfileImage,
+                s.WhatsApp,
+                s.FullAddress,
+                s.Status,
+                s.JoiningDate,
+                s.CenterId,
+                s.DistrictId,
+                s.VidhanSabhaId,
+                s.VillageId,
+                s.PanchayatId,
+                s.FatherMobileNumber,
+                s.FatherOccupation,
+                s.MotherMobileNumber,
+                s.MotherOccupation,
+                s.Category,
+                s.Bpl,
+                s.SchoolId,
+                sc.SchoolName,
+                c.CenterName,
+                u.Name as TeacherName
+            FROM Student s
+            LEFT JOIN School sc ON s.SchoolId = sc.Id
+            LEFT JOIN Center c ON s.CenterId = c.Id
+            LEFT JOIN Users u ON c.AssignedTeachers = u.Id
+            WHERE s.Id = %s
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [student_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+        
+    except Exception as e:
+        logger.error(f"StudentRepository : GetStudentById : {str(e)}")
+        raise e
+
+def update_student_active_or_inactive(student_id, status):
+    """Update student active or inactive status"""
+    logger.info(f"StudentRepository : UpdateStudentActiveOrInactive : Started")
+    
+    try:
+        status_bool = True if status == 1 else False
+        
+        sql = "UPDATE Student SET Status = %s WHERE Id = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [status_bool, student_id])
+        
+        return get_student_by_id(student_id)
+        
+    except Exception as e:
+        logger.error(f"StudentRepository : UpdateStudentActiveOrInactive : {str(e)}")
+        raise e
+
+def get_total_student_present(scan_date, user_id):
+    """Get total student present count"""
+    logger.info(f"StudentRepository : GetTotalStudentPresent : Started")
+    
+    try:
+        # Get user type
+        user_type_sql = "SELECT Type FROM Users WHERE Id = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(user_type_sql, [user_id])
+            user_row = cursor.fetchone()
+            user_type = user_row[0] if user_row else None
+        
+        if user_type == 1:
+            # SuperAdmin - get all centers
+            center_sql = "SELECT Id FROM Center"
+            cursor.execute(center_sql)
+            center_rows = cursor.fetchall()
+            center_ids = [row[0] for row in center_rows]
+        else:
+            # Regional Admin
+            center_sql = "SELECT Id FROM Center WHERE AssignedRegionalAdmin = %s"
+            cursor.execute(center_sql, [user_id])
+            center_rows = cursor.fetchall()
+            center_ids = [row[0] for row in center_rows]
+        
+        if not center_ids:
+            return {'presentStudents': 0, 'totalStudents': 0}
+        
+        center_ids_str = ','.join(['%s'] * len(center_ids))
+        
+        # Get total students
+        total_sql = f"""
+            SELECT COUNT(*) 
+            FROM Student 
+            WHERE CenterId IN ({center_ids_str}) AND Status = 1
+        """
+        cursor.execute(total_sql, center_ids)
+        total_students = cursor.fetchone()[0] or 0
+        
+        # Get present students
+        present_sql = f"""
+            SELECT COUNT(DISTINCT StudentId)
+            FROM StudentAttendance
+            WHERE CenterId IN ({center_ids_str}) AND DATE(ScanDate) = %s
+        """
+        cursor.execute(present_sql, center_ids + [scan_date.date()])
+        present_students = cursor.fetchone()[0] or 0
+        
+        return {
+            'presentStudents': present_students,
+            'totalStudents': total_students
+        }
+        
+    except Exception as e:
+        logger.error(f"StudentRepository : GetTotalStudentPresent : {str(e)}")
+        raise e
+
+def get_all_students(user_id, district_id=0, vidhan_sabha_id=0, panchayat_id=0, village_id=0):
+    """Get all students with filters"""
+    logger.info(f"StudentRepository : GetAllStudents : Started")
+    
+    try:
+        # Get user type
+        user_type_sql = "SELECT Type FROM Users WHERE Id = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(user_type_sql, [user_id])
+            user_row = cursor.fetchone()
+            user_type = user_row[0] if user_row else None
+        
+        where_conditions = ["1=1"]
+        params = []
+        
+        if user_type == 1:
+            # SuperAdmin - can see all students
+            if district_id:
+                where_conditions.append("DistrictId = %s")
+                params.append(district_id)
+            if vidhan_sabha_id:
+                where_conditions.append("VidhanSabhaId = %s")
+                params.append(vidhan_sabha_id)
+            if panchayat_id:
+                where_conditions.append("PanchayatId = %s")
+                params.append(panchayat_id)
+            if village_id:
+                where_conditions.append("VillageId = %s")
+                params.append(village_id)
+        else:
+            # Regional Admin - only see students in their centers
+            center_sql = "SELECT Id FROM Center WHERE AssignedRegionalAdmin = %s"
+            cursor.execute(center_sql, [user_id])
+            center_rows = cursor.fetchall()
+            center_ids = [row[0] for row in center_rows]
+            
+            if center_ids:
+                center_ids_str = ','.join(['%s'] * len(center_ids))
+                where_conditions.append(f"CenterId IN ({center_ids_str})")
+                params.extend(center_ids)
+                
+                if district_id:
+                    where_conditions.append("DistrictId = %s")
+                    params.append(district_id)
+                if vidhan_sabha_id:
+                    where_conditions.append("VidhanSabhaId = %s")
+                    params.append(vidhan_sabha_id)
+                if panchayat_id:
+                    where_conditions.append("PanchayatId = %s")
+                    params.append(panchayat_id)
+                if village_id:
+                    where_conditions.append("VillageId = %s")
+                    params.append(village_id)
+            else:
+                return []
+        
+        where_clause = " AND ".join(where_conditions)
+        sql = f"SELECT * FROM Student WHERE {where_clause}"
+        
+        with connection.cursor() as cursor:
+            cursor.execute(sql, params)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"StudentRepository : GetAllStudents : {str(e)}")
+        raise e
+    
+    
+#---------------------------------------------------------
+# School APIs Helper Functions
+#---------------------------------------------------------
+
+def save_school(school_data):
+    """Save or update school"""
+    logger.info(f"SchoolRepository : SaveSchool : Started")
+    
+    try:
+        school_id = school_data.get('Id', 0)
+        
+        if school_id > 0:
+            sql = "UPDATE School SET SchoolName = %s WHERE Id = %s"
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [school_data.get('SchoolName'), school_id])
+        else:
+            created_on = datetime.now()
+            sql = """
+                INSERT INTO School (SchoolName, CreatedOn, CreatedBy)
+                VALUES (%s, %s, %s)
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [
+                    school_data.get('SchoolName'),
+                    created_on,
+                    school_data.get('CreatedBy')
+                ])
+                cursor.execute("SELECT LAST_INSERT_ID()")
+                school_id = cursor.fetchone()[0]
+        
+        return get_school_by_id(school_id)
+        
+    except Exception as e:
+        logger.error(f"SchoolRepository : SaveSchool : {str(e)}")
+        raise e
+
+def get_school_by_id(school_id):
+    """Get school by ID"""
+    try:
+        sql = "SELECT Id, SchoolName, CreatedOn, CreatedBy FROM School WHERE Id = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [school_id])
+            row = cursor.fetchone()
+            if row:
+                columns = [col[0] for col in cursor.description]
+                return dict(zip(columns, row))
+        return None
+    except Exception as e:
+        logger.error(f"SchoolRepository : get_school_by_id : {str(e)}")
+        raise e
+
+def get_all_schools():
+    """Get all schools"""
+    logger.info(f"SchoolRepository : GetAllSchools : Started")
+    
+    try:
+        sql = "SELECT Id, SchoolName, CreatedOn, CreatedBy FROM School ORDER BY Id"
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+    except Exception as e:
+        logger.error(f"SchoolRepository : GetAllSchools : {str(e)}")
+        raise e
+    
+#---------------------------------------------------------
+# StudentAttendance APIs Helper Functions
+#---------------------------------------------------------
+
+def save_student_attendance(attendance_data, is_automatic=False, is_manual=False):
+    """Save student attendance"""
+    logger.info(f"StudentAttendanceRepository : SaveStudentAttendance : Started")
+    
+    try:
+        student_ids = attendance_data.get('StudentIds', [])
+        class_id = attendance_data.get('ClassId')
+        center_id = attendance_data.get('CenterId')
+        user_id = attendance_data.get('UserId')
+        scan_date = attendance_data.get('ScanDate')
+        
+        if not student_ids:
+            return -1
+        
+        for student_id in student_ids:
+            # Check if student is active
+            check_sql = "SELECT Status, CenterId, ManualAttendance FROM Student WHERE Id = %s"
+            with connection.cursor() as cursor:
+                cursor.execute(check_sql, [student_id])
+                student_row = cursor.fetchone()
+                
+                if not student_row:
+                    continue
+                
+                if not is_automatic and not is_manual:
+                    # SaveStudentAttendance
+                    if not student_row[0]:  # Status is False
+                        return 0
+                    if student_row[1] != center_id:
+                        return -2
+                
+                if is_automatic:
+                    # SaveAutomaticStudentAttendance
+                    if not student_row[0]:
+                        return 0
+                    if student_row[1] != center_id:
+                        return -2
+                
+                if is_manual:
+                    # SaveManualStudentAttendance
+                    manual_attendance = student_row[2] or 0
+                    if manual_attendance >= 360:
+                        return 0
+                
+                # Check if attendance already exists for today
+                today = datetime.now().date()
+                if is_automatic or is_manual:
+                    check_attendance_sql = """
+                        SELECT Id FROM StudentAttendance 
+                        WHERE StudentId = %s AND ClassId = %s AND DATE(ScanDate) = %s
+                    """
+                    cursor.execute(check_attendance_sql, [student_id, class_id, today])
+                    if cursor.fetchone():
+                        return -1
+                else:
+                    check_attendance_sql = """
+                        SELECT Id FROM StudentAttendance 
+                        WHERE StudentId = %s AND ClassId = %s AND DATE(ScanDate) = %s
+                    """
+                    cursor.execute(check_attendance_sql, [student_id, class_id, scan_date.date()])
+                    if cursor.fetchone():
+                        return -1
+                
+                # Insert attendance
+                insert_sql = """
+                    INSERT INTO StudentAttendance (ClassId, StudentId, CenterId, UserId, ScanDate, Type)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """
+                attendance_type = True if is_manual else False
+                scan_date_val = datetime.now() if (is_automatic or is_manual) else scan_date
+                cursor.execute(insert_sql, [class_id, student_id, center_id, user_id, scan_date_val, attendance_type])
+                
+                # Update student ActiveClassStatus
+                update_student_sql = "UPDATE Student SET ActiveClassStatus = 1 WHERE Id = %s"
+                cursor.execute(update_student_sql, [student_id])
+                
+                # Update manual attendance count
+                if is_manual:
+                    update_manual_sql = "UPDATE Student SET ManualAttendance = ManualAttendance + 1 WHERE Id = %s"
+                    cursor.execute(update_manual_sql, [student_id])
+                
+                # Update class avilable students
+                update_class_sql = "UPDATE Class SET AvilableStudents = AvilableStudents + 1 WHERE Id = %s"
+                cursor.execute(update_class_sql, [class_id])
+        
+        return 1
+        
+    except Exception as e:
+        logger.error(f"StudentAttendanceRepository : SaveStudentAttendance : {str(e)}")
+        raise e
+
+def get_all_student_with_avg_attendance(center_id):
+    """Get all students with average attendance"""
+    logger.info(f"StudentAttendanceRepository : GetAllStudentWihAvgAttendance : Started")
+    
+    try:
+        # Get class count
+        class_sql = "SELECT COUNT(*) FROM Class WHERE CenterId = %s AND Status IN (1, 2)"
+        with connection.cursor() as cursor:
+            cursor.execute(class_sql, [center_id])
+            class_count = cursor.fetchone()[0] or 0
+        
+        if class_count == 0:
+            sql = """
+                SELECT 
+                    Id,
+                    EnrollmentId,
+                    FullName,
+                    JoiningDate,
+                    Status,
+                    0 as AvgAttendance,
+                    CASE WHEN Status = 1 THEN '1' ELSE '0' END as StudentStaus
+                FROM Student
+                WHERE CenterId = %s
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [center_id])
+                rows = cursor.fetchall()
+                columns = [col[0] for col in cursor.description]
+                result = []
+                for row in rows:
+                    result.append(dict(zip(columns, row)))
+                return result
+        else:
+            sql = """
+                SELECT 
+                    s.Id,
+                    s.EnrollmentId,
+                    s.FullName,
+                    s.JoiningDate,
+                    s.Status,
+                    (SELECT COUNT(*) FROM StudentAttendance WHERE StudentId = s.Id) * 100 / %s as AvgAttendance,
+                    CASE WHEN s.Status = 1 THEN '1' ELSE '0' END as StudentStaus
+                FROM Student s
+                WHERE s.CenterId = %s
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(sql, [class_count, center_id])
+                rows = cursor.fetchall()
+                columns = [col[0] for col in cursor.description]
+                result = []
+                for row in rows:
+                    result.append(dict(zip(columns, row)))
+                return result
+                
+    except Exception as e:
+        logger.error(f"StudentAttendanceRepository : GetAllStudentWihAvgAttendance : {str(e)}")
+        raise e
+
+def get_all_absent_attendance(center_id):
+    """Get all absent students"""
+    logger.info(f"StudentAttendanceRepository : GetAllAbsentAttendance : Started")
+    
+    try:
+        today = datetime.now().date()
+        
+        # Get all active students
+        all_students_sql = "SELECT Id, FullName, EnrollmentId, ProfileImage, ManualAttendance FROM Student WHERE CenterId = %s AND Status = 1"
+        with connection.cursor() as cursor:
+            cursor.execute(all_students_sql, [center_id])
+            all_students = cursor.fetchall()
+            
+            if not all_students:
+                return []
+            
+            student_ids = [row[0] for row in all_students]
+            student_ids_str = ','.join(['%s'] * len(student_ids))
+            
+            # Get students with attendance today
+            present_sql = f"""
+                SELECT DISTINCT StudentId 
+                FROM StudentAttendance 
+                WHERE CenterId = %s AND DATE(ScanDate) = %s
+            """
+            cursor.execute(present_sql, [center_id, today])
+            present_rows = cursor.fetchall()
+            present_ids = [row[0] for row in present_rows]
+            
+            result = []
+            for student in all_students:
+                if student[0] not in present_ids:
+                    result.append({
+                        'id': student[0],
+                        'name': student[1],
+                        'enrollmentId': student[2],
+                        'profileImage': student[3],
+                        'manualAttendance': student[4] or 0
+                    })
+            
+            return result
+            
+    except Exception as e:
+        logger.error(f"StudentAttendanceRepository : GetAllAbsentAttendance : {str(e)}")
+        raise e
+
+def get_all_student_attendance_status(center_id, scan_date):
+    """Get all student attendance status"""
+    logger.info(f"StudentAttendanceRepository : GetAllStudentAttendancStatus : Started")
+    
+    try:
+        scan_date = parse_any_datetime(scan_date)
+        
+        sql = """
+            SELECT 
+                s.Id,
+                s.EnrollmentId,
+                s.FullName,
+                CASE WHEN sa.Id IS NOT NULL THEN 'Present' ELSE 'Absent' END as AttendanceStatus
+            FROM Student s
+            LEFT JOIN StudentAttendance sa ON s.Id = sa.StudentId AND DATE(sa.ScanDate) = %s
+            WHERE s.CenterId = %s AND s.Status = 1
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(sql, [scan_date.date(), center_id])
+            rows = cursor.fetchall()
+            columns = [col[0] for col in cursor.description]
+            result = []
+            for row in rows:
+                result.append(dict(zip(columns, row)))
+            return result
+            
+    except Exception as e:
+        logger.error(f"StudentAttendanceRepository : GetAllStudentAttendancStatus : {str(e)}")
+        raise e
+
+def get_all_student_attendance_by_month(center_id, student_id, month, year):
+    """Get student attendance by month"""
+    logger.info(f"StudentAttendanceRepository : GetAllStudentAttendancByMonth : Started")
+    
+    try:
+        import calendar
+        start_date = datetime(year, month, 1)
+        end_date = start_date.replace(day=1, month=start_date.month + 1) - timedelta(days=1)
+        
+        # Get student details
+        student_sql = "SELECT Id, FullName FROM Student WHERE Id = %s AND Status = 1 AND CenterId = %s"
+        with connection.cursor() as cursor:
+            cursor.execute(student_sql, [student_id, center_id])
+            student_row = cursor.fetchone()
+            
+            if not student_row:
+                return []
+            
+            student_name = student_row[1]
+            
+            # Get attendance records
+            attendance_sql = """
+                SELECT DISTINCT DATE(ScanDate) as Date
+                FROM StudentAttendance
+                WHERE StudentId = %s AND DATE(ScanDate) BETWEEN %s AND %s
+            """
+            cursor.execute(attendance_sql, [student_id, start_date.date(), end_date.date()])
+            attendance_dates = [row[0] for row in cursor.fetchall()]
+            
+            result = []
+            current_date = start_date
+            while current_date <= end_date:
+                status = 'Present' if current_date.date() in attendance_dates else 'Absent'
+                result.append({
+                    'id': student_id,
+                    'fullName': student_name,
+                    'date': current_date,
+                    'attendanceStatus': status
+                })
+                current_date += timedelta(days=1)
+            
+            return result
+            
+    except Exception as e:
+        logger.error(f"StudentAttendanceRepository : GetAllStudentAttendancByMonth : {str(e)}")
+        raise e

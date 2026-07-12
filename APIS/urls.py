@@ -67,6 +67,7 @@ urlpatterns = [
     path('Student/UpdateStudentActiveOrInactive/', StudentUpdatestudentactiveorinactivePostView.as_view(), name='student-updatestudentactiveorinactive-post'),
     path('Student/GetTotalStudentPresent/', StudentGettotalstudentpresentGetView.as_view(), name='student-gettotalstudentpresent-get'),
     path('Student/GetAllStudents/', StudentGetallstudentsGetView.as_view(), name='student-getallstudents-get'),
+    
     path('StudentAttendance/SaveStudentAttendance/', StudentattendanceSavestudentattendancePostView.as_view(), name='studentattendance-savestudentattendance-post'),
     path('StudentAttendance/SaveAutomaticStudentAttendance/', StudentattendanceSaveautomaticstudentattendancePostView.as_view(), name='studentattendance-saveautomaticstudentattendance-post'),
     path('StudentAttendance/SaveManualStudentAttendance/', StudentattendanceSavemanualstudentattendancePostView.as_view(), name='studentattendance-savemanualstudentattendance-post'),
