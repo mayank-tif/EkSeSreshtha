@@ -24,8 +24,8 @@ from EkSeSreshtha.env_details import *
 from . import serializers as api_serializers
 from .models import *
 from .serializers import GenerateAppTokenSerializer, LoginSerializer, UserLoginResponseSerializer
-from .utils import validate_app_and_device_with_token
-
+from .utils import *
+from .token_validation import *
 from .helper import *
 
 
@@ -44,188 +44,6 @@ class DummyUser:
         self.username = username
         self.id = 1
 
-
-def ok(data=None, message="Success", code=status.HTTP_200_OK, extra=None):
-    payload = {"status": True, "message": message, "code": code}
-    if data is not None:
-        payload["data"] = data
-    if extra:
-        payload.update(extra)
-    return Response(payload, status=code)
-
-
-def fail(message="Not found", code=status.HTTP_404_NOT_FOUND, data=None, error_key="error"):
-    payload = {"status": False, error_key: message, "code": code}
-    if data is not None:
-        payload["data"] = data
-    return Response(payload, status=code)
-
-
-def request_value(request, *names, default=None):
-    for source in (request.data, request.query_params):
-        for name in names:
-            if name in source and source.get(name) not in ("", None):
-                return source.get(name)
-    return default
-
-
-def to_bool(value):
-    if value in (None, ""):
-        return None
-    if isinstance(value, bool):
-        return value
-    return str(value).strip().lower() in {"1", "true", "yes", "y", "active"}
-
-
-def to_int(value, default=0):
-    try:
-        if value in (None, ""):
-            return default
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def hash_password(password):
-    if password in (None, ""):
-        return password
-    password = str(password)
-    if len(password) == SHA256_HEX_LENGTH and all(ch in "0123456789abcdefABCDEF" for ch in password):
-        return password.lower()
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-
-def parse_any_datetime(value):
-    if value in (None, ""):
-        return None
-    parsed = parse_datetime(str(value))
-    if parsed:
-        return parsed
-    parsed_date = parse_date(str(value))
-    return parsed_date
-
-
-def apply_pagination(queryset, request):
-    offset = to_int(request_value(request, "offset", "Offset"), 0)
-    limit = to_int(request_value(request, "limit", "Limit"), 0)
-    if limit > 0:
-        return queryset[offset : offset + limit]
-    if offset > 0:
-        return queryset[offset:]
-    return queryset
-
-
-def model_payload(obj, exclude_sensitive=True):
-    if obj is None:
-        return None
-    payload = model_to_dict(obj)
-    payload["id"] = obj.pk
-    if exclude_sensitive:
-        payload.pop("password", None)
-    return payload
-
-
-def queryset_payload(queryset):
-    return [model_payload(obj) for obj in queryset]
-
-
-def format_dotnet_datetime(value):
-    if not value:
-        return None
-    if isinstance(value, str):
-        return value
-    hour = value.strftime("%I").lstrip("0") or "0"
-    return f"{value.month}/{value.day}/{value.year} {hour}:{value:%M:%S %p}"
-
-
-def model_field_input_names(field):
-    names = {field.name, field.attname, field.db_column}
-    parts = field.name.split("_")
-    camel = parts[0] + "".join(part.title() for part in parts[1:])
-    pascal = "".join(part.title() for part in parts)
-    names.update({camel, pascal})
-    if field.name.endswith("_guid_id"):
-        names.add(field.db_column)
-    return [name for name in names if name]
-
-
-def coerce_for_field(field, value):
-    if value in ("", "null", "None"):
-        return None
-    internal_type = field.get_internal_type()
-    if internal_type in {"IntegerField", "AutoField", "BigAutoField"}:
-        return int(value)
-    if internal_type == "BooleanField":
-        return to_bool(value)
-    if internal_type == "DateTimeField":
-        return parse_any_datetime(value)
-    if internal_type == "FloatField":
-        return float(value)
-    return value
-
-
-def data_for_model(model, request, defaults=None):
-    defaults = defaults or {}
-    values = {}
-    for field in model._meta.fields:
-        if field.primary_key:
-            continue
-        for input_name in model_field_input_names(field):
-            value = request_value(request, input_name)
-            if value is not None:
-                target_name = field.attname if field.is_relation else field.name
-                values[target_name] = coerce_for_field(field, value)
-                break
-    for key, value in defaults.items():
-        values.setdefault(key, value)
-    return values
-
-
-def save_model_from_request(model, request, defaults=None, lookup_id_names=("id", "Id")):
-    values = data_for_model(model, request, defaults=defaults)
-    if "password" in values:
-        values["password"] = hash_password(values["password"])
-    object_id = request_value(request, *lookup_id_names)
-    if object_id:
-        obj, _ = model.objects.update_or_create(pk=object_id, defaults=values)
-    else:
-        obj = model.objects.create(**values)
-    return obj
-
-
-def get_by_id(model, request, *names):
-    object_id = request_value(request, *names, "id", "Id")
-    if not object_id:
-        return None
-    return model.objects.filter(pk=object_id).first()
-
-
-def filter_if_present(queryset, request, field_name, *param_names):
-    value = request_value(request, *param_names)
-    if value not in (None, "", "0", 0):
-        return queryset.filter(**{field_name: value})
-    return queryset
-
-
-def login_response(account, account_type, mobile_number):
-    token = AccessToken()
-    token["user_id"] = account.id
-    token["user_type"] = account_type
-    token["mobile_number"] = mobile_number
-    token["name"] = getattr(account, "full_name", None) or getattr(account, "name", None) or mobile_number
-    token.set_exp(lifetime=timedelta(days=30))
-    account.last_login_time = format_dotnet_datetime(now())
-    if hasattr(account, "token"):
-        account.token = str(token)
-        account.save(update_fields=["last_login_time", "token"])
-    else:
-        account.save(update_fields=["last_login_time"])
-    if isinstance(account, User):
-        serializer = UserLoginResponseSerializer(account, context={"token": str(token)})
-        return ok(data=serializer.data, message="Login successfully")
-    data = model_payload(account)
-    data["user_type"] = account_type
-    return ok(data=data, message="Login successfully")
 
 
 class DotNetAPIView(APIView):
@@ -283,31 +101,31 @@ class GenerateAppTokenView(TokenObtainPairView):
         return Response({"access_token": str(token)}, status=status.HTTP_200_OK)
 
 
-class LoginAPIView(DotNetAPIView):
-    """Authenticates a user, teacher, or regional admin using the hashed password flow."""
-    permission_classes = [AllowAny]
-    authentication_classes = []
-    serializer_class = LoginSerializer
+# class LoginAPIView(DotNetAPIView):
+#     """Authenticates a user, teacher, or regional admin using the hashed password flow."""
+#     permission_classes = [AllowAny]
+#     authentication_classes = []
+#     serializer_class = LoginSerializer
 
-    def post(self, request, *args, **kwargs):
-        logger.info("LoginAPIView started")
-        validate_app_and_device_with_token(request)
-        serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        mobile_number = serializer.validated_data["mobileNumber"]
-        password = hash_password(serializer.validated_data["password"])
-        logger.info("Attempting login for mobile number: %s", mobile_number, password)
+#     def post(self, request, *args, **kwargs):
+#         logger.info("LoginAPIView started")
+#         validate_app_and_device_with_token(request)
+#         serializer = self.serializer_class(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         mobile_number = serializer.validated_data["mobileNumber"]
+#         password = hash_password(serializer.validated_data["password"])
+#         logger.info("Attempting login for mobile number: %s", mobile_number, password)
 
-        account = User.objects.filter(phone_number=mobile_number, password=password).first()
-        if account:
-            return login_response(account, "super_admin", mobile_number)
-        account = Teacher.objects.filter(phone_number=mobile_number, password=password).first()
-        if account:
-            return login_response(account, "teacher", mobile_number)
-        account = RegionalAdmin.objects.filter(phone_number=mobile_number, password=password).first()
-        if account:
-            return login_response(account, "regional_admin", mobile_number)
-        return fail("invalid credential", code=status.HTTP_404_NOT_FOUND)
+#         account = User.objects.filter(phone_number=mobile_number, password=password).first()
+#         if account:
+#             return login_response(account, "super_admin", mobile_number)
+#         account = Teacher.objects.filter(phone_number=mobile_number, password=password).first()
+#         if account:
+#             return login_response(account, "teacher", mobile_number)
+#         account = RegionalAdmin.objects.filter(phone_number=mobile_number, password=password).first()
+#         if account:
+#             return login_response(account, "regional_admin", mobile_number)
+#         return fail("invalid credential", code=status.HTTP_404_NOT_FOUND)
 
 
 class ModelSaveView(DotNetAPIView):
@@ -1097,87 +915,501 @@ class StudentattendanceGetallstudentattendancbymonthGetView(DotNetAPIView):
         return ok(data, "Student exists")
 
 
-class UserSavesuperadminPostView(ModelSaveView):
-    """Saves a super admin user with hashed password storage."""
-    serializer_class = api_serializers.UserSaveSuperAdminRequestSerializer
-    model = User
-    success_message = "SuperAdmin save successfully"
 
 
-class UserSaveuserPostView(ModelSaveView):
-    """Saves a user record with hashed password storage."""
-    serializer_class = api_serializers.UserSaveUserRequestSerializer
-    model = User
-    success_message = "Data save successfully"
-
-
-class UserUpdatesuperadminuserPostView(UserSaveuserPostView):
-    """Updates a super admin user using the same save behavior."""
-    serializer_class = api_serializers.UserSaveUserRequestSerializer
-
-
-class UserUpdatedeviceidPostView(DotNetAPIView):
-    """Updates the stored device id for a user."""
-    serializer_class = api_serializers.UserUpdateDeviceIdRequestSerializer
-
-    def post(self, request, *args, **kwargs):
-        user = get_by_id(User, request, "userId", "UserId")
-        if not user:
-            return fail("SuperAdmin doesn't save")
-        user.device_id = request_value(request, "deviceId", "DeviceId")
-        user.save(update_fields=["device_id"])
-        return ok(model_payload(user), "SuperAdmin save successfully")
-
-
-class UserGetuserbyidGetView(ModelDetailView):
-    """Returns a user by user id."""
-    serializer_class = api_serializers.UserGetUserByIdQuerySerializer
-    model = User
-    id_names = ("userId", "UserId")
-    found_message = "user exists"
-    missing_message = "user not exists"
-
-
-class UserGetuserdetailbyphonenumberGetView(DotNetAPIView):
-    """Returns user details for a phone number."""
-    serializer_class = api_serializers.UserGetUserDetailByPhoneNumberQuerySerializer
-
-    def get(self, request, *args, **kwargs):
-        phone = request_value(request, "phoneNumer", "phoneNumber", "PhoneNumber")
-        user = User.objects.filter(phone_number=phone).first()
-        if user:
-            return ok(model_payload(user), "user exists")
-        return ok({}, "user not exists", extra={"status": False})
-
-
-class UserUpdatepasswordGetView(DotNetAPIView):
-    """Hashes and updates a user password."""
-    serializer_class = api_serializers.UserUpdatePasswordQuerySerializer
-
-    def get(self, request, *args, **kwargs):
-        user = get_by_id(User, request, "userId", "UserId")
-        if not user:
-            return ok({}, "password not updated", extra={"status": False})
-        user.password = hash_password(request_value(request, "newPassword", "NewPassword"))
-        user.save(update_fields=["password"])
-        return ok(model_payload(user), "password updated")
-
-
-class UserGetallteachersGetView(ModelListView):
+class UserGetAllTeachersView(APIView):
     """Lists teachers, optionally filtered by creator user id."""
-    serializer_class = api_serializers.UserGetAllTeachersQuerySerializer
-    model = Teacher
-    message = "List of assigned teachers"
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetRegisteredTeachers : Started")
+            
+            serializer = api_serializers.UserGetAllTeachersQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            userId = serializer.validated_data.get('userId', 0)
+            
+            all_teachers = get_all_teachers(userId)
+            
+            if all_teachers is not None:
+                response_serializer = api_serializers.TeacherDtoSerializer(all_teachers, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of assigned teachers",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Asigned teachers not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetRegisteredTeachers : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "data": None,
+                    "message": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-    def get_queryset(self, request):
-        queryset = Teacher.objects.all().order_by("id")
-        user_id = request_value(request, "userId", "UserId")
-        if user_id not in (None, "", "0", 0):
-            queryset = queryset.filter(created_by=user_id)
-        return queryset
+
+class UserGetAllRegionalAdminsView(APIView):
+    """Lists all regional admins."""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetAllRegionalAdmins : Started")
+            
+            all_regional_admins = get_all_regional_admins()
+            
+            if all_regional_admins is not None:
+                response_serializer = api_serializers.RegionalAdminDtoSerializer(all_regional_admins, many=True)
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "List of regional admins",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "List of regional admins not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetAllRegionalAdmins : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "data": None,
+                    "message": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class UserLoginView(APIView):
+    """Authenticates a user using mobile number and password"""
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    
+    def post(self, request):
+        logger.info("UserController : LoginUser : Started")
+        try:
+            validate_app_and_device_with_token(request)
+            mobile_number = request.data.get('mobileNumber')
+            password = request.data.get('password')
+            
+            user = login_user(mobile_number, password)
+            
+            if user is not None:
+                return Response(
+                    {
+                        "status": True,
+                        "data": user,
+                        "message": "Login successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "invalid credential",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as ex:
+            logger.error(f"UserController : LoginUser exception: {str(ex)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(ex),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
-class UserGetallunassignedteacherGetView(ModelListView):
+class UserSaveSuperAdminView(APIView):
+    """Saves a super admin user"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveSuperAdmin : Started")
+            
+            serializer = api_serializers.SuperAdminDtoSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user_data = serializer.validated_data
+            
+            # Hash password
+            if user_data.get('password'):
+                user_data['password'] = hash_password(user_data['password'])
+            
+            saved_user = save_user(user_data)
+            
+            if saved_user:
+                return Response(
+                    {
+                        "status": True,
+                        "data": saved_user,
+                        "message": "SuperAdmin save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "SuperAdmin doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveSuperAdmin : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class UserUpdateDeviceIdView(APIView):
+    """Updates user device ID"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : UpdateDeviceId : Started")
+            
+            serializer = api_serializers.UserDeviceDtoSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user_id = serializer.validated_data.get('userId')
+            device_id = serializer.validated_data.get('deviceId')
+            
+            updated_user = update_user_device_id(user_id, device_id)
+            
+            if updated_user:
+                return Response(
+                    {
+                        "status": True,
+                        "data": updated_user,
+                        "message": "SuperAdmin save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "SuperAdmin doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : UpdateDeviceId : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class UserSaveUserView(APIView):
+    """Saves a user"""
+    
+    def post(self, request):
+        try:
+            logger.info("UserController : SaveUser : Started")
+            
+            # Check if Type=2 and ListOfPanchayatIds is missing
+            if request.data.get('Type') == 2 and not request.data.get('ListOfPanchayatIds'):
+                return Response(
+                    {
+                        "status": False,
+                        "error": "ListOfPanchayatIds Parameter is missing",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            serializer = api_serializers.UserDtoSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user_data = serializer.validated_data
+            
+            # Hash password if present
+            if user_data.get('password'):
+                user_data['password'] = hash_password(user_data['password'])
+            
+            saved_user = save_user(user_data)
+            
+            if saved_user:
+                return Response(
+                    {
+                        "status": True,
+                        "data": saved_user,
+                        "message": "Data save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "data doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SaveUser : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class UserUpdateSuperAdminUserView(UserSaveUserView):
+    """Updates a super admin user"""
+    pass
+
+class UserGetUserByIdView(APIView):
+    """Get user by ID"""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetUser : Started")
+            
+            user_id = request.query_params.get('userId')
+            if not user_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "user not exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            
+            user = get_user_by_id(int(user_id))
+            
+            if user:
+                return Response(
+                    {
+                        "status": True,
+                        "data": user,
+                        "message": "user exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "user not exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetUser : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
+
+class UserGetUserDetailByPhoneNumberView(APIView):
+    """Get user details by phone number"""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetUser : Started")
+            
+            phone_number = request.query_params.get('phoneNumer')
+            if not phone_number:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "user not exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            
+            user = get_user_detail_by_phone(phone_number)
+            
+            if user:
+                return Response(
+                    {
+                        "status": True,
+                        "data": user,
+                        "message": "user exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "user not exists",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetUser : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
+
+class UserUpdatePasswordView(APIView):
+    """Update user password"""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetUser : Started")
+            
+            serializer = api_serializers.UserUpdatePasswordQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user_id = serializer.validated_data.get('userId')
+            new_password = serializer.validated_data.get('newPassword')
+            
+            user = update_user_password(user_id, new_password)
+            
+            if user:
+                return Response(
+                    {
+                        "status": True,
+                        "data": user,
+                        "message": "password updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": {},
+                        "message": "password not updated",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : UpdatePassword : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_501_NOT_IMPLEMENTED
+                },
+                status=status.HTTP_501_NOT_IMPLEMENTED
+            )
+
+class UserGetAllUnAssignedTeacherView(ModelListView):
     """Lists teachers without an assigned center."""
     model = Teacher
     message = "List of teachers"
@@ -1185,24 +1417,59 @@ class UserGetallunassignedteacherGetView(ModelListView):
     def get_queryset(self, request):
         return Teacher.objects.filter(center__isnull=True).order_by("id")
 
-
-class UserGetallregionaladminsGetView(ModelListView):
-    """Lists all regional admins."""
-    model = RegionalAdmin
-    message = "List of regional admins"
-
-
-class UserSearchdataGetView(DotNetAPIView):
-    """Searches users, teachers, regional admins, or students by name/phone."""
-    serializer_class = api_serializers.UserSearchDataQuerySerializer
-
-    def get(self, request, *args, **kwargs):
-        search_type = (request_value(request, "type", "Type") or "").lower()
-        query = request_value(request, "queryString", "QueryString", default="")
-        model = {"student": Student, "teacher": Teacher, "user": User, "regionaladmin": RegionalAdmin}.get(search_type, Student)
-        name_field = "full_name" if hasattr(model, "full_name") else "name"
-        queryset = model.objects.filter(Q(**{f"{name_field}__icontains": query}) | Q(phone_number__icontains=query))[:25]
-        return ok(queryset_payload(queryset), "List of search data")
+class UserSearchDataView(APIView):
+    """Search data by type and query string"""
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : SearchData : Started")
+            
+            serializer = api_serializers.UserSearchDataQuerySerializer(data=request.query_params)
+            if not serializer.is_valid():
+                return Response(
+                    {
+                        "status": False,
+                        "message": "Invalid parameters",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            search_type = serializer.validated_data.get('type', '')
+            query_string = serializer.validated_data.get('queryString', '')
+            
+            results = search_data(search_type, query_string)
+            
+            if results is not None:
+                return Response(
+                    {
+                        "status": True,
+                        "data": results,
+                        "message": "List of search data",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "message": "List of search data not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : SearchData : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class TeacherLoginteacherPostView(DotNetAPIView):

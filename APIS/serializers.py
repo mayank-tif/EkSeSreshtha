@@ -49,123 +49,6 @@ def format_dotnet_datetime(value):
     return f"{value.month}/{value.day}/{value.year} {hour}:{value:%M:%S %p}"
 
 
-class UserLoginResponseSerializer(serializers.ModelSerializer):
-    enrolmentRollId = serializers.CharField(source="enrolment_roll_id", allow_null=True)
-    password = serializers.SerializerMethodField()
-    token = serializers.SerializerMethodField()
-    deviceId = serializers.CharField(source="device_id", allow_null=True)
-    dateOfBirth = serializers.CharField(source="date_of_birth", allow_null=True)
-    phoneNumber = serializers.CharField(source="phone_number", allow_null=True)
-    whatsApp = serializers.CharField(source="whats_app", allow_null=True)
-    lastLoginTime = serializers.CharField(source="last_login_time", allow_null=True)
-    fullAddress = serializers.CharField(source="full_address", allow_null=True)
-    roleId = serializers.IntegerField(source="role_id", allow_null=True)
-    createdOn = serializers.SerializerMethodField()
-    enrollmentDate = serializers.SerializerMethodField()
-    guardianName = serializers.CharField(source="guardian_name", allow_null=True)
-    guardianNumber = serializers.CharField(source="guardian_number", allow_null=True)
-    createdBy = serializers.IntegerField(source="created_by", allow_null=True)
-    vidhanSabhaId = serializers.IntegerField(source="vidhan_sabha_id", allow_null=True)
-    districtId = serializers.IntegerField(source="district_id", allow_null=True)
-    villageId = serializers.IntegerField(source="village_id", allow_null=True)
-    panchayatId = serializers.IntegerField(source="panchayat_id", allow_null=True)
-    assignedTeacherStatus = serializers.BooleanField(source="assigned_teacher_status", allow_null=True)
-    assignedRegionalAdminStatus = serializers.BooleanField(source="assigned_regional_admin_status", allow_null=True)
-    listOfPanchayatId = serializers.SerializerMethodField()
-    district = serializers.SerializerMethodField()
-    vidhanSabha = serializers.SerializerMethodField()
-    panchayat = serializers.SerializerMethodField()
-    village = serializers.SerializerMethodField()
-    regionalAdminPanchayat = serializers.SerializerMethodField()
-    center = serializers.SerializerMethodField()
-    centers = serializers.SerializerMethodField()
-    centerAssignUser = serializers.SerializerMethodField()
-
-    class Meta:
-        model = User
-        fields = (
-            "id",
-            "enrolmentRollId",
-            "password",
-            "name",
-            "token",
-            "deviceId",
-            "type",
-            "age",
-            "gender",
-            "contact",
-            "status",
-            "dateOfBirth",
-            "email",
-            "phoneNumber",
-            "picture",
-            "whatsApp",
-            "lastLoginTime",
-            "fullAddress",
-            "roleId",
-            "createdOn",
-            "enrollmentDate",
-            "guardianName",
-            "guardianNumber",
-            "education",
-            "createdBy",
-            "vidhanSabhaId",
-            "districtId",
-            "villageId",
-            "panchayatId",
-            "assignedTeacherStatus",
-            "assignedRegionalAdminStatus",
-            "listOfPanchayatId",
-            "district",
-            "vidhanSabha",
-            "panchayat",
-            "village",
-            "regionalAdminPanchayat",
-            "center",
-            "centers",
-            "centerAssignUser",
-        )
-
-    def get_password(self, obj):
-        return None
-
-    def get_token(self, obj):
-        return self.context.get("token") or obj.token
-
-    def get_createdOn(self, obj):
-        return format_dotnet_datetime(obj.created_on)
-
-    def get_enrollmentDate(self, obj):
-        return format_dotnet_datetime(obj.enrollment_date)
-
-    def get_listOfPanchayatId(self, obj):
-        return None
-
-    def get_district(self, obj):
-        return None
-
-    def get_vidhanSabha(self, obj):
-        return None
-
-    def get_panchayat(self, obj):
-        return None
-
-    def get_village(self, obj):
-        return None
-
-    def get_regionalAdminPanchayat(self, obj):
-        return None
-
-    def get_center(self, obj):
-        return None
-
-    def get_centers(self, obj):
-        return None
-
-    def get_centerAssignUser(self, obj):
-        return None
-
-
 def required_char():
     return serializers.CharField(required=True, allow_blank=False)
 
@@ -755,13 +638,225 @@ class UserUpdatePasswordQuerySerializer(RequestSerializer):
     newPassword = required_char()
 
 
-class UserGetAllTeachersQuerySerializer(RequestSerializer):
-    userId = optional_int()
+class UserGetAllTeachersQuerySerializer(serializers.Serializer):
+    userId = serializers.IntegerField(required=False, default=0)
 
+class TeacherDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    assigned = serializers.BooleanField(allow_null=True, required=False)
+    profile = serializers.CharField(allow_null=True, required=False)
+    phoneNumber = serializers.CharField(allow_null=True, required=False)
+
+class LoginSerializer(serializers.Serializer):
+    mobileNumber = serializers.CharField(required=True)
+    password = serializers.CharField(required=True)
+    
+class UserLoginResponseSerializer(serializers.ModelSerializer):
+    enrolmentRollId = serializers.CharField(source="enrolment_roll_id", allow_null=True)
+    password = serializers.SerializerMethodField()
+    token = serializers.SerializerMethodField()
+    deviceId = serializers.CharField(source="device_id", allow_null=True)
+    dateOfBirth = serializers.CharField(source="date_of_birth", allow_null=True)
+    phoneNumber = serializers.CharField(source="phone_number", allow_null=True)
+    whatsApp = serializers.CharField(source="whats_app", allow_null=True)
+    lastLoginTime = serializers.CharField(source="last_login_time", allow_null=True)
+    fullAddress = serializers.CharField(source="full_address", allow_null=True)
+    roleId = serializers.IntegerField(source="role_id", allow_null=True)
+    createdOn = serializers.SerializerMethodField()
+    enrollmentDate = serializers.SerializerMethodField()
+    guardianName = serializers.CharField(source="guardian_name", allow_null=True)
+    guardianNumber = serializers.CharField(source="guardian_number", allow_null=True)
+    createdBy = serializers.IntegerField(source="created_by", allow_null=True)
+    vidhanSabhaId = serializers.IntegerField(source="vidhan_sabha_id", allow_null=True)
+    districtId = serializers.IntegerField(source="district_id", allow_null=True)
+    villageId = serializers.IntegerField(source="village_id", allow_null=True)
+    panchayatId = serializers.IntegerField(source="panchayat_id", allow_null=True)
+    assignedTeacherStatus = serializers.BooleanField(source="assigned_teacher_status", allow_null=True)
+    assignedRegionalAdminStatus = serializers.BooleanField(source="assigned_regional_admin_status", allow_null=True)
+    listOfPanchayatId = serializers.SerializerMethodField()
+    district = serializers.SerializerMethodField()
+    vidhanSabha = serializers.SerializerMethodField()
+    panchayat = serializers.SerializerMethodField()
+    village = serializers.SerializerMethodField()
+    regionalAdminPanchayat = serializers.SerializerMethodField()
+    center = serializers.SerializerMethodField()
+    centers = serializers.SerializerMethodField()
+    centerAssignUser = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "enrolmentRollId",
+            "password",
+            "name",
+            "token",
+            "deviceId",
+            "type",
+            "age",
+            "gender",
+            "contact",
+            "status",
+            "dateOfBirth",
+            "email",
+            "phoneNumber",
+            "picture",
+            "whatsApp",
+            "lastLoginTime",
+            "fullAddress",
+            "roleId",
+            "createdOn",
+            "enrollmentDate",
+            "guardianName",
+            "guardianNumber",
+            "education",
+            "createdBy",
+            "vidhanSabhaId",
+            "districtId",
+            "villageId",
+            "panchayatId",
+            "assignedTeacherStatus",
+            "assignedRegionalAdminStatus",
+            "listOfPanchayatId",
+            "district",
+            "vidhanSabha",
+            "panchayat",
+            "village",
+            "regionalAdminPanchayat",
+            "center",
+            "centers",
+            "centerAssignUser",
+        )
+
+    def get_password(self, obj):
+        return None
+
+    def get_token(self, obj):
+        return self.context.get("token") or obj.token
+
+    def get_createdOn(self, obj):
+        return format_dotnet_datetime(obj.created_on)
+
+    def get_enrollmentDate(self, obj):
+        return format_dotnet_datetime(obj.enrollment_date)
+
+    def get_listOfPanchayatId(self, obj):
+        return None
+
+    def get_district(self, obj):
+        return None
+
+    def get_vidhanSabha(self, obj):
+        return None
+
+    def get_panchayat(self, obj):
+        return None
+
+    def get_village(self, obj):
+        return None
+
+    def get_regionalAdminPanchayat(self, obj):
+        return None
+
+    def get_center(self, obj):
+        return None
+
+    def get_centers(self, obj):
+        return None
+
+    def get_centerAssignUser(self, obj):
+        return None
+
+
+class UserDeviceDtoSerializer(serializers.Serializer):
+    userId = serializers.IntegerField(required=True)
+    deviceId = serializers.CharField(required=True)
+
+class UserSaveSuperAdminRequestSerializer(RequestSerializer):
+    Id = optional_int()
+    EnrolmentRollId = optional_char()
+    Name = required_char()
+    Password = required_char()
+    Token = optional_char()
+    Email = optional_char()
+    Type = required_int()
+    Age = optional_int()
+    Gender = required_char()
+    Contact = optional_char()
+    Status = optional_bool()
+    DateOfBirth = required_char()
+    PhoneNumber = required_char()
+    Picture = optional_char()
+    WhatsApp = optional_char()
+    LastLoginTime = optional_char()
+    FullAddress = optional_char()
+    RoleId = optional_int()
+    CreatedOn = optional_datetime()
+    EnrollmentDate = optional_datetime()
+    CreatedBy = required_int()
+
+class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
+    foreign_key_fields = {
+        "VidhanSabhaId": VidhanSabha,
+        "DistrictId": District,
+        "VillageId": Village,
+    }
+    DeviceId = optional_char()
+    Education = optional_char()
+    VidhanSabhaId = optional_int()
+    DistrictId = optional_int()
+    VillageId = optional_int()
+    AssignedTeacherStatus = optional_bool()
+    AssignedRegionalAdminStatus = optional_bool()
+    GuardianName = optional_char()
+    GuardianNumber = optional_char()
+    ListOfPanchayatIds = serializers.ListField(child=serializers.IntegerField(), required=False)
+    WhatsApp = required_char()
+
+class UserUpdatePasswordQuerySerializer(RequestSerializer):
+    userId = required_int()
+    newPassword = required_char()
 
 class UserSearchDataQuerySerializer(RequestSerializer):
     type = optional_char()
     queryString = optional_char()
+
+class SuperAdminDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(required=False)
+    enrolmentRollId = serializers.CharField(allow_null=True, required=False)
+    name = serializers.CharField(required=True)
+    password = serializers.CharField(required=True)
+    token = serializers.CharField(allow_null=True, required=False)
+    email = serializers.CharField(allow_null=True, required=False)
+    type = serializers.IntegerField(required=True)
+    age = serializers.IntegerField(allow_null=True, required=False)
+    gender = serializers.CharField(required=True)
+    contact = serializers.CharField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    dateOfBirth = serializers.CharField(required=True)
+    phoneNumber = serializers.CharField(required=True)
+    picture = serializers.CharField(allow_null=True, required=False)
+    whatsApp = serializers.CharField(allow_null=True, required=False)
+    lastLoginTime = serializers.CharField(allow_null=True, required=False)
+    fullAddress = serializers.CharField(allow_null=True, required=False)
+    roleId = serializers.IntegerField(allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(allow_null=True, required=False)
+    enrollmentDate = serializers.DateTimeField(allow_null=True, required=False)
+    createdBy = serializers.IntegerField(required=True)
+
+class UserDtoSerializer(SuperAdminDtoSerializer):
+    deviceId = serializers.CharField(allow_null=True, required=False)
+    education = serializers.CharField(allow_null=True, required=False)
+    vidhanSabhaId = serializers.IntegerField(allow_null=True, required=False)
+    districtId = serializers.IntegerField(allow_null=True, required=False)
+    villageId = serializers.IntegerField(allow_null=True, required=False)
+    panchayatId = serializers.IntegerField(allow_null=True, required=False)
+    assignedTeacherStatus = serializers.BooleanField(allow_null=True, required=False)
+    assignedRegionalAdminStatus = serializers.BooleanField(allow_null=True, required=False)
+    guardianName = serializers.CharField(allow_null=True, required=False)
+    guardianNumber = serializers.CharField(allow_null=True, required=False)
+    listOfPanchayatIds = serializers.CharField(allow_null=True, required=False)
 
 
 class VidhanSabhaSaveVidhanSabhaRequestSerializer(RequestSerializer):
@@ -851,4 +946,9 @@ class RegionalAdminSaveRegionalAdminRequestSerializer(TeacherSaveTeacherRequestS
 
 class LoginRequestSerializer(LoginSerializer):
     pass
+
+class RegionalAdminDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    profile = serializers.CharField(allow_null=True, required=False)
 
