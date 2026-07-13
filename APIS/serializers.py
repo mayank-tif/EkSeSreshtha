@@ -411,12 +411,12 @@ class DistrictSaveDistrictRequestSerializer(RequestSerializer):
     CreatedBy = optional_int()
 
 class DistrictDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    districtGuidId = serializers.CharField(allow_null=True, required=False)
-    name = serializers.CharField(allow_null=True, required=False)
-    status = serializers.BooleanField(allow_null=True, required=False)
-    createdOn = serializers.DateTimeField(allow_null=True, required=False)
-    createdBy = serializers.IntegerField(allow_null=True, required=False)
+    id = serializers.IntegerField(source='Id')
+    districtGuidId = serializers.CharField(source='DistrictGuidId', allow_null=True, required=False)
+    name = serializers.CharField(source='Name', allow_null=True, required=False)
+    status = serializers.BooleanField(source='Status', allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(source='CreatedOn', allow_null=True, required=False)
+    createdBy = serializers.IntegerField(source='CreatedBy', allow_null=True, required=False)
 
 class PaginationQuerySerializer(RequestSerializer):
     offset = optional_int()
@@ -495,16 +495,17 @@ class PanchayatByDistrictAndVidhanSabhaQuerySerializer(RequestSerializer):
     vidhanSabhaId = required_int()
 
 class PanchayatDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    panchayatGuidId = serializers.CharField(allow_null=True, required=False)
-    name = serializers.CharField(allow_null=True, required=False)
-    districtId = serializers.IntegerField()
-    districtName = serializers.CharField(allow_null=True, required=False)
-    vidhanSabhaId = serializers.IntegerField()
-    vidhanSabhaName = serializers.CharField(allow_null=True, required=False)
-    createdOn = serializers.DateTimeField(allow_null=True, required=False)
-    createdBy = serializers.IntegerField(allow_null=True, required=False)
-    status = serializers.BooleanField(allow_null=True, required=False)
+    id = serializers.IntegerField(source='Id')
+    panchayatGuidId = serializers.CharField(source='PanchayatGuidId', allow_null=True, required=False)
+    name = serializers.CharField(source='Name', allow_null=True, required=False)
+    status = serializers.BooleanField(source='Status', allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(source='CreatedOn', allow_null=True, required=False)
+    createdBy = serializers.IntegerField(source='CreatedBy', allow_null=True, required=False)
+    districtId = serializers.IntegerField(source='DistrictId')
+    vidhanSabhaId = serializers.IntegerField(source='VidhanSabhaId')
+    districtName = serializers.CharField(source='DistrictName', allow_null=True, required=False)
+    vidhanSabhaName = serializers.CharField(source='VidhanSabhaName', allow_null=True, required=False)
+    village = serializers.ListField(allow_null=True, required=False)
 
 class NameCheckQuerySerializer(RequestSerializer):
     name = required_char()
@@ -1023,18 +1024,18 @@ class VillageByDistrictVidhanSabhaAndPanchayatQuerySerializer(RequestSerializer)
     panchayatId = required_int()
 
 class VillageDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField()
-    villageGuidId = serializers.CharField(allow_null=True, required=False)
-    name = serializers.CharField(allow_null=True, required=False)
-    districtId = serializers.IntegerField()
-    districtName = serializers.CharField(allow_null=True, required=False)
-    vidhanSabhaId = serializers.IntegerField()
-    vidhanSabhaName = serializers.CharField(allow_null=True, required=False)
-    panchayatId = serializers.IntegerField()
-    panchayatName = serializers.CharField(allow_null=True, required=False)
-    createdOn = serializers.DateTimeField(allow_null=True, required=False)
-    createdBy = serializers.IntegerField(allow_null=True, required=False)
-    status = serializers.BooleanField(allow_null=True, required=False)
+    id = serializers.IntegerField(source='Id')
+    villageGuidId = serializers.CharField(source='VillageGuidId', allow_null=True, required=False)
+    name = serializers.CharField(source='Name', allow_null=True, required=False)
+    status = serializers.BooleanField(source='Status', allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(source='CreatedOn', allow_null=True, required=False)
+    createdBy = serializers.IntegerField(source='CreatedBy', allow_null=True, required=False)
+    districtId = serializers.IntegerField(source='DistrictId')
+    vidhanSabhaId = serializers.IntegerField(source='VidhanSabhaId')
+    panchayatId = serializers.IntegerField(source='PanchayatId')
+    panchayatName = serializers.CharField(source='PanchayatName', allow_null=True, required=False)
+    vidhanSabhaName = serializers.CharField(source='VidhanSabhaName', allow_null=True, required=False)
+    districtName = serializers.CharField(source='DistrictName', allow_null=True, required=False)
 
 # Teacher Serializers
 class TeacherSaveTeacherRequestSerializer(RequestSerializer):
@@ -1070,6 +1071,21 @@ class TeacherSaveTeacherRequestSerializer(RequestSerializer):
 class TeacherLoginRequestSerializer(serializers.Serializer):
     name = serializers.CharField(required=True)
     password = serializers.CharField(required=True)
+    
+
+class TeacherUnAssignedDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    assigned = serializers.BooleanField(allow_null=True, required=False)
+    profile = serializers.CharField(allow_null=True, required=False)
+    phoneNumber = serializers.CharField(allow_null=True, required=False)
+    
+class TeacherDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    assigned = serializers.BooleanField(allow_null=True, required=False)
+    profile = serializers.CharField(allow_null=True, required=False)
+    phoneNumber = serializers.CharField(allow_null=True, required=False)
 
 class TeacherDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
@@ -1129,6 +1145,11 @@ class RegionalAdminSaveRegionalAdminRequestSerializer(RequestSerializer):
 class RegionalAdminLoginRequestSerializer(serializers.Serializer):
     name = serializers.CharField(required=True)
     password = serializers.CharField(required=True)
+    
+class RegionalAdminDetailSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    profile = serializers.CharField(allow_null=True, required=False)
 
 class RegionalAdminDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()

@@ -1,21 +1,16 @@
 from django.db import models
 
 
-class AuditModel(models.Model):
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
-    class Meta:
-        abstract = True
-
-
-class District(AuditModel):
+class District(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     district_guid_id = models.CharField(db_column="DistrictGuidId", max_length=36, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "District"
@@ -27,7 +22,7 @@ class District(AuditModel):
         return self.name or str(self.id)
 
 
-class VidhanSabha(AuditModel):
+class VidhanSabha(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     vidhan_sabha_guid_id = models.CharField(db_column="VidhanSabhaGuidId", unique=True, max_length=36)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
@@ -40,6 +35,10 @@ class VidhanSabha(AuditModel):
         blank=True,
         related_name='vidhan_sabhas'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "VidhanSabha"
@@ -52,7 +51,7 @@ class VidhanSabha(AuditModel):
         return self.name or str(self.id)
 
 
-class Panchayat(AuditModel):
+class Panchayat(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     panchayat_guid_id = models.CharField(db_column="PanchayatGuidId", unique=True, max_length=36)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
@@ -73,6 +72,10 @@ class Panchayat(AuditModel):
         blank=True,
         related_name='panchayats'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Panchayat"
@@ -86,7 +89,7 @@ class Panchayat(AuditModel):
         return self.name or str(self.id)
 
 
-class Village(AuditModel):
+class Village(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     village_guid_id = models.CharField(db_column="VillageGuidId",max_length=36, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
@@ -115,6 +118,10 @@ class Village(AuditModel):
         blank=True,
         related_name='villages'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Village"
@@ -129,9 +136,13 @@ class Village(AuditModel):
         return self.name or str(self.id)
 
 
-class School(AuditModel):
+class School(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     school_name = models.CharField(db_column="SchoolName", max_length=50, null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "School"
@@ -143,9 +154,13 @@ class School(AuditModel):
         return self.school_name or str(self.id)
 
 
-class SchoolName(AuditModel):
+class SchoolName(models.Model):
     id = models.IntegerField(db_column="Id", primary_key=True)
     school_name = models.CharField(db_column="SchoolName", max_length=50, unique=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "SchoolName"
@@ -154,7 +169,7 @@ class SchoolName(AuditModel):
         return self.school_name
 
 
-class Center(AuditModel):
+class Center(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     center_guid_id = models.CharField(db_column="CenterGuidId", max_length=50, null=True, blank=True, unique=True)
     center_name = models.CharField(db_column="CenterName", max_length=50, null=True, blank=True, unique=True)
@@ -198,6 +213,10 @@ class Center(AuditModel):
         blank=True,
         related_name='centers'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Center"
@@ -218,7 +237,7 @@ class Center(AuditModel):
         return self.center_name or str(self.id)
 
 
-class User(AuditModel):
+class User(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     enrolment_roll_id = models.CharField(db_column="EnrolmentRollId", max_length=50, null=True, blank=True, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
@@ -278,6 +297,10 @@ class User(AuditModel):
         blank=True,
         related_name='users'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Users"
@@ -300,7 +323,7 @@ class User(AuditModel):
         return self.name or str(self.id)
 
 
-class ClassModel(AuditModel):
+class ClassModel(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     class_enrolment_id = models.CharField(db_column="ClassEnrolmentId", max_length=50, null=True, blank=True, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
@@ -324,6 +347,10 @@ class ClassModel(AuditModel):
         blank=True,
         related_name='classes'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Class"
@@ -344,7 +371,7 @@ class ClassModel(AuditModel):
         return self.name or str(self.id)
 
 
-class ClassDetail(AuditModel):
+class ClassDetail(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     class_guid_id = models.CharField(db_column="ClassGuidId", max_length=36, unique=True)
     sccan_time_spam = models.BinaryField(db_column="SccanTimeSpam", null=True, blank=True)
@@ -382,6 +409,10 @@ class ClassDetail(AuditModel):
         blank=True,
         related_name='class_details'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "ClassDetail"
@@ -397,7 +428,7 @@ class ClassDetail(AuditModel):
         ]
 
 
-class RegionalAdmin(AuditModel):
+class RegionalAdmin(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     regional_admin_guid_id = models.CharField(db_column="RegionalAdminGuidId", max_length=36, unique=True)
     full_name = models.CharField(db_column="FullName", max_length=50, null=True, blank=True)
@@ -458,6 +489,10 @@ class RegionalAdmin(AuditModel):
         blank=True,
         related_name='regional_admins'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "RegionalAdmin"
@@ -479,7 +514,7 @@ class RegionalAdmin(AuditModel):
         return self.full_name or str(self.id)
 
 
-class Teacher(AuditModel):
+class Teacher(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     teacher_guid_id = models.CharField(db_column="TeacherGuidId", max_length=36, unique=True)
     full_name = models.CharField(db_column="FullName", max_length=50, null=True, blank=True)
@@ -539,6 +574,10 @@ class Teacher(AuditModel):
         blank=True,
         related_name='teachers'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Teacher"
@@ -560,7 +599,7 @@ class Teacher(AuditModel):
         return self.full_name or str(self.id)
 
 
-class Student(AuditModel):
+class Student(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     enrollment_id = models.CharField(db_column="EnrollmentId", max_length=50, null=True, blank=True, unique=True)
     full_name = models.CharField(db_column="FullName", max_length=50, null=True, blank=True)
@@ -640,6 +679,10 @@ class Student(AuditModel):
         blank=True,
         related_name='students'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Student"
@@ -662,7 +705,7 @@ class Student(AuditModel):
         return self.full_name or str(self.id)
 
 
-class Holidays(AuditModel):
+class Holidays(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     description = models.CharField(db_column="Description", max_length=50, null=True, blank=True)
@@ -679,6 +722,10 @@ class Holidays(AuditModel):
         blank=True,
         related_name='holidays'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Holidays"
@@ -692,7 +739,7 @@ class Holidays(AuditModel):
         return self.name or str(self.id)
 
 
-class HolidayCenter(AuditModel):
+class HolidayCenter(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     holiday = models.ForeignKey(
         Holidays,
@@ -710,6 +757,10 @@ class HolidayCenter(AuditModel):
         blank=True,
         related_name='holiday_centers'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "HolidayCenter"
@@ -719,11 +770,15 @@ class HolidayCenter(AuditModel):
         ]
 
 
-class TeacherActivityLog(AuditModel):
+class TeacherActivityLog(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     teacher_acivity_guid_id = models.CharField(db_column="TeacherAcivityGuidId", max_length=36, unique=True)
     login_time = models.CharField(db_column="LoginTime", max_length=50, null=True, blank=True)
     logout_time = models.CharField(db_column="LogoutTime", max_length=50, null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "TeacherActivityLog"
@@ -735,11 +790,15 @@ class TeacherActivityLog(AuditModel):
         ]
 
 
-class Announcement(AuditModel):
+class Announcement(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     title = models.CharField(db_column="Title", max_length=50, null=True, blank=True)
     description = models.TextField(db_column="Description", null=True, blank=True)
     image = models.TextField(db_column="Image", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Announcement"
@@ -749,7 +808,7 @@ class Announcement(AuditModel):
         return self.title or str(self.id)
 
 
-class CenterAssignUser(AuditModel):
+class CenterAssignUser(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     type = models.IntegerField(db_column="Type", null=True, blank=True)
@@ -764,6 +823,10 @@ class CenterAssignUser(AuditModel):
         blank=True,
         related_name='center_assign_users'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "CenterAssignUser"
@@ -774,7 +837,7 @@ class CenterAssignUser(AuditModel):
         ]
 
 
-class CenterLog(AuditModel):
+class CenterLog(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     reason = models.CharField(db_column="Reason", max_length=50, null=True, blank=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
@@ -788,6 +851,10 @@ class CenterLog(AuditModel):
         blank=True,
         related_name='center_logs'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "CenterLog"
@@ -797,7 +864,7 @@ class CenterLog(AuditModel):
         ]
 
 
-class ClassCancelByTeacher(AuditModel):
+class ClassCancelByTeacher(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
     starting_date = models.DateTimeField(db_column="StartingDate", null=True, blank=True)
@@ -813,6 +880,10 @@ class ClassCancelByTeacher(AuditModel):
         blank=True,
         related_name='class_cancel_by_teachers'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "ClassCancelByTeacher"
@@ -823,11 +894,15 @@ class ClassCancelByTeacher(AuditModel):
         ]
 
 
-class Concern(AuditModel):
+class Concern(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     type = models.CharField(db_column="Type", max_length=50, null=True, blank=True)
     description = models.CharField(db_column="Description", max_length=50, null=True, blank=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Concern"
@@ -837,7 +912,7 @@ class Concern(AuditModel):
         ]
 
 
-class RegionalAdminPanchayat(AuditModel):
+class RegionalAdminPanchayat(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     panchayat_name = models.CharField(db_column="PanchayatName", max_length=50, null=True, blank=True)
@@ -851,6 +926,10 @@ class RegionalAdminPanchayat(AuditModel):
         blank=True,
         related_name='regional_admin_panchayats'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "RegionalAdminPanchayat"
@@ -860,7 +939,7 @@ class RegionalAdminPanchayat(AuditModel):
         ]
 
 
-class StudentAttendance(AuditModel):
+class StudentAttendance(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     scan_date = models.DateTimeField(db_column="ScanDate", null=True, blank=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
@@ -891,6 +970,10 @@ class StudentAttendance(AuditModel):
         blank=True,
         related_name='attendances'
     )
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "StudentAttendance"
@@ -903,7 +986,7 @@ class StudentAttendance(AuditModel):
         ]
 
 
-class UserActivityLog(AuditModel):
+class UserActivityLog(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
     ip_address = models.CharField(db_column="IpAddress", max_length=50, null=True, blank=True)
@@ -911,6 +994,10 @@ class UserActivityLog(AuditModel):
     activity_date = models.DateTimeField(db_column="ActivityDate", null=True, blank=True)
     data = models.TextField(db_column="Data", null=True, blank=True)
     url = models.CharField(db_column="Url", max_length=50, null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "UserActivityLog"
@@ -920,12 +1007,16 @@ class UserActivityLog(AuditModel):
         ]
 
 
-class VersionControl(AuditModel):
+class VersionControl(models.Model):
     id = models.IntegerField(db_column="Id", primary_key=True)
     app_id = models.IntegerField(db_column="AppId", null=True, blank=True)
     version = models.FloatField(db_column="Version", null=True, blank=True)
     message = models.CharField(db_column="Message", max_length=50, null=True, blank=True)
     status = models.IntegerField(db_column="Status", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "VersionControl"
@@ -935,10 +1026,14 @@ class VersionControl(AuditModel):
         ]
 
 
-class Test(AuditModel):
+class Test(models.Model):
     id = models.AutoField(db_column="id", primary_key=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     address = models.CharField(db_column="Address", max_length=50, null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "test"
@@ -947,10 +1042,14 @@ class Test(AuditModel):
         return self.name or str(self.id)
 
 
-class TestTable(AuditModel):
+class TestTable(models.Model):
     id = models.AutoField(db_column="id", primary_key=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     address = models.CharField(db_column="Address", max_length=50, null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "TestTable"

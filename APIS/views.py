@@ -3057,7 +3057,7 @@ class UserGetAllTeachersView(APIView):
             all_teachers = get_all_teachers(userId)
             
             if all_teachers is not None:
-                response_serializer = api_serializers.TeacherDtoSerializer(all_teachers, many=True)
+                response_serializer = api_serializers.TeacherDetailSerializer(all_teachers, many=True)
                 return Response(
                     {
                         "status": True,
@@ -3101,7 +3101,7 @@ class UserGetAllRegionalAdminsView(APIView):
             all_regional_admins = get_all_regional_admins()
             
             if all_regional_admins is not None:
-                response_serializer = api_serializers.RegionalAdminDtoSerializer(all_regional_admins, many=True)
+                response_serializer = api_serializers.RegionalAdminDetailSerializer(all_regional_admins, many=True)
                 return Response(
                     {
                         "status": True,
@@ -3525,13 +3525,59 @@ class UserUpdatePasswordView(APIView):
                 status=status.HTTP_501_NOT_IMPLEMENTED
             )
 
-class UserGetAllUnAssignedTeacherView(ModelListView):
+class UserGetAllUnAssignedTeacherView(APIView):
     """Lists teachers without an assigned center."""
-    model = Teacher
-    message = "List of teachers"
-
-    def get_queryset(self, request):
-        return Teacher.objects.filter(center__isnull=True).order_by("id")
+    
+    def get(self, request):
+        try:
+            logger.info("UserController : GetUnAssignedTeachers : Started")
+            
+            teachers = Teacher.objects.filter(center__isnull=True).order_by('id')
+            
+            # Convert to dict for serialization
+            data = []
+            for teacher in teachers:
+                data.append({
+                    'id': teacher.id,
+                    'name': teacher.full_name,
+                    'assigned': False,
+                    'profile': teacher.picture,
+                    'phoneNumber': teacher.phone_number
+                })
+            
+            serializer = api_serializers.TeacherUnAssignedDetailSerializer(data, many=True)
+            
+            if data:
+                return Response(
+                    {
+                        "status": True,
+                        "data": serializer.data,
+                        "message": "List of teachers",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "List of teachers not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserController : GetUnAssignedTeachers : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class UserSearchDataView(APIView):
     """Search data by type and query string"""
