@@ -1462,7 +1462,7 @@ def save_user(user_data):
         raise e
 
 def get_user_by_id(user_id):
-    """Get user by ID"""
+    """Get user by ID matching .NET response structure exactly"""
     logger.info(f"UserRepository : GetUserById : Started")
     
     try:
@@ -1470,36 +1470,40 @@ def get_user_by_id(user_id):
             SELECT 
                 u.Id,
                 u.EnrolmentRollId,
-                u.Password,
                 u.Name,
-                u.Token,
-                u.DeviceId,
+                u.Email,
                 u.Type,
                 u.Age,
                 u.Gender,
                 u.Contact,
                 u.Status,
                 u.DateOfBirth,
-                u.Email,
                 u.PhoneNumber,
                 u.Picture,
                 u.WhatsApp,
                 u.LastLoginTime,
                 u.FullAddress,
-                u.RoleId,
+                u.Education,
                 u.CreatedOn,
                 u.EnrollmentDate,
-                u.GuardianName,
-                u.GuardianNumber,
-                u.Education,
                 u.CreatedBy,
                 u.VidhanSabhaId,
                 u.DistrictId,
                 u.VillageId,
                 u.PanchayatId,
                 u.AssignedTeacherStatus,
-                u.AssignedRegionalAdminStatus
+                u.AssignedRegionalAdminStatus,
+                u.GuardianName,
+                u.GuardianNumber,
+                d.Name as DistrictName,
+                v.Name as VidhanSabhaName,
+                vi.Name as VillageName,
+                p.Name as PanchayatName
             FROM Users u
+            LEFT JOIN District d ON u.DistrictId = d.Id
+            LEFT JOIN VidhanSabha v ON u.VidhanSabhaId = v.Id
+            LEFT JOIN Panchayat p ON u.PanchayatId = p.Id
+            LEFT JOIN Village vi ON u.VillageId = vi.Id
             WHERE u.Id = %s
         """
         
@@ -1511,55 +1515,252 @@ def get_user_by_id(user_id):
                 columns = [col[0] for col in cursor.description]
                 user_dict = dict(zip(columns, row))
                 
-                # Get additional data based on user type
-                if user_dict.get('Type') == 3:  # Teacher
-                    # Get center details
-                    center_sql = """
-                        SELECT c.*, 
-                               d.Name as DistrictName,
-                               v.Name as VidhanSabhaName,
-                               p.Name as PanchayatName,
-                               vi.Name as VillageName
-                        FROM Center c
-                        LEFT JOIN District d ON c.DistrictId = d.Id
-                        LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id
-                        LEFT JOIN Panchayat p ON c.PanchayatId = p.Id
-                        LEFT JOIN Village vi ON c.VillageId = vi.Id
-                        WHERE c.AssignedTeachers = %s
-                    """
-                    cursor.execute(center_sql, [user_id])
-                    center_row = cursor.fetchone()
-                    if center_row:
-                        center_columns = [col[0] for col in cursor.description]
-                        user_dict['Center'] = dict(zip(center_columns, center_row))
+                user_type = user_dict.get('Type')
                 
-                elif user_dict.get('Type') == 2:  # Regional Admin
-                    # Get centers
+                # Super Admin (Type 1) - only basic fields
+                if user_type == 1:
+                    response = {
+                        'id': user_dict.get('Id'),
+                        'enrolmentRollId': user_dict.get('EnrolmentRollId'),
+                        'name': user_dict.get('Name'),
+                        'email': user_dict.get('Email'),
+                        'type': user_dict.get('Type'),
+                        'age': user_dict.get('Age'),
+                        'gender': user_dict.get('Gender'),
+                        'contact': user_dict.get('Contact'),
+                        'status': bool(user_dict.get('Status')) if user_dict.get('Status') is not None else None,
+                        'dateOfBirth': user_dict.get('DateOfBirth'),
+                        'phoneNumber': user_dict.get('PhoneNumber'),
+                        'picture': user_dict.get('Picture'),
+                        'whatsApp': user_dict.get('WhatsApp'),
+                        'lastLoginTime': user_dict.get('LastLoginTime'),
+                        'fullAddress': user_dict.get('FullAddress'),
+                        'createdOn': user_dict.get('CreatedOn').strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user_dict.get('CreatedOn') else None,
+                        'enrollmentDate': user_dict.get('EnrollmentDate').strftime('%Y-%m-%dT%H:%M:%S') if user_dict.get('EnrollmentDate') else None,
+                        'createdBy': user_dict.get('CreatedBy')
+                    }
+                    return response
+                
+                # Regional Admin (Type 2)
+                elif user_type == 2:
+                    # Get list of panchayats
+                    panchayat_sql = """
+                        SELECT 
+                            rp.PanchayatId as Id,
+                            p.PanchayatGuidId,
+                            p.Name,
+                            p.Status,
+                            p.CreatedOn,
+                            p.CreatedBy,
+                            p.DistrictId,
+                            p.VidhanSabhaId
+                        FROM RegionalAdminPanchayat rp
+                        INNER JOIN Panchayat p ON rp.PanchayatId = p.Id
+                        WHERE rp.UsersId = %s
+                    """
+                    cursor.execute(panchayat_sql, [user_id])
+                    panchayat_rows = cursor.fetchall()
+                    
+                    list_of_panchayat = []
+                    if panchayat_rows:
+                        panchayat_columns = [col[0] for col in cursor.description]
+                        for row in panchayat_rows:
+                            panchayat_dict = dict(zip(panchayat_columns, row))
+                            list_of_panchayat.append({
+                                'id': panchayat_dict.get('Id'),
+                                'panchayatGuidId': panchayat_dict.get('PanchayatGuidId') or '00000000-0000-0000-0000-000000000000',
+                                'name': panchayat_dict.get('Name'),
+                                'status': panchayat_dict.get('Status'),
+                                'createdOn': panchayat_dict.get('CreatedOn'),
+                                'createdBy': panchayat_dict.get('CreatedBy'),
+                                'districtId': panchayat_dict.get('DistrictId') or 0,
+                                'vidhanSabhaId': panchayat_dict.get('VidhanSabhaId') or 0
+                            })
+                    
+                    # Get list of centers
                     centers_sql = """
-                        SELECT c.* 
+                        SELECT 
+                            c.Id,
+                            c.CenterGuidId,
+                            c.CenterName,
+                            c.AssignedTeachers,
+                            c.AssignedRegionalAdmin,
+                            c.StartedDate,
+                            c.VidhanSabhaId,
+                            c.DistrictId,
+                            c.PanchayatId,
+                            c.VillageId
                         FROM Center c
                         WHERE c.AssignedRegionalAdmin = %s
                     """
                     cursor.execute(centers_sql, [user_id])
                     centers_rows = cursor.fetchall()
-                    if centers_rows:
-                        center_columns = [col[0] for col in cursor.description]
-                        user_dict['Centers'] = [dict(zip(center_columns, row)) for row in centers_rows]
                     
-                    # Get panchayats
-                    panchayat_sql = """
-                        SELECT rp.*, p.Name as PanchayatName
-                        FROM RegionalAdminPanchayat rp
-                        JOIN Panchayat p ON rp.PanchayatId = p.Id
-                        WHERE rp.UsersId = %s
-                    """
-                    cursor.execute(panchayat_sql, [user_id])
-                    panchayat_rows = cursor.fetchall()
-                    if panchayat_rows:
-                        panchayat_columns = [col[0] for col in cursor.description]
-                        user_dict['RegionalAdminPanchayat'] = [dict(zip(panchayat_columns, row)) for row in panchayat_rows]
+                    list_of_centers = []
+                    if centers_rows:
+                        centers_columns = [col[0] for col in cursor.description]
+                        for row in centers_rows:
+                            center_dict = dict(zip(centers_columns, row))
+                            list_of_centers.append({
+                                'id': center_dict.get('Id'),
+                                'centerGuidId': center_dict.get('CenterGuidId'),
+                                'centerName': center_dict.get('CenterName'),
+                                'assignedTeachers': center_dict.get('AssignedTeachers'),
+                                'assignedRegionalAdmin': center_dict.get('AssignedRegionalAdmin'),
+                                'startedDate': center_dict.get('StartedDate'),
+                                'vidhanSabhaId': center_dict.get('VidhanSabhaId') or 0,
+                                'districtId': center_dict.get('DistrictId') or 0,
+                                'panchayatId': center_dict.get('PanchayatId') or 0,
+                                'villageId': center_dict.get('VillageId')
+                            })
+                    
+                    response = {
+                        'id': user_dict.get('Id'),
+                        'enrolmentRollId': user_dict.get('EnrolmentRollId'),
+                        'name': user_dict.get('Name'),
+                        'email': user_dict.get('Email'),
+                        'type': user_dict.get('Type'),
+                        'age': user_dict.get('Age'),
+                        'gender': user_dict.get('Gender'),
+                        'contact': user_dict.get('Contact'),
+                        'status': bool(user_dict.get('Status')) if user_dict.get('Status') is not None else None,
+                        'dateOfBirth': user_dict.get('DateOfBirth'),
+                        'phoneNumber': user_dict.get('PhoneNumber'),
+                        'picture': user_dict.get('Picture'),
+                        'whatsApp': user_dict.get('WhatsApp'),
+                        'lastLoginTime': user_dict.get('LastLoginTime'),
+                        'fullAddress': user_dict.get('FullAddress'),
+                        'education': user_dict.get('Education'),
+                        'createdOn': user_dict.get('CreatedOn').strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user_dict.get('CreatedOn') else None,
+                        'enrollmentDate': user_dict.get('EnrollmentDate').strftime('%Y-%m-%dT%H:%M:%S') if user_dict.get('EnrollmentDate') else None,
+                        'createdBy': user_dict.get('CreatedBy'),
+                        'vidhanSabhaId': user_dict.get('VidhanSabhaId'),
+                        'districtId': user_dict.get('DistrictId'),
+                        'villageId': user_dict.get('VillageId'),
+                        'assignedTeacherStatus': user_dict.get('AssignedTeacherStatus'),
+                        'assignedRegionalAdminStatus': user_dict.get('AssignedRegionalAdminStatus'),
+                        'guardianName': user_dict.get('GuardianName'),
+                        'guardianNumber': user_dict.get('GuardianNumber'),
+                        'districtName': user_dict.get('DistrictName'),
+                        'vidhanSabhaName': user_dict.get('VidhanSabhaName'),
+                        'villageName': user_dict.get('VillageName') or '',
+                        'listOfPanchayat': list_of_panchayat,
+                        'listOfCenters': list_of_centers,
+                        'assignedDate': None
+                    }
+                    return response
                 
-                return user_dict
+                # Teacher (Type 3)
+                elif user_type == 3:
+                    # Get center details
+                    center_sql = """
+                        SELECT 
+                            c.Id,
+                            c.CenterGuidId,
+                            c.CenterName,
+                            c.ClassStatus,
+                            c.Status,
+                            c.CreatedDate,
+                            c.StartedDate,
+                            c.AssignedTeachers,
+                            c.AssignedRegionalAdmin,
+                            c.VidhanSabhaId,
+                            c.DistrictId,
+                            c.PanchayatId,
+                            c.VillageId
+                        FROM Center c
+                        WHERE c.AssignedTeachers = %s
+                    """
+                    cursor.execute(center_sql, [user_id])
+                    center_row = cursor.fetchone()
+                    
+                    center_data = None
+                    if center_row:
+                        center_columns = [col[0] for col in cursor.description]
+                        center_dict = dict(zip(center_columns, center_row))
+                        center_data = {
+                            'id': center_dict.get('Id'),
+                            'centerGuidId': center_dict.get('CenterGuidId'),
+                            'centerName': center_dict.get('CenterName'),
+                            'classStatus': bool(center_dict.get('ClassStatus')) if center_dict.get('ClassStatus') is not None else None,
+                            'status': bool(center_dict.get('Status')) if center_dict.get('Status') is not None else None,
+                            'createdDate': center_dict.get('CreatedDate'),
+                            'startedDate': center_dict.get('StartedDate'),
+                            'assignedTeachers': center_dict.get('AssignedTeachers'),
+                            'assignedRegionalAdmin': center_dict.get('AssignedRegionalAdmin'),
+                            'vidhanSabhaId': center_dict.get('VidhanSabhaId') or 0,
+                            'districtId': center_dict.get('DistrictId') or 0,
+                            'panchayatId': center_dict.get('PanchayatId') or 0,
+                            'villageId': center_dict.get('VillageId'),
+                            'totalCenterCount': 0,
+                            'regionalAdminName': None,
+                            'districtName': None,
+                            'vidhanSabhaName': None,
+                            'villageName': None,
+                            'panchayatName': None,
+                            'centerAssignUser': None,
+                            'district': None,
+                            'vidhanSabha': None,
+                            'panchayat': None,
+                            'village': None,
+                            'totalStudents': None,
+                            'teacherName': None,
+                            'regionalAdminId': None,
+                            'totalActiveStudents': None,
+                            'totalPresentStudents': None,
+                            'totalAvialableStudents': None,
+                            'classStartDate': None,
+                            'classEndDate': None,
+                            'user': None,
+                            'type': 0,
+                            'startDate': None,
+                            'endDate': None,
+                            'reason': None,
+                            'noAttendance': None,
+                            'endDateWithAttendance': None,
+                            'endDateWithNoAttendance': None,
+                            'completed': None,
+                            'notStarted': None,
+                            'classCancelTeacher': None
+                        }
+                    
+                    response = {
+                        'id': user_dict.get('Id'),
+                        'enrolmentRollId': user_dict.get('EnrolmentRollId'),
+                        'name': user_dict.get('Name'),
+                        'email': user_dict.get('Email'),
+                        'type': user_dict.get('Type'),
+                        'age': user_dict.get('Age'),
+                        'gender': user_dict.get('Gender'),
+                        'contact': user_dict.get('Contact'),
+                        'status': bool(user_dict.get('Status')) if user_dict.get('Status') is not None else None,
+                        'dateOfBirth': user_dict.get('DateOfBirth'),
+                        'phoneNumber': user_dict.get('PhoneNumber'),
+                        'picture': user_dict.get('Picture'),
+                        'whatsApp': user_dict.get('WhatsApp'),
+                        'lastLoginTime': user_dict.get('LastLoginTime'),
+                        'fullAddress': user_dict.get('FullAddress'),
+                        'education': user_dict.get('Education'),
+                        'createdOn': user_dict.get('CreatedOn').strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user_dict.get('CreatedOn') else None,
+                        'enrollmentDate': user_dict.get('EnrollmentDate').strftime('%Y-%m-%dT%H:%M:%S') if user_dict.get('EnrollmentDate') else None,
+                        'createdBy': user_dict.get('CreatedBy'),
+                        'vidhanSabhaId': user_dict.get('VidhanSabhaId'),
+                        'districtId': user_dict.get('DistrictId'),
+                        'villageId': user_dict.get('VillageId'),
+                        'panchayatId': user_dict.get('PanchayatId'),
+                        'assignedTeacherStatus': user_dict.get('AssignedTeacherStatus'),
+                        'assignedRegionalAdminStatus': user_dict.get('AssignedRegionalAdminStatus'),
+                        'guardianName': user_dict.get('GuardianName'),
+                        'guardianNumber': user_dict.get('GuardianNumber'),
+                        'districtName': user_dict.get('DistrictName'),
+                        'vidhanSabhaName': user_dict.get('VidhanSabhaName'),
+                        'villageName': user_dict.get('VillageName'),
+                        'panchayatName': user_dict.get('PanchayatName'),
+                        'center': center_data,
+                        'centerEnrollmentDate': None,
+                        'assignedDate': None
+                    }
+                    return response
         
         return None
         
