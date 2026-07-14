@@ -166,7 +166,7 @@ class AnnouncementSaveannouncementPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveHolidays : Started")
+            logger.info("UserView : SaveHolidays : Started")
             
             # Handle file upload
             image_files = request.FILES.getlist('ImageFile')
@@ -229,7 +229,7 @@ class AnnouncementSaveannouncementPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveAnnouncement : {str(e)}")
+            logger.error(f"UserView : SaveAnnouncement : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -244,7 +244,7 @@ class AnnouncementGetannouncementGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("DistrictController : GetAnnouncement : Started")
+            logger.info("DistrictView : GetAnnouncement : Started")
             
             announcements = get_all_announcements()
             
@@ -271,7 +271,7 @@ class AnnouncementGetannouncementGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictController : GetAnnouncement : {str(e)}")
+            logger.error(f"DistrictView : GetAnnouncement : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -290,7 +290,7 @@ class CenterSavecenterPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : LoginSuperAdmin : Started")
+            logger.info("UserView : LoginSuperAdmin : Started")
             
             serializer = api_serializers.CenterSaveCenterRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -332,7 +332,7 @@ class CenterSavecenterPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveCenter : {str(e)}")
+            logger.error(f"UserView : SaveCenter : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -460,7 +460,7 @@ class CenterGetcenteryidGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetUser : Started")
+            logger.info("UserView : GetUser : Started")
             
             serializer = api_serializers.CenterGetCenteryIdQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -500,7 +500,7 @@ class CenterGetcenteryidGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetCenterById : {str(e)}")
+            logger.error(f"UserView : GetCenterById : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -515,7 +515,7 @@ class CenterGetcenterbyteacheridGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetStudentAttendanceOfCenter : Started")
+            logger.info("UserView : GetStudentAttendanceOfCenter : Started")
             
             user_id = request.query_params.get('userId')
             if not user_id:
@@ -554,7 +554,7 @@ class CenterGetcenterbyteacheridGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetCenterByTeacherId : {str(e)}")
+            logger.error(f"UserView : GetCenterByTeacherId : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -569,7 +569,7 @@ class CenterGetallcenterattendanceGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : UpdateCenterActiveOrDeactive : Started")
+            logger.info("UserView : UpdateCenterActiveOrDeactive : Started")
             
             serializer = api_serializers.CenterGetAllCenterAttendanceQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -611,7 +611,7 @@ class CenterGetallcenterattendanceGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllCenterAttendance : {str(e)}")
+            logger.error(f"UserView : GetAllCenterAttendance : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -626,7 +626,7 @@ class CenterUpdatecenteractiveordeactiveGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : UpdateCenterActiveOrDeactive : Started")
+            logger.info("UserView : UpdateCenterActiveOrDeactive : Started")
             
             center_id = request.query_params.get('centerId')
             status_value = request.query_params.get('status')
@@ -693,7 +693,7 @@ class CenterUpdatecenteractiveordeactiveGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : UpdateCenterActiveOrDeactive : {str(e)}")
+            logger.error(f"UserView : UpdateCenterActiveOrDeactive : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -708,7 +708,7 @@ class CenterGettotalattendancecountofcenterGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetTotalAttendanceCountOfCenter : Started")
+            logger.info("UserView : GetTotalAttendanceCountOfCenter : Started")
             
             serializer = api_serializers.CenterGetTotalAttendanceCountOfCenterQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -747,7 +747,7 @@ class CenterGettotalattendancecountofcenterGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetTotalAttendanceCountOfCenter : {str(e)}")
+            logger.error(f"UserView : GetTotalAttendanceCountOfCenter : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -767,7 +767,7 @@ class ClassSaveclassPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             serializer = api_serializers.ClassSaveClassRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -813,7 +813,7 @@ class ClassSaveclassPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveClass : {str(e)}")
+            logger.error(f"UserView : SaveClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -828,7 +828,7 @@ class ClassCancelclassPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : CancelClass : Started")
+            logger.info("UserView : CancelClass : Started")
             
             serializer = api_serializers.CancelClassDtoSerializer(data=request.data)
             if not serializer.is_valid():
@@ -864,7 +864,7 @@ class ClassCancelclassPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : CancelClass : {str(e)}")
+            logger.error(f"UserView : CancelClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -879,7 +879,7 @@ class ClassUpdateendclasstimePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             serializer = api_serializers.EndClassDtoSerializer(data=request.data)
             if not serializer.is_valid():
@@ -915,7 +915,7 @@ class ClassUpdateendclasstimePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveClass : {str(e)}")
+            logger.error(f"UserView : SaveClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -930,7 +930,7 @@ class ClassUpdateclasssubstatusPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             serializer = api_serializers.UpdateClassSubStatusDtoSerializer(data=request.data)
             if not serializer.is_valid():
@@ -966,7 +966,7 @@ class ClassUpdateclasssubstatusPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveClass : {str(e)}")
+            logger.error(f"UserView : SaveClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -981,7 +981,7 @@ class ClassCancelclassbyteacherPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             serializer = api_serializers.ClassCancelTeacherDtoSerializer(data=request.data)
             if not serializer.is_valid():
@@ -1017,7 +1017,7 @@ class ClassCancelclassbyteacherPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveClass : {str(e)}")
+            logger.error(f"UserView : SaveClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1032,7 +1032,7 @@ class ClassDeleteclassbyteacheridPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             serializer = api_serializers.ClassDeleteClassByTeacherIdQuerySerializer(data=request.data)
             if not serializer.is_valid():
@@ -1068,7 +1068,7 @@ class ClassDeleteclassbyteacheridPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveClass : {str(e)}")
+            logger.error(f"UserView : SaveClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1083,7 +1083,7 @@ class ClassGetclasscurrentstatusGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             serializer = api_serializers.ClassGetClassCurrentStatusQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -1104,7 +1104,7 @@ class ClassGetclasscurrentstatusGetView(APIView):
             return Response(result, status=status.HTTP_200_OK)
                 
         except Exception as e:
-            logger.error(f"UserController : SaveClass : {str(e)}")
+            logger.error(f"UserView : SaveClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1119,7 +1119,7 @@ class ClassGetliveclassdetailGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             serializer = api_serializers.ClassGetLiveClassDetailQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -1157,7 +1157,7 @@ class ClassGetliveclassdetailGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveClass : {str(e)}")
+            logger.error(f"UserView : SaveClass : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1176,7 +1176,7 @@ class DistrictGetalldistrictGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("DistrictController : GetAllDistrict : Started")
+            logger.info("DistrictView : GetAllDistrict : Started")
             
             serializer = api_serializers.PaginationQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -1217,7 +1217,7 @@ class DistrictGetalldistrictGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictController : GetAllDistrict : {str(e)}")
+            logger.error(f"DistrictView : GetAllDistrict : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1232,7 +1232,7 @@ class DistrictSavedistrictPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("DistrictController : SaveDistrict : Started")
+            logger.info("DistrictView : SaveDistrict : Started")
             
             serializer = api_serializers.DistrictSaveDistrictRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -1270,7 +1270,7 @@ class DistrictSavedistrictPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictController : SaveDistrict : {str(e)}")
+            logger.error(f"DistrictView : SaveDistrict : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1290,7 +1290,7 @@ class VidhansabhaGetallvidhansabhaGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VidhanSabhaController : GetAllVidhanSabha : Started")
+            logger.info("VidhanSabhaView : GetAllVidhanSabha : Started")
             
             offset = request.query_params.get('offset', 0)
             limit = request.query_params.get('limit', 0)
@@ -1320,7 +1320,7 @@ class VidhansabhaGetallvidhansabhaGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"VidhanSabhaController : GetAllVidhanSabha : {str(e)}")
+            logger.error(f"VidhanSabhaView : GetAllVidhanSabha : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1335,7 +1335,7 @@ class VidhansabhaSavevidhansabhaPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("VidhanSabhaController : SaveVidhanSabha : Started")
+            logger.info("VidhanSabhaView : SaveVidhanSabha : Started")
             
             serializer = api_serializers.VidhanSabhaSaveVidhanSabhaRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -1373,7 +1373,7 @@ class VidhansabhaSavevidhansabhaPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"VidhanSabhaController : SaveVidhanSabha : {str(e)}")
+            logger.error(f"VidhanSabhaView : SaveVidhanSabha : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1388,7 +1388,7 @@ class VidhansabhaGetvidhansabhabydistrictidGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VidhanSabhaController : GetVidhanSabhaByDistrictId : Started")
+            logger.info("VidhanSabhaView : GetVidhanSabhaByDistrictId : Started")
             
             district_id = request.query_params.get('districtId')
             if not district_id:
@@ -1427,7 +1427,7 @@ class VidhansabhaGetvidhansabhabydistrictidGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"VidhanSabhaController : GetVidhanSabhaByDistrictId : {str(e)}")
+            logger.error(f"VidhanSabhaView : GetVidhanSabhaByDistrictId : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1442,7 +1442,7 @@ class VidhansabhaCheckvidhansabhanamePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : CheckVidhanSabhaName : Started")
+            logger.info("UserView : CheckVidhanSabhaName : Started")
             
             name = request.data.get('name')
             if not name:
@@ -1477,7 +1477,7 @@ class VidhansabhaCheckvidhansabhanamePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : CheckVidhanSabhaName : {str(e)}")
+            logger.error(f"UserView : CheckVidhanSabhaName : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1496,7 +1496,7 @@ class PanchayatGetallpanchayatGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("PanchayatController : GetAllPanchayat : Started")
+            logger.info("PanchayatView : GetAllPanchayat : Started")
             
             offset = request.query_params.get('offset', 0)
             limit = request.query_params.get('limit', 0)
@@ -1526,7 +1526,7 @@ class PanchayatGetallpanchayatGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"PanchayatController : GetAllPanchayat : {str(e)}")
+            logger.error(f"PanchayatView : GetAllPanchayat : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1541,7 +1541,7 @@ class PanchayatSavepanchayatPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("PanchayatController : SavePanchayat : Started")
+            logger.info("PanchayatView : SavePanchayat : Started")
             
             serializer = api_serializers.PanchayatSavePanchayatRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -1579,7 +1579,7 @@ class PanchayatSavepanchayatPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"PanchayatController : SavePanchayat : {str(e)}")
+            logger.error(f"PanchayatView : SavePanchayat : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1594,7 +1594,7 @@ class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VidhanSabhaController : GetPanchayatByDistrictAndVidhanSabhaId : Started")
+            logger.info("VidhanSabhaView : GetPanchayatByDistrictAndVidhanSabhaId : Started")
             
             district_id = request.query_params.get('districtId')
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId')
@@ -1637,7 +1637,7 @@ class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"VidhanSabhaController : GetPanchayatByDistrictAndVidhanSabhaId : {str(e)}")
+            logger.error(f"VidhanSabhaView : GetPanchayatByDistrictAndVidhanSabhaId : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1652,7 +1652,7 @@ class PanchayatCheckpanchayatnamePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : CheckPanchayatName : Started")
+            logger.info("UserView : CheckPanchayatName : Started")
             
             name = request.data.get('name')
             if not name:
@@ -1687,7 +1687,7 @@ class PanchayatCheckpanchayatnamePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : CheckPanchayatName : {str(e)}")
+            logger.error(f"UserView : CheckPanchayatName : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1707,7 +1707,7 @@ class VillageGetallvillageGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetAllVillage : Started")
+            logger.info("VillageView : GetAllVillage : Started")
             
             offset = request.query_params.get('offset', 0)
             limit = request.query_params.get('limit', 0)
@@ -1737,7 +1737,7 @@ class VillageGetallvillageGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"VillageController : GetAllVillage : {str(e)}")
+            logger.error(f"VillageView : GetAllVillage : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1752,7 +1752,7 @@ class VillageSavevillagePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("VillageController : SaveVillage : Started")
+            logger.info("VillageView : SaveVillage : Started")
             
             serializer = api_serializers.VillageSaveVillageRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -1790,7 +1790,7 @@ class VillageSavevillagePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"VillageController : SaveVillage : {str(e)}")
+            logger.error(f"VillageView : SaveVillage : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1805,7 +1805,7 @@ class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetVillageByDistrictVidhanSabhaAndPanchId : Started")
+            logger.info("VillageView : GetVillageByDistrictVidhanSabhaAndPanchId : Started")
             
             district_id = request.query_params.get('districtId')
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId')
@@ -1849,7 +1849,7 @@ class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"VillageController : GetVillageByDistrictVidhanSabhaAndPanchId : {str(e)}")
+            logger.error(f"VillageView : GetVillageByDistrictVidhanSabhaAndPanchId : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1864,7 +1864,7 @@ class VillageCheckvillagenamePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : CheckVillageName : Started")
+            logger.info("UserView : CheckVillageName : Started")
             
             name = request.data.get('name')
             if not name:
@@ -1899,7 +1899,7 @@ class VillageCheckvillagenamePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : CheckVillageName : {str(e)}")
+            logger.error(f"UserView : CheckVillageName : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1919,7 +1919,7 @@ class SchoolSaveschoolPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : LoginSuperAdmin : Started")
+            logger.info("UserView : LoginSuperAdmin : Started")
             
             serializer = api_serializers.SchoolSaveSchoolRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -1957,7 +1957,7 @@ class SchoolSaveschoolPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveSchool : {str(e)}")
+            logger.error(f"UserView : SaveSchool : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1972,7 +1972,7 @@ class SchoolGetallschoolsGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetUser : Started")
+            logger.info("UserView : GetUser : Started")
             
             schools = get_all_schools()
             
@@ -1999,7 +1999,7 @@ class SchoolGetallschoolsGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllSchools : {str(e)}")
+            logger.error(f"UserView : GetAllSchools : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2019,7 +2019,7 @@ class HolidaysSaveholidaysPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveHolidays : Started")
+            logger.info("UserView : SaveHolidays : Started")
             
             serializer = api_serializers.HolidaysSaveHolidaysRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -2061,7 +2061,7 @@ class HolidaysSaveholidaysPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveHolidays : {str(e)}")
+            logger.error(f"UserView : SaveHolidays : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2076,7 +2076,7 @@ class HolidaysGetallholidaysbyteacheridGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("DistrictController : GetAllDistrict : Started")
+            logger.info("DistrictView : GetAllDistrict : Started")
             
             teacher_id = request.query_params.get('teacherId')
             if not teacher_id:
@@ -2115,7 +2115,7 @@ class HolidaysGetallholidaysbyteacheridGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictController : GetAllHolidaysByTeacherId : {str(e)}")
+            logger.error(f"DistrictView : GetAllHolidaysByTeacherId : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2130,7 +2130,7 @@ class HolidaysGetallholidaysbycenteridGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("DistrictController : GetAllDistrict : Started")
+            logger.info("DistrictView : GetAllDistrict : Started")
             
             center_id = request.query_params.get('centerId')
             if not center_id:
@@ -2169,7 +2169,7 @@ class HolidaysGetallholidaysbycenteridGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictController : GetAllHolidaysByCenterId : {str(e)}")
+            logger.error(f"DistrictView : GetAllHolidaysByCenterId : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2184,7 +2184,7 @@ class HolidaysGetallholidaysbyyearGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("DistrictController : GetAllHolidaysByYear : Started")
+            logger.info("DistrictView : GetAllHolidaysByYear : Started")
             
             year = request.query_params.get('year')
             if not year:
@@ -2223,7 +2223,7 @@ class HolidaysGetallholidaysbyyearGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictController : GetAllHolidaysByYear : {str(e)}")
+            logger.error(f"DistrictView : GetAllHolidaysByYear : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2238,7 +2238,7 @@ class HolidaysGetallholidaysGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("DistrictController : GetAllHolidaysByYear : Started")
+            logger.info("DistrictView : GetAllHolidaysByYear : Started")
             
             status_param = request.query_params.get('status', 1)
             user_id = request.query_params.get('userId', 0)
@@ -2268,7 +2268,7 @@ class HolidaysGetallholidaysGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictController : GetAllHolidays : {str(e)}")
+            logger.error(f"DistrictView : GetAllHolidays : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2283,7 +2283,7 @@ class HolidaysDeleteholidaybyidPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveClass : Started")
+            logger.info("UserView : SaveClass : Started")
             
             holiday_id = request.data.get('id')
             if not holiday_id:
@@ -2318,7 +2318,7 @@ class HolidaysDeleteholidaybyidPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : DeleteHolidayById : {str(e)}")
+            logger.error(f"UserView : DeleteHolidayById : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2338,7 +2338,7 @@ class StudentSavestudentPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : LoginSuperAdmin : Started")
+            logger.info("UserView : LoginSuperAdmin : Started")
             
             serializer = api_serializers.StudentSaveStudentRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -2376,7 +2376,7 @@ class StudentSavestudentPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveStudent : {str(e)}")
+            logger.error(f"UserView : SaveStudent : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2391,7 +2391,7 @@ class StudentGetstudentbyidGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetUser : Started")
+            logger.info("UserView : GetUser : Started")
             
             student_id = request.query_params.get('studentId')
             if not student_id:
@@ -2430,7 +2430,7 @@ class StudentGetstudentbyidGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetStudentById : {str(e)}")
+            logger.error(f"UserView : GetStudentById : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2445,7 +2445,7 @@ class StudentUpdatestudentactiveorinactivePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : UpdateStudentActiveOrInactive : Started")
+            logger.info("UserView : UpdateStudentActiveOrInactive : Started")
             
             serializer = api_serializers.StudentUpdateStudentActiveOrInactiveRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -2486,7 +2486,7 @@ class StudentUpdatestudentactiveorinactivePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : UpdateStudentActiveOrInactive : {str(e)}")
+            logger.error(f"UserView : UpdateStudentActiveOrInactive : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2501,7 +2501,7 @@ class StudentGettotalstudentpresentGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetTotalStudentPresent : Started")
+            logger.info("UserView : GetTotalStudentPresent : Started")
             
             scan_date = request.query_params.get('scanDate')
             user_id = request.query_params.get('userId')
@@ -2543,7 +2543,7 @@ class StudentGettotalstudentpresentGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetTotalStudentPresent : {str(e)}")
+            logger.error(f"UserView : GetTotalStudentPresent : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2558,7 +2558,7 @@ class StudentGetallstudentsGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetTotalStudentPresent : Started")
+            logger.info("UserView : GetTotalStudentPresent : Started")
             
             user_id = request.query_params.get('userId')
             if not user_id:
@@ -2608,7 +2608,7 @@ class StudentGetallstudentsGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllStudents : {str(e)}")
+            logger.error(f"UserView : GetAllStudents : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2627,7 +2627,7 @@ class StudentattendanceSavestudentattendancePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveStudentAttendance : Started")
             
             serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -2681,7 +2681,7 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveStudentAttendance : {str(e)}")
+            logger.error(f"UserView : SaveStudentAttendance : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2696,7 +2696,7 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveStudentAttendance : Started")
             
             serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -2750,7 +2750,7 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveAutomaticStudentAttendance : {str(e)}")
+            logger.error(f"UserView : SaveAutomaticStudentAttendance : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2765,7 +2765,7 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveStudentAttendance : Started")
             
             serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -2810,7 +2810,7 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveManualStudentAttendance : {str(e)}")
+            logger.error(f"UserView : SaveManualStudentAttendance : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2825,7 +2825,7 @@ class StudentattendanceGetallstudentwihavgattendanceGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveStudentAttendance : Started")
             
             center_id = request.query_params.get('centerId')
             if not center_id:
@@ -2861,7 +2861,7 @@ class StudentattendanceGetallstudentwihavgattendanceGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllStudentWihAvgAttendance : {str(e)}")
+            logger.error(f"UserView : GetAllStudentWihAvgAttendance : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2876,7 +2876,7 @@ class StudentattendanceGetallabsentattendanceGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveStudentAttendance : Started")
             
             center_id = request.query_params.get('centerId')
             if not center_id:
@@ -2912,7 +2912,7 @@ class StudentattendanceGetallabsentattendanceGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllAbsentAttendance : {str(e)}")
+            logger.error(f"UserView : GetAllAbsentAttendance : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2927,7 +2927,7 @@ class StudentattendanceGetallstudentattendancstatusGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveStudentAttendance : Started")
             
             center_id = request.query_params.get('centerId')
             scan_date = request.query_params.get('scanDate')
@@ -2965,7 +2965,7 @@ class StudentattendanceGetallstudentattendancstatusGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllStudentAttendancStatus : {str(e)}")
+            logger.error(f"UserView : GetAllStudentAttendancStatus : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -2980,7 +2980,7 @@ class StudentattendanceGetallstudentattendancbymonthGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveStudentAttendance : Started")
             
             center_id = request.query_params.get('centerId')
             student_id = request.query_params.get('studentId')
@@ -3020,7 +3020,7 @@ class StudentattendanceGetallstudentattendancbymonthGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllStudentAttendancByMonth : {str(e)}")
+            logger.error(f"UserView : GetAllStudentAttendancByMonth : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3038,7 +3038,7 @@ class UserGetAllTeachersView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetRegisteredTeachers : Started")
+            logger.info("UserView : GetRegisteredTeachers : Started")
             
             serializer = api_serializers.UserGetAllTeachersQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -3079,7 +3079,7 @@ class UserGetAllTeachersView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetRegisteredTeachers : {str(e)}")
+            logger.error(f"UserView : GetRegisteredTeachers : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3096,7 +3096,7 @@ class UserGetAllRegionalAdminsView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetAllRegionalAdmins : Started")
+            logger.info("UserView : GetAllRegionalAdmins : Started")
             
             all_regional_admins = get_all_regional_admins()
             
@@ -3123,7 +3123,7 @@ class UserGetAllRegionalAdminsView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetAllRegionalAdmins : {str(e)}")
+            logger.error(f"UserView : GetAllRegionalAdmins : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3140,7 +3140,7 @@ class UserLoginView(APIView):
     authentication_classes = []
     
     def post(self, request):
-        logger.info("UserController : LoginUser : Started")
+        logger.info("UserView : LoginUser : Started")
         try:
             validate_app_and_device_with_token(request)
             mobile_number = request.data.get('mobileNumber')
@@ -3169,7 +3169,7 @@ class UserLoginView(APIView):
                 )
                 
         except Exception as ex:
-            logger.error(f"UserController : LoginUser exception: {str(ex)}")
+            logger.error(f"UserView : LoginUser exception: {str(ex)}")
             return Response(
                 {
                     "status": False,
@@ -3185,7 +3185,7 @@ class UserSaveSuperAdminView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : SaveSuperAdmin : Started")
+            logger.info("UserView : SaveSuperAdmin : Started")
             
             serializer = api_serializers.SuperAdminDtoSerializer(data=request.data)
             if not serializer.is_valid():
@@ -3227,7 +3227,7 @@ class UserSaveSuperAdminView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveSuperAdmin : {str(e)}")
+            logger.error(f"UserView : SaveSuperAdmin : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3242,7 +3242,7 @@ class UserUpdateDeviceIdView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : UpdateDeviceId : Started")
+            logger.info("UserView : UpdateDeviceId : Started")
             
             serializer = api_serializers.UserDeviceDtoSerializer(data=request.data)
             if not serializer.is_valid():
@@ -3281,7 +3281,7 @@ class UserUpdateDeviceIdView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : UpdateDeviceId : {str(e)}")
+            logger.error(f"UserView : UpdateDeviceId : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3292,29 +3292,31 @@ class UserUpdateDeviceIdView(APIView):
             )
 
 class UserSaveUserView(APIView):
-    """Saves a user"""
-    
     def post(self, request):
         try:
-            logger.info("UserController : SaveUser : Started")
+            logger.info("UserView : SaveUser : Started")
             
-            # Check if Type=2 and ListOfPanchayatIds is missing
-            if request.data.get('Type') == 2 and not request.data.get('ListOfPanchayatIds'):
-                return Response(
-                    {
-                        "status": False,
-                        "error": "ListOfPanchayatIds Parameter is missing",
-                        "code": status.HTTP_404_NOT_FOUND
-                    },
-                    status=status.HTTP_404_NOT_FOUND
-                )
+            # Get the raw data for processing
+            data = request.data.copy()
+            print("data", data)
             
-            serializer = api_serializers.UserDtoSerializer(data=request.data)
+            # Handle ListOfPanchayatIds from form data
+            if 'ListOfPanchayatIds' in data:
+                if isinstance(data['ListOfPanchayatIds'], list):
+                    data['ListOfPanchayatIds'] = ','.join(str(x) for x in data['ListOfPanchayatIds'])
+            
+            # Log the data for debugging
+            logger.info(f"UserSaveUserView data: {data}")
+            
+            serializer = api_serializers.UserSaveUserRequestSerializer(data=data)
+            
             if not serializer.is_valid():
+                logger.error(f"UserSaveUserView validation errors: {serializer.errors}")
                 return Response(
                     {
                         "status": False,
                         "error": "Invalid parameters",
+                        "details": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -3323,8 +3325,8 @@ class UserSaveUserView(APIView):
             user_data = serializer.validated_data
             
             # Hash password if present
-            if user_data.get('password'):
-                user_data['password'] = hash_password(user_data['password'])
+            if user_data.get('Password'):
+                user_data['Password'] = hash_password(user_data['Password'])
             
             saved_user = save_user(user_data)
             
@@ -3349,7 +3351,7 @@ class UserSaveUserView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveUser : {str(e)}")
+            logger.error(f"UserView : SaveUser : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3368,7 +3370,7 @@ class UserGetUserByIdView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetUser : Started")
+            logger.info("UserView : GetUser : Started")
             
             user_id = request.query_params.get('userId')
             if not user_id:
@@ -3406,7 +3408,7 @@ class UserGetUserByIdView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetUser : {str(e)}")
+            logger.error(f"UserView : GetUser : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3421,7 +3423,7 @@ class UserGetUserDetailByPhoneNumberView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetUser : Started")
+            logger.info("UserView : GetUser : Started")
             
             phone_number = request.query_params.get('phoneNumer')
             if not phone_number:
@@ -3459,7 +3461,7 @@ class UserGetUserDetailByPhoneNumberView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetUser : {str(e)}")
+            logger.error(f"UserView : GetUser : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3474,7 +3476,7 @@ class UserUpdatePasswordView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetUser : Started")
+            logger.info("UserView : GetUser : Started")
             
             serializer = api_serializers.UserUpdatePasswordQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -3515,7 +3517,7 @@ class UserUpdatePasswordView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : UpdatePassword : {str(e)}")
+            logger.error(f"UserView : UpdatePassword : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3530,7 +3532,7 @@ class UserGetAllUnAssignedTeacherView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : GetUnAssignedTeachers : Started")
+            logger.info("UserView : GetUnAssignedTeachers : Started")
             
             teachers = Teacher.objects.filter(center__isnull=True).order_by('id')
             
@@ -3569,7 +3571,7 @@ class UserGetAllUnAssignedTeacherView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : GetUnAssignedTeachers : {str(e)}")
+            logger.error(f"UserView : GetUnAssignedTeachers : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3584,7 +3586,7 @@ class UserSearchDataView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserController : SearchData : Started")
+            logger.info("UserView : SearchData : Started")
             
             serializer = api_serializers.UserSearchDataQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
@@ -3623,7 +3625,7 @@ class UserSearchDataView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SearchData : {str(e)}")
+            logger.error(f"UserView : SearchData : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3645,7 +3647,7 @@ class TeacherLoginteacherPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : LoginSuperAdmin : Started")
+            logger.info("UserView : LoginSuperAdmin : Started")
             
             name = request.data.get('name')
             password = request.data.get('password')
@@ -3683,7 +3685,7 @@ class TeacherLoginteacherPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : LoginTeacher : {str(e)}")
+            logger.error(f"UserView : LoginTeacher : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3698,7 +3700,7 @@ class TeacherSaveteacherPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : LoginSuperAdmin : Started")
+            logger.info("UserView : LoginSuperAdmin : Started")
             
             serializer = api_serializers.TeacherSaveTeacherRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -3741,7 +3743,7 @@ class TeacherSaveteacherPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : SaveTeacher : {str(e)}")
+            logger.error(f"UserView : SaveTeacher : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3761,7 +3763,7 @@ class RegionaladminGetallregionaladminGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("RegionalAdminController : GetAllMasterAdmin : Started")
+            logger.info("RegionalAdminView : GetAllMasterAdmin : Started")
             
             regional_admins = get_all_regional_admins()
             
@@ -3788,7 +3790,7 @@ class RegionaladminGetallregionaladminGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"RegionalAdminController : GetAllRegionalAdmin : {str(e)}")
+            logger.error(f"RegionalAdminView : GetAllRegionalAdmin : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3805,7 +3807,7 @@ class RegionaladminLoginregionaladminPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserController : LoginRegionalAdmin : Started")
+            logger.info("UserView : LoginRegionalAdmin : Started")
             
             name = request.data.get('name')
             password = request.data.get('password')
@@ -3843,7 +3845,7 @@ class RegionaladminLoginregionaladminPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserController : LoginRegionalAdmin : {str(e)}")
+            logger.error(f"UserView : LoginRegionalAdmin : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3858,7 +3860,7 @@ class RegionaladminSaveregionaladminPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("RegionalAdminController : SaveRegionalAdmin : Started")
+            logger.info("RegionalAdminView : SaveRegionalAdmin : Started")
             
             serializer = api_serializers.RegionalAdminSaveRegionalAdminRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -3901,7 +3903,7 @@ class RegionaladminSaveregionaladminPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"RegionalAdminController : SaveRegionalAdmin : {str(e)}")
+            logger.error(f"RegionalAdminView : SaveRegionalAdmin : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3941,7 +3943,7 @@ class DashboardGetclasscountbymonthGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetAllVillage : Started")
+            logger.info("VillageView : GetAllVillage : Started")
             
             center_id = request.query_params.get('centerId')
             start_date = request.query_params.get('startDate')
@@ -3961,7 +3963,7 @@ class DashboardGetclasscountbymonthGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetClassCountByMonth : {str(e)}")
+            logger.error(f"DashboardView : GetClassCountByMonth : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -3972,7 +3974,7 @@ class DashboardGettotalgenterratiobycenteridGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetAllVillage : Started")
+            logger.info("VillageView : GetAllVillage : Started")
             
             center_id = request.query_params.get('centerId')
             start_date = request.query_params.get('startDate')
@@ -3992,7 +3994,7 @@ class DashboardGettotalgenterratiobycenteridGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalGenterRatioByCenterId : {str(e)}")
+            logger.error(f"DashboardView : GetTotalGenterRatioByCenterId : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4003,7 +4005,7 @@ class DashboardGettotalstudentofclassGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetTotalStudentOfClass : Started")
+            logger.info("VillageView : GetTotalStudentOfClass : Started")
             
             center_id = request.query_params.get('centerId')
             start_date = request.query_params.get('startDate')
@@ -4023,7 +4025,7 @@ class DashboardGettotalstudentofclassGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalStudentOfClass : {str(e)}")
+            logger.error(f"DashboardView : GetTotalStudentOfClass : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4034,7 +4036,7 @@ class DashboardGetcenterdetailbymonthGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            logger.info("VillageView : GetCenterDetailByMonth : Started")
             
             center_id = request.query_params.get('centerId')
             month = request.query_params.get('month')
@@ -4051,7 +4053,7 @@ class DashboardGetcenterdetailbymonthGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetCenterDetailByMonth : {str(e)}")
+            logger.error(f"DashboardView : GetCenterDetailByMonth : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4062,7 +4064,7 @@ class DashboardGettotalbplGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetTotalBpl : Started")
+            logger.info("VillageView : GetTotalBpl : Started")
             
             center_id = request.query_params.get('centerId')
             start_date = request.query_params.get('startDate')
@@ -4082,7 +4084,7 @@ class DashboardGettotalbplGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalBpl : {str(e)}")
+            logger.error(f"DashboardView : GetTotalBpl : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4093,7 +4095,7 @@ class DashboardGettotalstudentcategoryofclassGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetTotalBpl : Started")
+            logger.info("VillageView : GetTotalBpl : Started")
             
             center_id = request.query_params.get('centerId')
             start_date = request.query_params.get('startDate')
@@ -4113,7 +4115,7 @@ class DashboardGettotalstudentcategoryofclassGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalStudentCategoryOfClass : {str(e)}")
+            logger.error(f"DashboardView : GetTotalStudentCategoryOfClass : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4124,7 +4126,7 @@ class DashboardGetuserbyfilterGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            logger.info("VillageView : GetCenterDetailByMonth : Started")
             
             district_id = request.query_params.get('districtId', 0)
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
@@ -4151,7 +4153,7 @@ class DashboardGetuserbyfilterGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetUserByFilter : {str(e)}")
+            logger.error(f"DashboardView : GetUserByFilter : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4162,7 +4164,7 @@ class DashboardGettotalbplbyfilterGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            logger.info("VillageView : GetCenterDetailByMonth : Started")
             
             district_id = request.query_params.get('districtId', 0)
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
@@ -4189,7 +4191,7 @@ class DashboardGettotalbplbyfilterGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalBplByFilter : {str(e)}")
+            logger.error(f"DashboardView : GetTotalBplByFilter : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4200,7 +4202,7 @@ class DashboardGettotalgenderratiobyfilterGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            logger.info("VillageView : GetCenterDetailByMonth : Started")
             
             district_id = request.query_params.get('districtId', 0)
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
@@ -4227,7 +4229,7 @@ class DashboardGettotalgenderratiobyfilterGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalGenderRatioByFilter : {str(e)}")
+            logger.error(f"DashboardView : GetTotalGenderRatioByFilter : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4238,7 +4240,7 @@ class DashboardGettotalstudentcategoryofclassbyfilterGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            logger.info("VillageView : GetCenterDetailByMonth : Started")
             
             district_id = request.query_params.get('districtId', 0)
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
@@ -4265,7 +4267,7 @@ class DashboardGettotalstudentcategoryofclassbyfilterGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalStudentCategoryOfClassByFilter : {str(e)}")
+            logger.error(f"DashboardView : GetTotalStudentCategoryOfClassByFilter : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4276,7 +4278,7 @@ class DashboardGettotalstudengradeofclassbyfilterGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            logger.info("VillageView : GetCenterDetailByMonth : Started")
             
             district_id = request.query_params.get('districtId', 0)
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
@@ -4303,7 +4305,7 @@ class DashboardGettotalstudengradeofclassbyfilterGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetTotalStudenGradetOfClassByFilter : {str(e)}")
+            logger.error(f"DashboardView : GetTotalStudenGradetOfClassByFilter : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4314,7 +4316,7 @@ class DashboardGetdistrictofcenterbyfilterGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetCenterDetailByMonth : Started")
+            logger.info("VillageView : GetCenterDetailByMonth : Started")
             
             district_id = request.query_params.get('districtId', 0)
             vidhan_sabha_id = request.query_params.get('vidhanSabhaId', 0)
@@ -4338,7 +4340,7 @@ class DashboardGetdistrictofcenterbyfilterGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetDistrictOfCenterByFilter : {str(e)}")
+            logger.error(f"DashboardView : GetDistrictOfCenterByFilter : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4349,14 +4351,14 @@ class DashboardGetstudentattendancebypercentageGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("VillageController : GetStudentAttendanceByPercentage : Started")
+            logger.info("VillageView : GetStudentAttendanceByPercentage : Started")
             
             result = get_student_attendance_by_percentage()
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardController : GetStudentAttendanceByPercentage : {str(e)}")
+            logger.error(f"DashboardView : GetStudentAttendanceByPercentage : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -4391,7 +4393,7 @@ class WeatherforecastGetView(APIView):
             return Response(result, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"WeatherForecastController : GetWeatherForecast : {str(e)}")
+            logger.error(f"WeatherForecastView : GetWeatherForecast : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST

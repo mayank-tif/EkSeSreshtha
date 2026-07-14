@@ -59,7 +59,7 @@ urlpatterns = [
     path('Panchayat/GetPanchayatByDistrictAndVidhanSabhaId/', PanchayatGetpanchayatbydistrictandvidhansabhaidGetView.as_view(), name='panchayat-getpanchayatbydistrictandvidhansabhaid-get'),
     path('Panchayat/CheckPanchayatName/', PanchayatCheckpanchayatnamePostView.as_view(), name='panchayat-checkpanchayatname-post'),
     
-    path('School/SaveSchool/', SchoolSaveschoolPostView.as_view(), name='school-saveschool-post'),
+    path('School/SaveSchool', SchoolSaveschoolPostView.as_view(), name='school-saveschool-post'),
     path('School/GetAllSchools/', SchoolGetallschoolsGetView.as_view(), name='school-getallschools-get'),
     
     path('Student/SaveStudent/', StudentSavestudentPostView.as_view(), name='student-savestudent-post'),
@@ -79,7 +79,7 @@ urlpatterns = [
     path("User/LoginUser", UserLoginView.as_view(), name="login"),
     path('User/SaveSuperAdmin/', UserSaveSuperAdminView.as_view(), name='user-save-superadmin'),
     path('User/UpdateDeviceId', UserUpdateDeviceIdView.as_view(), name='user-update-deviceid'),
-    path('User/SaveUser/', UserSaveUserView.as_view(), name='user-save-user'),
+    path('User/SaveUser', UserSaveUserView.as_view(), name='user-save-user'),
     path('User/UpdateSuperAdminUser/', UserUpdateSuperAdminUserView.as_view(), name='user-update-superadmin'),
     path('User/GetUserById/', UserGetUserByIdView.as_view(), name='user-get-user-by-id'),
     path('User/GetUserDetailByPhoneNumber/', UserGetUserDetailByPhoneNumberView.as_view(), name='user-get-user-detail-by-phone'),

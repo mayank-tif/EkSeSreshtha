@@ -729,34 +729,76 @@ class UserUpdateDeviceIdRequestSerializer(RequestSerializer):
     DeviceId = required_char()
 
 
+class UserSaveSuperAdminRequestSerializer(RequestSerializer):
+    Id = serializers.IntegerField(required=False, allow_null=True)
+    EnrolmentRollId = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    Name = serializers.CharField(required=True)
+    Password = serializers.CharField(required=True)
+    Token = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    Email = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    Type = serializers.IntegerField(required=True)
+    Age = serializers.IntegerField(required=False, allow_null=True)
+    Gender = serializers.CharField(required=True)
+    Contact = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    Status = serializers.BooleanField(required=False, allow_null=True)
+    DateOfBirth = serializers.CharField(required=True)
+    PhoneNumber = serializers.CharField(required=True)
+    Picture = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    WhatsApp = serializers.CharField(required=True)
+    LastLoginTime = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    FullAddress = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    # RoleId = serializers.IntegerField(required=False, allow_null=True,)
+    CreatedOn = serializers.DateTimeField(required=False, allow_null=True)
+    EnrollmentDate = serializers.DateTimeField(required=False, allow_null=True) 
+    CreatedBy = serializers.IntegerField(required=True)
+
+
 class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
     foreign_key_fields = {
         "VidhanSabhaId": VidhanSabha,
         "DistrictId": District,
         "VillageId": Village,
     }
-
-    DeviceId = optional_char()
-    Education = optional_char()
-    VidhanSabhaId = optional_int()
-    DistrictId = optional_int()
-    VillageId = optional_int()
-    AssignedTeacherStatus = optional_bool()
-    AssignedRegionalAdminStatus = optional_bool()
-    GuardianName = optional_char()
-    GuardianNumber = optional_char()
-    ListOfPanchayatIds = serializers.ListField(child=serializers.IntegerField(), required=False)
-    WhatsApp = required_char()
+    
+    DeviceId = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    Education = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    VidhanSabhaId = serializers.IntegerField(required=False, allow_null=True)
+    DistrictId = serializers.IntegerField(required=False, allow_null=True)
+    VillageId = serializers.IntegerField(required=False, allow_null=True)
+    PanchayatId = serializers.IntegerField(required=False, allow_null=True)
+    AssignedTeacherStatus = serializers.BooleanField(required=False, allow_null=True)
+    AssignedRegionalAdminStatus = serializers.BooleanField(required=False, allow_null=True)
+    GuardianName = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    GuardianNumber = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    ListOfPanchayatIds = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        panchayat_ids = attrs.get("ListOfPanchayatIds") or []
-        existing_ids = set(Panchayat.objects.filter(pk__in=panchayat_ids).values_list("id", flat=True))
-        missing_ids = [value for value in panchayat_ids if value not in existing_ids]
-        if missing_ids:
-            raise serializers.ValidationError({"ListOfPanchayatIds": f"Panchayat ids do not exist: {missing_ids}"})
+        
+        # RegionalAdmin (Type=2) requires ListOfPanchayatIds
+        if attrs.get('Type') == 2:
+            list_of_panchayat_ids = attrs.get('ListOfPanchayatIds')
+            if not list_of_panchayat_ids:
+                raise serializers.ValidationError({
+                    "ListOfPanchayatIds": "ListOfPanchayatIds is required for Regional Admin"
+                })
+            
+            # Parse and validate panchayat IDs
+            if isinstance(list_of_panchayat_ids, str):
+                panchayat_ids = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+            else:
+                panchayat_ids = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+            
+            # Validate panchayat IDs exist
+            existing_ids = set(Panchayat.objects.filter(pk__in=panchayat_ids).values_list("id", flat=True))
+            missing_ids = [pid for pid in panchayat_ids if pid not in existing_ids]
+            if missing_ids:
+                raise serializers.ValidationError({
+                    "ListOfPanchayatIds": f"Panchayat ids do not exist: {missing_ids}"
+                })
+        
         return attrs
-
+    
 
 class UserGetUserByIdQuerySerializer(RequestSerializer):
     foreign_key_fields = {"userId": User}

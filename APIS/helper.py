@@ -1172,123 +1172,246 @@ def save_user(user_data):
     logger.info(f"UserRepository : SaveLogin : Started")
     
     try:
-        user_id = user_data.get('Id', 0)
+        user_id = int(user_data.get('Id', 0))
+        print(f"Saving user with ID: {user_id}")
         
-        if user_id > 0:
-            # Update existing user
-            update_fields = []
-            update_values = []
-            
-            # Build update query dynamically
-            for key, value in user_data.items():
-                if key != 'Id' and value is not None:
-                    # Convert field names to column names
-                    column_name = {
-                        'enrolmentRollId': 'EnrolmentRollId',
-                        'deviceId': 'DeviceId',
-                        'dateOfBirth': 'DateOfBirth',
-                        'phoneNumber': 'PhoneNumber',
-                        'whatsApp': 'WhatsApp',
-                        'lastLoginTime': 'LastLoginTime',
-                        'fullAddress': 'FullAddress',
-                        'roleId': 'RoleId',
-                        'createdOn': 'CreatedOn',
-                        'enrollmentDate': 'EnrollmentDate',
-                        'createdBy': 'CreatedBy',
-                        'vidhanSabhaId': 'VidhanSabhaId',
-                        'districtId': 'DistrictId',
-                        'villageId': 'VillageId',
-                        'panchayatId': 'PanchayatId',
-                        'assignedTeacherStatus': 'AssignedTeacherStatus',
-                        'assignedRegionalAdminStatus': 'AssignedRegionalAdminStatus',
-                        'guardianName': 'GuardianName',
-                        'guardianNumber': 'GuardianNumber',
-                        'fullName': 'FullName',
-                        'assignedTeacher': 'AssignedTeacher',
-                        'assignedRegionalAdmin': 'AssignedRegionalAdmin'
-                    }.get(key, key)
-                    
-                    update_fields.append(f"{column_name} = %s")
-                    update_values.append(value)
-            
-            if update_fields:
-                update_values.append(user_id)
-                sql = f"""
-                    UPDATE Users 
-                    SET {', '.join(update_fields)}
+        with connection.cursor() as cursor:
+            if user_id > 0:
+                print("if")
+                # Get existing user to preserve values
+                select_sql = """
+                    SELECT 
+                        Id, EnrolmentRollId, Password, Type, Status, 
+                        CreatedOn, AssignedTeacherStatus, AssignedRegionalAdminStatus
+                    FROM Users 
                     WHERE Id = %s
                 """
-                with connection.cursor() as cursor:
-                    cursor.execute(sql, update_values)
-        else:
-            # Insert new user
-            columns = []
-            placeholders = []
-            values = []
-            
-            for key, value in user_data.items():
-                if key != 'Id' and value is not None:
-                    column_name = {
-                        'enrolmentRollId': 'EnrolmentRollId',
-                        'deviceId': 'DeviceId',
-                        'dateOfBirth': 'DateOfBirth',
-                        'phoneNumber': 'PhoneNumber',
-                        'whatsApp': 'WhatsApp',
-                        'lastLoginTime': 'LastLoginTime',
-                        'fullAddress': 'FullAddress',
-                        'roleId': 'RoleId',
-                        'createdOn': 'CreatedOn',
-                        'enrollmentDate': 'EnrollmentDate',
-                        'createdBy': 'CreatedBy',
-                        'vidhanSabhaId': 'VidhanSabhaId',
-                        'districtId': 'DistrictId',
-                        'villageId': 'VillageId',
-                        'panchayatId': 'PanchayatId',
-                        'assignedTeacherStatus': 'AssignedTeacherStatus',
-                        'assignedRegionalAdminStatus': 'AssignedRegionalAdminStatus',
-                        'guardianName': 'GuardianName',
-                        'guardianNumber': 'GuardianNumber'
-                    }.get(key, key)
-                    
-                    columns.append(column_name)
-                    placeholders.append('%s')
-                    values.append(value)
-            
-            # Set default values
-            columns.append('CreatedOn')
-            placeholders.append('%s')
-            values.append(datetime.now())
-            
-            columns.append('AssignedTeacherStatus')
-            placeholders.append('%s')
-            values.append(False)
-            
-            columns.append('AssignedRegionalAdminStatus')
-            placeholders.append('%s')
-            values.append(False)
-            
-            columns.append('Status')
-            placeholders.append('%s')
-            values.append(True)
-            
-            if user_data.get('Type') == 3:  # Teacher
-                if user_data.get('ListOfPanchayatIds'):
-                    panchayat_list = user_data.get('ListOfPanchayatIds')
-                    if isinstance(panchayat_list, list) and len(panchayat_list) == 1:
-                        columns.append('PanchayatId')
-                        placeholders.append('%s')
-                        values.append(int(panchayat_list[0]))
-            
-            sql = f"""
-                INSERT INTO Users ({', '.join(columns)})
-                VALUES ({', '.join(placeholders)})
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, values)
+                cursor.execute(select_sql, [user_id])
+                existing = cursor.fetchone()
                 
-                # Get the inserted ID
+                if existing:
+                    enrolment_roll_id = existing[1]
+                    existing_password = existing[2]
+                    user_type = existing[3]
+                    existing_status = existing[4]
+                    existing_created_on = existing[5]
+                    
+                    update_fields = []
+                    update_values = []
+                    
+                    # If Type == 1 (SuperAdmin) - can change anything
+                    if user_type == 1:
+                        # SuperAdmin can change password
+                        if user_data.get('Password') and user_data['Password'] != existing_password:
+                            update_fields.append("Password = %s")
+                            update_values.append(user_data['Password'])
+                        
+                        # SuperAdmin can change all fields
+                        field_mapping = {
+                            'Name': 'Name',
+                            'Token': 'Token',
+                            'Email': 'Email',
+                            'Age': 'Age',
+                            'Gender': 'Gender',
+                            'Contact': 'Contact',
+                            'DateOfBirth': 'DateOfBirth',
+                            'PhoneNumber': 'PhoneNumber',
+                            'Picture': 'Picture',
+                            'WhatsApp': 'WhatsApp',
+                            'LastLoginTime': 'LastLoginTime',
+                            'FullAddress': 'FullAddress',
+                            'RoleId': 'RoleId',
+                            'DeviceId': 'DeviceId',
+                            'Education': 'Education',
+                            'VidhanSabhaId': 'VidhanSabhaId',
+                            'DistrictId': 'DistrictId',
+                            'VillageId': 'VillageId',
+                            'PanchayatId': 'PanchayatId',
+                            'GuardianName': 'GuardianName',
+                            'GuardianNumber': 'GuardianNumber',
+                            'AssignedTeacherStatus': 'AssignedTeacherStatus',
+                            'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus'
+                        }
+                        
+                        for key, column in field_mapping.items():
+                            if key in user_data and user_data[key] is not None:
+                                update_fields.append(f"{column} = %s")
+                                update_values.append(user_data[key])
+                    else:
+                        # Non-superadmin: preserve EnrolmentRollId, Password, Status, CreatedOn
+                        # Only update specific fields from ConvertUpdateUsertoToUser
+                        # In .NET, only these fields are updated for non-superadmin:
+                        # DateOfBirth, GuardianName, GuardianNumber, Email, PhoneNumber, Name
+                        
+                        if user_data.get('DateOfBirth'):
+                            update_fields.append("DateOfBirth = %s")
+                            update_values.append(user_data['DateOfBirth'])
+                        
+                        if user_data.get('GuardianName'):
+                            update_fields.append("GuardianName = %s")
+                            update_values.append(user_data['GuardianName'])
+                        
+                        if user_data.get('GuardianNumber'):
+                            update_fields.append("GuardianNumber = %s")
+                            update_values.append(user_data['GuardianNumber'])
+                        
+                        if user_data.get('Email'):
+                            update_fields.append("Email = %s")
+                            update_values.append(user_data['Email'])
+                        
+                        if user_data.get('PhoneNumber'):
+                            update_fields.append("PhoneNumber = %s")
+                            update_values.append(user_data['PhoneNumber'])
+                        
+                        if user_data.get('Name'):
+                            update_fields.append("Name = %s")
+                            update_values.append(user_data['Name'])
+                        
+                        # Preserve existing values for these fields
+                        update_fields.append("EnrolmentRollId = %s")
+                        update_values.append(enrolment_roll_id)
+                        
+                        update_fields.append("Password = %s")
+                        update_values.append(existing_password)
+                        
+                        update_fields.append("Status = %s")
+                        update_values.append(existing_status)
+                        
+                        update_fields.append("CreatedOn = %s")
+                        update_values.append(existing_created_on)
+                    
+                    # Handle ListOfPanchayatIds for RegionalAdmin
+                    if user_type == 2:  # RegionalAdmin
+                        list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                        if list_of_panchayat_ids:
+                            if isinstance(list_of_panchayat_ids, str):
+                                panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                            else:
+                                panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                            
+                            if panchayat_list:
+                                # Delete existing RegionalAdminPanchayat records
+                                cursor.execute("DELETE FROM RegionalAdminPanchayat WHERE UsersId = %s", [user_id])
+                                
+                                # Insert new records
+                                for panchayat_id in panchayat_list:
+                                    cursor.execute("SELECT Name FROM Panchayat WHERE Id = %s", [panchayat_id])
+                                    panchayat_row = cursor.fetchone()
+                                    panchayat_name = panchayat_row[0] if panchayat_row else None
+                                    
+                                    if panchayat_name:
+                                        insert_sql = """
+                                            INSERT INTO RegionalAdminPanchayat (UsersId, PanchayatId, PanchayatName)
+                                            VALUES (%s, %s, %s)
+                                        """
+                                        cursor.execute(insert_sql, [user_id, panchayat_id, panchayat_name])
+                    
+                    if update_fields:
+                        update_values.append(user_id)
+                        sql = f"UPDATE Users SET {', '.join(update_fields)} WHERE Id = %s"
+                        cursor.execute(sql, update_values)
+            else:
+                print("else")
+                # Insert new user
+                # Generate EnrolmentRollId: Name.Substring(0,2) + "-" + DateOfBirth + "-" + Gender(M/F)
+                name = user_data.get('Name', '')
+                date_of_birth = user_data.get('DateOfBirth', '')
+                gender = user_data.get('Gender', '')
+                
+                enrolment_roll_id = f"{name[:2]}-{date_of_birth}-"
+                if gender and gender.lower() == 'male':
+                    enrolment_roll_id += 'M'
+                else:
+                    enrolment_roll_id += 'F'
+                
+                created_on = datetime.now()
+                
+                # Set default values
+                columns = [
+                    'EnrolmentRollId', 'Status', 'CreatedOn', 
+                    'AssignedTeacherStatus', 'AssignedRegionalAdminStatus'
+                ]
+                values = [
+                    enrolment_roll_id, 1, created_on, 0, 0
+                ]
+                
+                # Map fields to column names
+                field_mapping = {
+                    'Name': 'Name',
+                    'Password': 'Password',
+                    'Token': 'Token',
+                    'Email': 'Email',
+                    'Type': 'Type',
+                    'Age': 'Age',
+                    'Gender': 'Gender',
+                    'Contact': 'Contact',
+                    'DateOfBirth': 'DateOfBirth',
+                    'PhoneNumber': 'PhoneNumber',
+                    'Picture': 'Picture',
+                    'WhatsApp': 'WhatsApp',
+                    'LastLoginTime': 'LastLoginTime',
+                    'FullAddress': 'FullAddress',
+                    'RoleId': 'RoleId',
+                    'DeviceId': 'DeviceId',
+                    'Education': 'Education',
+                    'VidhanSabhaId': 'VidhanSabhaId',
+                    'DistrictId': 'DistrictId',
+                    'VillageId': 'VillageId',
+                    'PanchayatId': 'PanchayatId',
+                    'GuardianName': 'GuardianName',
+                    'GuardianNumber': 'GuardianNumber',
+                    'AssignedTeacherStatus': 'AssignedTeacherStatus',
+                    'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus'
+                }
+                
+                for key, column in field_mapping.items():
+                    if key in user_data and user_data[key] is not None:
+                        columns.append(column)
+                        values.append(user_data[key])
+                
+                user_type = user_data.get('Type')
+                
+                # Handle ListOfPanchayatIds for Teacher
+                if user_type == 3:  # Teacher
+                    list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                    if list_of_panchayat_ids:
+                        if isinstance(list_of_panchayat_ids, str):
+                            panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                        else:
+                            panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                        
+                        if len(panchayat_list) == 1:
+                            columns.append('PanchayatId')
+                            values.append(panchayat_list[0])
+                
+                placeholders = ', '.join(['%s'] * len(columns))
+                sql = f"INSERT INTO Users ({', '.join(columns)}) VALUES ({placeholders})"
+                cursor.execute(sql, values)
+                print("sql", sql, values)
+                
                 cursor.execute("SELECT LAST_INSERT_ID()")
                 user_id = cursor.fetchone()[0]
+                
+                # Handle RegionalAdminPanchayat for RegionalAdmin
+                if user_type == 2:  # RegionalAdmin
+                    list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                    if list_of_panchayat_ids:
+                        if isinstance(list_of_panchayat_ids, str):
+                            panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                        else:
+                            panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                        
+                        for panchayat_id in panchayat_list:
+                            cursor.execute("SELECT Name FROM Panchayat WHERE Id = %s", [panchayat_id])
+                            panchayat_row = cursor.fetchone()
+                            panchayat_name = panchayat_row[0] if panchayat_row else None
+                            
+                            if panchayat_name:
+                                insert_sql = """
+                                    INSERT INTO RegionalAdminPanchayat (UsersId, PanchayatId, PanchayatName)
+                                    VALUES (%s, %s, %s)
+                                """
+                                cursor.execute(insert_sql, [user_id, panchayat_id, panchayat_name])
         
         return get_user_by_id(user_id)
         
@@ -4893,7 +5016,7 @@ def upload_announcement_images(image_files):
         
         return file_paths
     except Exception as e:
-        logger.error(f"AnnouncementController : UploadImages : {str(e)}")
+        logger.error(f"AnnouncementView : UploadImages : {str(e)}")
         raise e
     
     
