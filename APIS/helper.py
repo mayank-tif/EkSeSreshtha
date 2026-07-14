@@ -3959,7 +3959,7 @@ def update_student_active_or_inactive(student_id, status):
 
 def get_total_student_present(scan_date, user_id):
     """Get total student present count - matches .NET response exactly"""
-    logger.info(f"StudentRepository : GetTotalStudentPresent : Started")
+    logger.info(f"StudentHelper : GetTotalStudentPresent : Started")
     
     try:
         # Get user type
@@ -4063,7 +4063,7 @@ def get_total_student_present(scan_date, user_id):
         }
         
     except Exception as e:
-        logger.error(f"StudentRepository : GetTotalStudentPresent : {str(e)}")
+        logger.error(f"StudentHelper : GetTotalStudentPresent : {str(e)}")
         raise e
 
 def get_all_students(user_id, district_id=0, vidhan_sabha_id=0, panchayat_id=0, village_id=0):
@@ -4305,7 +4305,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
 
 def get_all_student_with_avg_attendance(center_id):
     """Get all students with average attendance - matches .NET logic exactly"""
-    logger.info(f"StudentAttendanceRepository : GetAllStudentWihAvgAttendance : Started")
+    logger.info(f"StudentAttendanceHelper : GetAllStudentWihAvgAttendance : Started")
     
     try:
         # Get class count for this center (Active or Completed)
@@ -4355,7 +4355,7 @@ def get_all_student_with_avg_attendance(center_id):
         return students
         
     except Exception as e:
-        logger.error(f"StudentAttendanceRepository : GetAllStudentWihAvgAttendance : {str(e)}")
+        logger.error(f"StudentAttendanceHelper : GetAllStudentWihAvgAttendance : {str(e)}")
         raise e
 
 def get_all_absent_attendance(center_id):
@@ -4405,31 +4405,47 @@ def get_all_absent_attendance(center_id):
         raise e
 
 def get_all_student_attendance_status(center_id, scan_date):
-    """Get all student attendance status"""
+    """Get all student attendance status for a specific date - matches .NET logic exactly"""
     logger.info(f"StudentAttendanceHelper : GetAllStudentAttendancStatus : Started")
     
     try:
-        scan_date = parse_any_datetime(scan_date)
+        # Parse the scan date
+        if isinstance(scan_date, str):
+            scan_date = parse_any_datetime(scan_date)
+            scan_date = scan_date.date() if scan_date else datetime.now().date()
+        elif hasattr(scan_date, 'date'):
+            scan_date = scan_date.date()
         
-        sql = """
-            SELECT 
-                s.Id,
-                s.EnrollmentId,
-                s.FullName,
-                CASE WHEN sa.Id IS NOT NULL THEN 'Present' ELSE 'Absent' END as AttendanceStatus
-            FROM Student s
-            LEFT JOIN StudentAttendance sa ON s.Id = sa.StudentId AND DATE(sa.ScanDate) = %s
-            WHERE s.CenterId = %s AND s.Status = 1
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [scan_date.date(), center_id])
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        students = []
+        
+        # Get all active students in the center
+        student_queryset = Student.objects.filter(
+            center_id=center_id,
+            status=True  # Only active students
+        ).values('id', 'enrollment_id', 'full_name')
+        
+        for student in student_queryset:
+            student_id = student['id']
             
+            # Check if student has attendance on the given date
+            has_attendance = StudentAttendance.objects.filter(
+                student_id=student_id,
+                scan_date__date=scan_date
+            ).exists()
+            
+            attendance_status = 'Present' if has_attendance else 'Absent'
+            
+            students.append({
+                'id': student_id,
+                'enrollmentId': student['enrollment_id'],
+                'fullName': student['full_name'],
+                'attendanceStatus': attendance_status,
+                'averageAttendance': 0,  # Not calculated in this endpoint
+                'date': scan_date
+            })
+        
+        return students
+        
     except Exception as e:
         logger.error(f"StudentAttendanceHelper : GetAllStudentAttendancStatus : {str(e)}")
         raise e
