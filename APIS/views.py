@@ -2506,16 +2506,16 @@ class StudentGettotalstudentpresentGetView(APIView):
             scan_date = request.query_params.get('scanDate')
             user_id = request.query_params.get('userId')
             
-            if not scan_date or not user_id:
-                return Response(
-                    {
-                        "status": False,
-                        "data": None,
-                        "message": "scanDate and userId are required",
-                        "code": status.HTTP_400_BAD_REQUEST
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # if not scan_date or not user_id:
+            #     return Response(
+            #         {
+            #             "status": False,
+            #             "data": None,
+            #             "message": "scanDate and userId are required",
+            #             "code": status.HTTP_400_BAD_REQUEST
+            #         },
+            #         status=status.HTTP_400_BAD_REQUEST
+            #     )
             
             scan_date = parse_any_datetime(scan_date)
             result = get_total_student_present(scan_date, int(user_id))
@@ -2932,15 +2932,15 @@ class StudentattendanceGetallstudentattendancstatusGetView(APIView):
             center_id = request.query_params.get('centerId')
             scan_date = request.query_params.get('scanDate')
             
-            if not center_id or not scan_date:
-                return Response(
-                    {
-                        "status": False,
-                        "error": "centerId and scanDate are required",
-                        "code": status.HTTP_400_BAD_REQUEST
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # if not center_id or not scan_date:
+            #     return Response(
+            #         {
+            #             "status": False,
+            #             "error": "centerId and scanDate are required",
+            #             "code": status.HTTP_400_BAD_REQUEST
+            #         },
+            #         status=status.HTTP_400_BAD_REQUEST
+            #     )
             
             students = get_all_student_attendance_status(int(center_id), scan_date)
             

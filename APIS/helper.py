@@ -454,7 +454,7 @@ def get_all_centers_orm(userId, type):
     
 def get_center_by_id(center_id):
     """Get center by ID with related data"""
-    logger.info(f"CenterRepository : GetCenteryId : Started")
+    logger.info(f"CenterHelper : GetCenteryId : Started")
     
     try:
         sql = """
@@ -521,12 +521,12 @@ def get_center_by_id(center_id):
         return None
         
     except Exception as e:
-        logger.error(f"CenterRepository : GetCenteryId : {str(e)}")
+        logger.error(f"CenterHelper : GetCenteryId : {str(e)}")
         raise e
 
 def get_center_by_user_id(user_id):
     """Get center assigned to a teacher"""
-    logger.info(f"CenterRepository : GetCenterByUserId : Started")
+    logger.info(f"CenterHelper : GetCenterByUserId : Started")
     
     try:
         sql = """
@@ -590,12 +590,12 @@ def get_center_by_user_id(user_id):
         return None
         
     except Exception as e:
-        logger.error(f"CenterRepository : GetCenterByUserId : {str(e)}")
+        logger.error(f"CenterHelper : GetCenterByUserId : {str(e)}")
         raise e
 
 def get_all_center_attendance(user_id, date, offset, limit):
     """Get all center attendance"""
-    logger.info(f"CenterRepository : GetAllCenterAttendance : Started")
+    logger.info(f"CenterHelper : GetAllCenterAttendance : Started")
     
     try:
         # Get user type
@@ -700,16 +700,16 @@ def get_all_center_attendance(user_id, date, offset, limit):
             
             centers.append(center_dict)
         
-        logger.info(f"CenterRepository : GetAllCenterAttendance : End")
+        logger.info(f"CenterHelper : GetAllCenterAttendance : End")
         return centers
         
     except Exception as e:
-        logger.error(f"CenterRepository : GetAllCenterAttendance : {str(e)}")
+        logger.error(f"CenterHelper : GetAllCenterAttendance : {str(e)}")
         raise e
 
 def get_total_attendance_count_of_center(user_id, date):
     """Get total attendance count of center"""
-    logger.info(f"CenterRepository : GetTotalAttendanceCountOfCenter : Started")
+    logger.info(f"CenterHelper : GetTotalAttendanceCountOfCenter : Started")
     
     try:
         # Get user type
@@ -756,16 +756,16 @@ def get_total_attendance_count_of_center(user_id, date):
             "Status": True
         }
         
-        logger.info(f"CenterRepository : GetTotalAttendanceCountOfCenter : End")
+        logger.info(f"CenterHelper : GetTotalAttendanceCountOfCenter : End")
         return result
         
     except Exception as e:
-        logger.error(f"CenterRepository : GetTotalAttendanceCountOfCenter : {str(e)}")
+        logger.error(f"CenterHelper : GetTotalAttendanceCountOfCenter : {str(e)}")
         raise e
 
 def update_center_active_or_deactive(center_log_data):
     """Update center active or deactive status"""
-    logger.info(f"CenterRepository : UpdateCenterActiveOrDeactive : Started")
+    logger.info(f"CenterHelper : UpdateCenterActiveOrDeactive : Started")
     
     try:
         center_id = center_log_data.get('centerId')
@@ -793,16 +793,16 @@ def update_center_active_or_deactive(center_log_data):
             """
             cursor.execute(log_sql, [center_id, user_id, reason, datetime.now()])
         
-        logger.info(f"CenterRepository : UpdateCenterActiveOrDeactive : End")
+        logger.info(f"CenterHelper : UpdateCenterActiveOrDeactive : End")
         return {'centerId': center_id, 'status': status}
         
     except Exception as e:
-        logger.error(f"CenterRepository : UpdateCenterActiveOrDeactive : {str(e)}")
+        logger.error(f"CenterHelper : UpdateCenterActiveOrDeactive : {str(e)}")
         raise e
     
 def save_center(center_data):
     """Save or update center with full .NET logic"""
-    logger.info(f"CenterRepository : SaveCenter : Started")
+    logger.info(f"CenterHelper : SaveCenter : Started")
     
     try:
         center_id = center_data.get('Id', 0)
@@ -906,14 +906,14 @@ def save_center(center_data):
         return get_center_by_id(center_id)
         
     except Exception as e:
-        logger.error(f"CenterRepository : SaveCenter : {str(e)}")
+        logger.error(f"CenterHelper : SaveCenter : {str(e)}")
         raise e
 
 
 # TECHERS SECTION ----------------------------------------------------------
 def get_all_teachers(userId):
     """Get all teachers with optional filtering by userId"""
-    logger.info(f"UserRepository : GetRegisteredTeachers : Started")
+    logger.info(f"UserHelper : GetRegisteredTeachers : Started")
     
     try:
         users = []
@@ -975,11 +975,11 @@ def get_all_teachers(userId):
             }
             result.append(teacher_dto)
         
-        logger.info(f"UserRepository : GetRegisteredTeachers : End")
+        logger.info(f"UserHelper : GetRegisteredTeachers : End")
         return result
         
     except Exception as e:
-        logger.error(f"UserRepository : GetRegisteredTeachers : {str(e)}")
+        logger.error(f"UserHelper : GetRegisteredTeachers : {str(e)}")
         raise e
     
 
@@ -987,7 +987,7 @@ def get_all_teachers(userId):
 #---------------------------------------------------------
 def get_all_regional_admins():
     """Get all regional admins (Type == RegionalAdmin)"""
-    logger.info(f"UserRepository : GetAllRegionalAdmins : Started")
+    logger.info(f"UserHelper : GetAllRegionalAdmins : Started")
     
     try:
         sql = """
@@ -1015,11 +1015,11 @@ def get_all_regional_admins():
                 }
                 result.append(regional_admin_dto)
         
-        logger.info(f"UserRepository : GetAllRegionalAdmins : End")
+        logger.info(f"UserHelper : GetAllRegionalAdmins : End")
         return result
         
     except Exception as e:
-        logger.error(f"UserRepository : GetAllRegionalAdmins : {str(e)}")
+        logger.error(f"UserHelper : GetAllRegionalAdmins : {str(e)}")
         raise e
 
 
@@ -1027,7 +1027,7 @@ def get_all_regional_admins():
 # USER SECTION---------------------------------------------------------
 def login_user(mobile_number, password):
     """Authenticate user by mobile number and password"""
-    logger.info(f"UserRepository : LoginUser : Started")
+    logger.info(f"UserHelper : LoginUser : Started")
     
     try:
         hashed_password = hash_password(password)
@@ -1157,19 +1157,19 @@ def login_user(mobile_number, password):
                     "centerAssignUser": None
                 }
                 
-                logger.info(f"UserRepository : LoginUser : End")
+                logger.info(f"UserHelper : LoginUser : End")
                 return response_data
         
         return None
         
     except Exception as e:
-        logger.error(f"UserRepository : LoginUser : {str(e)}")
+        logger.error(f"UserHelper : LoginUser : {str(e)}")
         raise e
     
     
 def save_user(user_data):
     """Save or update user"""
-    logger.info(f"UserRepository : SaveLogin : Started")
+    logger.info(f"UserHelper : SaveLogin : Started")
     
     try:
         user_id = int(user_data.get('Id', 0))
@@ -1454,16 +1454,16 @@ def save_user(user_data):
         return get_user_by_id(user_id)
         
     except Exception as e:
-        logger.error(f"UserRepository : SaveLogin : {str(e)}")
+        logger.error(f"UserHelper : SaveLogin : {str(e)}")
         raise e
         
     except Exception as e:
-        logger.error(f"UserRepository : SaveLogin : {str(e)}")
+        logger.error(f"UserHelper : SaveLogin : {str(e)}")
         raise e
 
 def get_user_by_id(user_id):
     """Get user by ID matching .NET response structure exactly"""
-    logger.info(f"UserRepository : GetUserById : Started")
+    logger.info(f"UserHelper : GetUserById : Started")
     
     try:
         sql = """
@@ -1765,12 +1765,12 @@ def get_user_by_id(user_id):
         return None
         
     except Exception as e:
-        logger.error(f"UserRepository : GetUserById : {str(e)}")
+        logger.error(f"UserHelper : GetUserById : {str(e)}")
         raise e
 
 def update_user_device_id(user_id, device_id):
     """Update user device ID"""
-    logger.info(f"UserRepository : UpdateDeviceId : Started")
+    logger.info(f"UserHelper : UpdateDeviceId : Started")
     
     try:
         sql = """
@@ -1784,12 +1784,12 @@ def update_user_device_id(user_id, device_id):
         return get_user_by_id(user_id)
         
     except Exception as e:
-        logger.error(f"UserRepository : UpdateDeviceId : {str(e)}")
+        logger.error(f"UserHelper : UpdateDeviceId : {str(e)}")
         raise e
 
 def update_user_password(user_id, new_password):
     """Update user password"""
-    logger.info(f"UserRepository : UpdatePassword : Started")
+    logger.info(f"UserHelper : UpdatePassword : Started")
     
     try:
         hashed_password = hash_password(new_password)
@@ -1804,12 +1804,12 @@ def update_user_password(user_id, new_password):
         return get_user_by_id(user_id)
         
     except Exception as e:
-        logger.error(f"UserRepository : UpdatePassword : {str(e)}")
+        logger.error(f"UserHelper : UpdatePassword : {str(e)}")
         raise e
 
 def get_user_detail_by_phone(phone_number):
     """Get user details by phone number"""
-    logger.info(f"UserRepository : GetUserDetailByPhoneNumber : Started")
+    logger.info(f"UserHelper : GetUserDetailByPhoneNumber : Started")
     
     try:
         sql = """
@@ -1834,12 +1834,12 @@ def get_user_detail_by_phone(phone_number):
         return None
         
     except Exception as e:
-        logger.error(f"UserRepository : GetUserDetailByPhoneNumber : {str(e)}")
+        logger.error(f"UserHelper : GetUserDetailByPhoneNumber : {str(e)}")
         raise e
 
 def search_data(search_type, query_string):
     """Search data by type and query string"""
-    logger.info(f"UserRepository : SearchData : Started")
+    logger.info(f"UserHelper : SearchData : Started")
     
     try:
         results = []
@@ -1872,11 +1872,11 @@ def search_data(search_type, query_string):
                 for row in rows:
                     results.append(dict(zip(columns, row)))
         
-        logger.info(f"UserRepository : SearchData : End")
+        logger.info(f"UserHelper : SearchData : End")
         return results
         
     except Exception as e:
-        logger.error(f"UserRepository : SearchData : {str(e)}")
+        logger.error(f"UserHelper : SearchData : {str(e)}")
         raise e
 
 #---------------------------------------------------------
@@ -1885,7 +1885,7 @@ def search_data(search_type, query_string):
 
 def save_class(class_data):
     """Save a new class"""
-    logger.info(f"ClassRepository : SaveClass : Started")
+    logger.info(f"ClassHelper : SaveClass : Started")
     
     try:
         class_enrolment_id = class_data.get('classEnrolmentId')
@@ -1938,7 +1938,7 @@ def save_class(class_data):
         return get_class_by_id(class_id)
         
     except Exception as e:
-        logger.error(f"ClassRepository : SaveClass : {str(e)}")
+        logger.error(f"ClassHelper : SaveClass : {str(e)}")
         raise e
 
 def get_class_by_id(class_id):
@@ -1960,12 +1960,12 @@ def get_class_by_id(class_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"ClassRepository : get_class_by_id : {str(e)}")
+        logger.error(f"ClassHelper : get_class_by_id : {str(e)}")
         raise e
 
 def cancel_class(class_data):
     """Cancel a class"""
-    logger.info(f"ClassRepository : CancelClass : Started")
+    logger.info(f"ClassHelper : CancelClass : Started")
     
     try:
         class_id = class_data.get('id')
@@ -1983,12 +1983,12 @@ def cancel_class(class_data):
         return get_class_by_id(class_id)
         
     except Exception as e:
-        logger.error(f"ClassRepository : CancelClass : {str(e)}")
+        logger.error(f"ClassHelper : CancelClass : {str(e)}")
         raise e
 
 def update_end_class_time(class_id):
     """Update end class time"""
-    logger.info(f"ClassRepository : UpdateEndClassTime : Started")
+    logger.info(f"ClassHelper : UpdateEndClassTime : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2026,12 +2026,12 @@ def update_end_class_time(class_id):
         return get_class_by_id(class_id)
         
     except Exception as e:
-        logger.error(f"ClassRepository : UpdateEndClassTime : {str(e)}")
+        logger.error(f"ClassHelper : UpdateEndClassTime : {str(e)}")
         raise e
 
 def update_class_sub_status(class_id):
     """Update class sub status"""
-    logger.info(f"ClassRepository : UpdateClassSubStatus : Started")
+    logger.info(f"ClassHelper : UpdateClassSubStatus : Started")
     
     try:
         sql = "UPDATE Class SET SubStatus = 1 WHERE Id = %s"
@@ -2041,12 +2041,12 @@ def update_class_sub_status(class_id):
         return get_class_by_id(class_id)
         
     except Exception as e:
-        logger.error(f"ClassRepository : UpdateClassSubStatus : {str(e)}")
+        logger.error(f"ClassHelper : UpdateClassSubStatus : {str(e)}")
         raise e
 
 def cancel_class_by_teacher(class_cancel_data):
     """Cancel class by teacher"""
-    logger.info(f"ClassRepository : CancelClassByTeacher : Started")
+    logger.info(f"ClassHelper : CancelClassByTeacher : Started")
     
     try:
         insert_sql = """
@@ -2071,12 +2071,12 @@ def cancel_class_by_teacher(class_cancel_data):
         return {'id': cancel_id}
         
     except Exception as e:
-        logger.error(f"ClassRepository : CancelClassByTeacher : {str(e)}")
+        logger.error(f"ClassHelper : CancelClassByTeacher : {str(e)}")
         raise e
 
 def delete_class_by_teacher_id(class_id):
     """Delete class by teacher ID"""
-    logger.info(f"ClassRepository : DeleteClassByTeacherId : Started")
+    logger.info(f"ClassHelper : DeleteClassByTeacherId : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2102,12 +2102,12 @@ def delete_class_by_teacher_id(class_id):
         return {'id': class_id, 'deleted': True}
         
     except Exception as e:
-        logger.error(f"ClassRepository : DeleteClassByTeacherId : {str(e)}")
+        logger.error(f"ClassHelper : DeleteClassByTeacherId : {str(e)}")
         raise e
 
 def get_class_current_status(center_id, teacher_id):
     """Get class current status"""
-    logger.info(f"ClassRepository : GetClassCurrentStatus : Started")
+    logger.info(f"ClassHelper : GetClassCurrentStatus : Started")
     
     try:
         today = datetime.now().date()
@@ -2196,12 +2196,12 @@ def get_class_current_status(center_id, teacher_id):
         return result
         
     except Exception as e:
-        logger.error(f"ClassRepository : GetClassCurrentStatus : {str(e)}")
+        logger.error(f"ClassHelper : GetClassCurrentStatus : {str(e)}")
         raise e
 
 def get_live_class_detail(class_id):
     """Get live class detail"""
-    logger.info(f"ClassRepository : GetLiveClassDetail : Started")
+    logger.info(f"ClassHelper : GetLiveClassDetail : Started")
     
     try:
         today = datetime.now().date()
@@ -2223,7 +2223,7 @@ def get_live_class_detail(class_id):
         return None
         
     except Exception as e:
-        logger.error(f"ClassRepository : GetLiveClassDetail : {str(e)}")
+        logger.error(f"ClassHelper : GetLiveClassDetail : {str(e)}")
         raise e
 
 
@@ -2233,7 +2233,7 @@ def get_live_class_detail(class_id):
 
 def get_all_districts(offset, limit):
     """Get all districts with pagination"""
-    logger.info(f"DistrictRepository : GetAllDistrict : Started")
+    logger.info(f"DistrictHelper : GetAllDistrict : Started")
     
     try:
         if offset == 0 and limit == 0:
@@ -2279,12 +2279,12 @@ def get_all_districts(offset, limit):
                 return result
                 
     except Exception as e:
-        logger.error(f"DistrictRepository : GetAllDistrict : {str(e)}")
+        logger.error(f"DistrictHelper : GetAllDistrict : {str(e)}")
         raise e
 
 def save_district(district_data):
     """Save or update district"""
-    logger.info(f"DistrictRepository : SaveDistrict : Started")
+    logger.info(f"DistrictHelper : SaveDistrict : Started")
     
     try:
         district_id = district_data.get('Id', 0)
@@ -2341,7 +2341,7 @@ def save_district(district_data):
         return get_district_by_id(district_id)
         
     except Exception as e:
-        logger.error(f"DistrictRepository : SaveDistrict : {str(e)}")
+        logger.error(f"DistrictHelper : SaveDistrict : {str(e)}")
         raise e
 
 def get_district_by_id(district_id):
@@ -2366,12 +2366,12 @@ def get_district_by_id(district_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"DistrictRepository : get_district_by_id : {str(e)}")
+        logger.error(f"DistrictHelper : get_district_by_id : {str(e)}")
         raise e
 
 def check_district_name(name):
     """Check if district name exists"""
-    logger.info(f"DistrictRepository : CheckDistrictName : Started")
+    logger.info(f"DistrictHelper : CheckDistrictName : Started")
     
     try:
         sql = "SELECT Name FROM District WHERE Name = %s"
@@ -2380,7 +2380,7 @@ def check_district_name(name):
             row = cursor.fetchone()
             return row[0] if row else None
     except Exception as e:
-        logger.error(f"DistrictRepository : CheckDistrictName : {str(e)}")
+        logger.error(f"DistrictHelper : CheckDistrictName : {str(e)}")
         raise e
 
 #---------------------------------------------------------
@@ -2391,7 +2391,7 @@ def check_district_name(name):
 
 def get_class_count_by_month(center_id, start_date, end_date):
     """Get class count by month for a center"""
-    logger.info(f"DashboardRepository : GetClassCountByMonth : Started")
+    logger.info(f"DashboardHelper : GetClassCountByMonth : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2442,12 +2442,12 @@ def get_class_count_by_month(center_id, start_date, end_date):
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetClassCountByMonth : {str(e)}")
+        logger.error(f"DashboardHelper : GetClassCountByMonth : {str(e)}")
         raise e
 
 def get_total_gender_ratio_by_center_id(center_id, start_date, end_date):
     """Get total gender ratio by center ID"""
-    logger.info(f"DashboardRepository : GetTotalGenderRatioByCenterId : Started")
+    logger.info(f"DashboardHelper : GetTotalGenderRatioByCenterId : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2500,12 +2500,12 @@ def get_total_gender_ratio_by_center_id(center_id, start_date, end_date):
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalGenderRatioByCenterId : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalGenderRatioByCenterId : {str(e)}")
         raise e
 
 def get_total_student_of_class(center_id, start_date, end_date):
     """Get total student of class by center"""
-    logger.info(f"DashboardRepository : GetTotalStudentOfClass : Started")
+    logger.info(f"DashboardHelper : GetTotalStudentOfClass : Started")
     
     list_of_existing_grade = ["UKG", "LKG", "Pre Nursery", "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th"]
     
@@ -2577,12 +2577,12 @@ def get_total_student_of_class(center_id, start_date, end_date):
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalStudentOfClass : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalStudentOfClass : {str(e)}")
         raise e
 
 def get_center_detail_by_month(center_id, month, year):
     """Get center detail by month and year"""
-    logger.info(f"DashboardRepository : GetCenterDetailByMonth : Started")
+    logger.info(f"DashboardHelper : GetCenterDetailByMonth : Started")
     
     try:
         start_date = datetime(year, month, 1)
@@ -2642,12 +2642,12 @@ def get_center_detail_by_month(center_id, month, year):
         return json.dumps(result)
         
     except Exception as e:
-        logger.error(f"DashboardRepository : GetCenterDetailByMonth : {str(e)}")
+        logger.error(f"DashboardHelper : GetCenterDetailByMonth : {str(e)}")
         raise e
 
 def get_total_bpl(center_id, start_date, end_date):
     """Get total BPL students by center"""
-    logger.info(f"DashboardRepository : GetTotalBpl : Started")
+    logger.info(f"DashboardHelper : GetTotalBpl : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2713,12 +2713,12 @@ def get_total_bpl(center_id, start_date, end_date):
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalBpl : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalBpl : {str(e)}")
         raise e
 
 def get_total_student_category_of_class(center_id, start_date, end_date):
     """Get total student category of class"""
-    logger.info(f"DashboardRepository : GetTotalStudentCategoryOfClass : Started")
+    logger.info(f"DashboardHelper : GetTotalStudentCategoryOfClass : Started")
     
     categories = ["General", "OBC", "SC", "ST", "EWS", "Others"]
     
@@ -2768,12 +2768,12 @@ def get_total_student_category_of_class(center_id, start_date, end_date):
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalStudentCategoryOfClass : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalStudentCategoryOfClass : {str(e)}")
         raise e
 
 def get_user_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
     """Get user by filter"""
-    logger.info(f"DashboardRepository : GetUserByFilter : Started")
+    logger.info(f"DashboardHelper : GetUserByFilter : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2825,12 +2825,12 @@ def get_user_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, s
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetUserByFilter : {str(e)}")
+        logger.error(f"DashboardHelper : GetUserByFilter : {str(e)}")
         raise e
 
 def get_total_bpl_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
     """Get total BPL by filter"""
-    logger.info(f"DashboardRepository : GetTotalBplByFilter : Started")
+    logger.info(f"DashboardHelper : GetTotalBplByFilter : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2908,12 +2908,12 @@ def get_total_bpl_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalBplByFilter : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalBplByFilter : {str(e)}")
         raise e
 
 def get_total_gender_ratio_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
     """Get total gender ratio by filter"""
-    logger.info(f"DashboardRepository : GetTotalGenderRatioByFilter : Started")
+    logger.info(f"DashboardHelper : GetTotalGenderRatioByFilter : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -2978,12 +2978,12 @@ def get_total_gender_ratio_by_filter(district_id, vidhan_sabha_id, panchayta_id,
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalGenderRatioByFilter : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalGenderRatioByFilter : {str(e)}")
         raise e
 
 def get_total_student_category_of_class_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
     """Get total student category of class by filter"""
-    logger.info(f"DashboardRepository : GetTotalStudentCategoryOfClassByFilter : Started")
+    logger.info(f"DashboardHelper : GetTotalStudentCategoryOfClassByFilter : Started")
     
     categories = ["General", "OBC", "SC", "ST", "EWS", "Others"]
     
@@ -3041,12 +3041,12 @@ def get_total_student_category_of_class_by_filter(district_id, vidhan_sabha_id, 
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalStudentCategoryOfClassByFilter : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalStudentCategoryOfClassByFilter : {str(e)}")
         raise e
 
 def get_total_student_grade_of_class_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
     """Get total student grade of class by filter"""
-    logger.info(f"DashboardRepository : GetTotalStudenGradetOfClassByFilter : Started")
+    logger.info(f"DashboardHelper : GetTotalStudenGradetOfClassByFilter : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -3101,12 +3101,12 @@ def get_total_student_grade_of_class_by_filter(district_id, vidhan_sabha_id, pan
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetTotalStudenGradetOfClassByFilter : {str(e)}")
+        logger.error(f"DashboardHelper : GetTotalStudenGradetOfClassByFilter : {str(e)}")
         raise e
 
 def get_district_of_center_by_filter(district_id, vidhan_sabha_id, start_date, end_date):
     """Get district of center by filter"""
-    logger.info(f"DashboardRepository : GetDistrictOfCenterByFilter : Started")
+    logger.info(f"DashboardHelper : GetDistrictOfCenterByFilter : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -3208,12 +3208,12 @@ def get_district_of_center_by_filter(district_id, vidhan_sabha_id, start_date, e
             return json.dumps(result)
             
     except Exception as e:
-        logger.error(f"DashboardRepository : GetDistrictOfCenterByFilter : {str(e)}")
+        logger.error(f"DashboardHelper : GetDistrictOfCenterByFilter : {str(e)}")
         raise e
 
 def get_student_attendance_by_percentage():
     """Get student attendance by percentage"""
-    logger.info(f"DashboardRepository : GetStudentAttendanceByPercentage : Started")
+    logger.info(f"DashboardHelper : GetStudentAttendanceByPercentage : Started")
     
     try:
         result = {
@@ -3237,7 +3237,7 @@ def get_student_attendance_by_percentage():
         return json.dumps(result)
         
     except Exception as e:
-        logger.error(f"DashboardRepository : GetStudentAttendanceByPercentage : {str(e)}")
+        logger.error(f"DashboardHelper : GetStudentAttendanceByPercentage : {str(e)}")
         raise e
 
 #---------------------------------------------------------
@@ -3246,7 +3246,7 @@ def get_student_attendance_by_percentage():
 
 def save_holidays(holidays_data):
     """Save or update holidays"""
-    logger.info(f"HolidaysRepository : SaveHolidays : Started")
+    logger.info(f"HolidaysHelper : SaveHolidays : Started")
     
     try:
         holiday_id = holidays_data.get('Id', 0)
@@ -3328,16 +3328,16 @@ def save_holidays(holidays_data):
                         holidays_data.get('CreatedBy')
                     ])
         
-        logger.info(f"HolidaysRepository : SaveHolidays : End")
+        logger.info(f"HolidaysHelper : SaveHolidays : End")
         return {'status': True, 'message': 'Holidays saved successfully'}
         
     except Exception as e:
-        logger.error(f"HolidaysRepository : SaveHolidays : {str(e)}")
+        logger.error(f"HolidaysHelper : SaveHolidays : {str(e)}")
         raise e
 
 def get_all_holidays_by_teacher_id(teacher_id):
     """Get all holidays by teacher ID"""
-    logger.info(f"HolidaysRepository : GetAllHolidaysByTeacherId : Started")
+    logger.info(f"HolidaysHelper : GetAllHolidaysByTeacherId : Started")
     
     try:
         today = datetime.now().date()
@@ -3363,12 +3363,12 @@ def get_all_holidays_by_teacher_id(teacher_id):
             return result
             
     except Exception as e:
-        logger.error(f"HolidaysRepository : GetAllHolidaysByTeacherId : {str(e)}")
+        logger.error(f"HolidaysHelper : GetAllHolidaysByTeacherId : {str(e)}")
         raise e
 
 def get_all_holidays_by_year(year):
     """Get all holidays by year"""
-    logger.info(f"HolidaysRepository : GetAllHolidaysByYear : Started")
+    logger.info(f"HolidaysHelper : GetAllHolidaysByYear : Started")
     
     try:
         sql = """
@@ -3387,12 +3387,12 @@ def get_all_holidays_by_year(year):
             return result
             
     except Exception as e:
-        logger.error(f"HolidaysRepository : GetAllHolidaysByYear : {str(e)}")
+        logger.error(f"HolidaysHelper : GetAllHolidaysByYear : {str(e)}")
         raise e
 
 def get_all_holidays_by_center_id(center_id):
     """Get all holidays by center ID"""
-    logger.info(f"HolidaysRepository : GetAllHolidaysByCenterId : Started")
+    logger.info(f"HolidaysHelper : GetAllHolidaysByCenterId : Started")
     
     try:
         sql = """
@@ -3411,12 +3411,12 @@ def get_all_holidays_by_center_id(center_id):
             return result
             
     except Exception as e:
-        logger.error(f"HolidaysRepository : GetAllHolidaysByCenterId : {str(e)}")
+        logger.error(f"HolidaysHelper : GetAllHolidaysByCenterId : {str(e)}")
         raise e
 
 def get_all_holidays(status, user_id=0):
     """Get all holidays with optional status and user filter"""
-    logger.info(f"HolidaysRepository : GetAllHolidays : Started")
+    logger.info(f"HolidaysHelper : GetAllHolidays : Started")
     
     try:
         today = datetime.now().date()
@@ -3508,12 +3508,12 @@ def get_all_holidays(status, user_id=0):
             return result
             
     except Exception as e:
-        logger.error(f"HolidaysRepository : GetAllHolidays : {str(e)}")
+        logger.error(f"HolidaysHelper : GetAllHolidays : {str(e)}")
         raise e
 
 def delete_holiday_by_id(holiday_id):
     """Delete holiday by ID"""
-    logger.info(f"HolidaysRepository : DeleteHolidayById : Started")
+    logger.info(f"HolidaysHelper : DeleteHolidayById : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -3532,7 +3532,7 @@ def delete_holiday_by_id(holiday_id):
             return {'id': holiday_id, 'deleted': True}
             
     except Exception as e:
-        logger.error(f"HolidaysRepository : DeleteHolidayById : {str(e)}")
+        logger.error(f"HolidaysHelper : DeleteHolidayById : {str(e)}")
         raise e
 
 
@@ -3542,7 +3542,7 @@ def delete_holiday_by_id(holiday_id):
 
 def get_all_panchayats(offset, limit):
     """Get all panchayats with pagination"""
-    logger.info(f"PanchayatRepository : GetAllPanchayat : Started")
+    logger.info(f"PanchayatHelper : GetAllPanchayat : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -3594,12 +3594,12 @@ def get_all_panchayats(offset, limit):
             return result
             
     except Exception as e:
-        logger.error(f"PanchayatRepository : GetAllPanchayat : {str(e)}")
+        logger.error(f"PanchayatHelper : GetAllPanchayat : {str(e)}")
         raise e
 
 def save_panchayat(panchayat_data):
     """Save or update panchayat"""
-    logger.info(f"PanchayatRepository : SavePanchayat : Started")
+    logger.info(f"PanchayatHelper : SavePanchayat : Started")
     
     try:
         panchayat_id = panchayat_data.get('Id', 0)
@@ -3661,7 +3661,7 @@ def save_panchayat(panchayat_data):
         return get_panchayat_by_id(panchayat_id)
         
     except Exception as e:
-        logger.error(f"PanchayatRepository : SavePanchayat : {str(e)}")
+        logger.error(f"PanchayatHelper : SavePanchayat : {str(e)}")
         raise e
 
 def get_panchayat_by_id(panchayat_id):
@@ -3692,12 +3692,12 @@ def get_panchayat_by_id(panchayat_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"PanchayatRepository : get_panchayat_by_id : {str(e)}")
+        logger.error(f"PanchayatHelper : get_panchayat_by_id : {str(e)}")
         raise e
 
 def get_panchayat_by_district_and_vidhan_sabha_id(district_id, vidhan_sabha_id):
     """Get panchayat by district and vidhan sabha ID"""
-    logger.info(f"PanchayatRepository : GetPanchayatByDistrictAndVidhanSabhaId : Started")
+    logger.info(f"PanchayatHelper : GetPanchayatByDistrictAndVidhanSabhaId : Started")
     
     try:
         sql = """
@@ -3722,12 +3722,12 @@ def get_panchayat_by_district_and_vidhan_sabha_id(district_id, vidhan_sabha_id):
         return None
         
     except Exception as e:
-        logger.error(f"PanchayatRepository : GetPanchayatByDistrictAndVidhanSabhaId : {str(e)}")
+        logger.error(f"PanchayatHelper : GetPanchayatByDistrictAndVidhanSabhaId : {str(e)}")
         raise e
 
 def check_panchayat_name(name):
     """Check if panchayat name exists"""
-    logger.info(f"PanchayatRepository : CheckPanchayatName : Started")
+    logger.info(f"PanchayatHelper : CheckPanchayatName : Started")
     
     try:
         sql = "SELECT Name FROM Panchayat WHERE Name = %s"
@@ -3736,7 +3736,7 @@ def check_panchayat_name(name):
             row = cursor.fetchone()
             return row[0] if row else None
     except Exception as e:
-        logger.error(f"PanchayatRepository : CheckPanchayatName : {str(e)}")
+        logger.error(f"PanchayatHelper : CheckPanchayatName : {str(e)}")
         raise e
     
     
@@ -3746,7 +3746,7 @@ def check_panchayat_name(name):
 
 def save_student(student_data):
     """Save or update student"""
-    logger.info(f"StudentRepository : SaveStudent : Started")
+    logger.info(f"StudentHelper : SaveStudent : Started")
     
     try:
         student_id = student_data.get('Id', 0)
@@ -3879,12 +3879,12 @@ def save_student(student_data):
         return get_student_by_id(student_id)
         
     except Exception as e:
-        logger.error(f"StudentRepository : SaveStudent : {str(e)}")
+        logger.error(f"StudentHelper : SaveStudent : {str(e)}")
         raise e
 
 def get_student_by_id(student_id):
     """Get student by ID"""
-    logger.info(f"StudentRepository : GetStudentById : Started")
+    logger.info(f"StudentHelper : GetStudentById : Started")
     
     try:
         sql = """
@@ -3937,12 +3937,12 @@ def get_student_by_id(student_id):
         return None
         
     except Exception as e:
-        logger.error(f"StudentRepository : GetStudentById : {str(e)}")
+        logger.error(f"StudentHelper : GetStudentById : {str(e)}")
         raise e
 
 def update_student_active_or_inactive(student_id, status):
     """Update student active or inactive status"""
-    logger.info(f"StudentRepository : UpdateStudentActiveOrInactive : Started")
+    logger.info(f"StudentHelper : UpdateStudentActiveOrInactive : Started")
     
     try:
         status_bool = True if status == 1 else False
@@ -3954,60 +3954,112 @@ def update_student_active_or_inactive(student_id, status):
         return get_student_by_id(student_id)
         
     except Exception as e:
-        logger.error(f"StudentRepository : UpdateStudentActiveOrInactive : {str(e)}")
+        logger.error(f"StudentHelper : UpdateStudentActiveOrInactive : {str(e)}")
         raise e
 
 def get_total_student_present(scan_date, user_id):
-    """Get total student present count"""
+    """Get total student present count - matches .NET response exactly"""
     logger.info(f"StudentRepository : GetTotalStudentPresent : Started")
     
     try:
         # Get user type
-        user_type_sql = "SELECT Type FROM Users WHERE Id = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(user_type_sql, [user_id])
-            user_row = cursor.fetchone()
-            user_type = user_row[0] if user_row else None
+        try:
+            user = User.objects.get(id=user_id)
+            user_type = user.type
+        except User.DoesNotExist:
+            logger.error(f"User not found with ID: {user_id}")
+            return {
+                'totalStudents': 0,
+                'presentStudents': 0,
+                'totalClasses': 0,
+                'totalActiveClasses': 0,
+                'completedClassCount': 0,
+                'upComingClassCount': 0,
+                'cancelClassCount': 0,
+                'time': None
+            }
         
-        if user_type == 1:
-            # SuperAdmin - get all centers
-            center_sql = "SELECT Id FROM Center"
-            cursor.execute(center_sql)
-            center_rows = cursor.fetchall()
-            center_ids = [row[0] for row in center_rows]
-        else:
-            # Regional Admin
-            center_sql = "SELECT Id FROM Center WHERE AssignedRegionalAdmin = %s"
-            cursor.execute(center_sql, [user_id])
-            center_rows = cursor.fetchall()
-            center_ids = [row[0] for row in center_rows]
+        # Get center IDs based on user type
+        if user_type == 1:  # SuperAdmin
+            center_ids = list(Center.objects.values_list('id', flat=True))
+        else:  # Regional Admin (Type 2)
+            center_ids = list(Center.objects.filter(
+                assigned_regional_admin=user_id
+            ).values_list('id', flat=True))
         
         if not center_ids:
-            return {'presentStudents': 0, 'totalStudents': 0}
+            return {
+                'totalStudents': 0,
+                'presentStudents': 0,
+                'totalClasses': 0,
+                'totalActiveClasses': 0,
+                'completedClassCount': 0,
+                'upComingClassCount': 0,
+                'cancelClassCount': 0,
+                'time': None
+            }
         
-        center_ids_str = ','.join(['%s'] * len(center_ids))
+        # 1. Get Total Students and Present Students
+        # Total active students
+        total_students = Student.objects.filter(
+            center_id__in=center_ids,
+            status=True
+        ).count()
         
-        # Get total students
-        total_sql = f"""
-            SELECT COUNT(*) 
-            FROM Student 
-            WHERE CenterId IN ({center_ids_str}) AND Status = 1
-        """
-        cursor.execute(total_sql, center_ids)
-        total_students = cursor.fetchone()[0] or 0
+        # Present students (attendance on scan_date)
+        scan_date_obj = scan_date.date() if hasattr(scan_date, 'date') else scan_date
+        present_students = StudentAttendance.objects.filter(
+            center_id__in=center_ids,
+            scan_date__date=scan_date_obj
+        ).values('student_id').distinct().count()
         
-        # Get present students
-        present_sql = f"""
-            SELECT COUNT(DISTINCT StudentId)
-            FROM StudentAttendance
-            WHERE CenterId IN ({center_ids_str}) AND DATE(ScanDate) = %s
-        """
-        cursor.execute(present_sql, center_ids + [scan_date.date()])
-        present_students = cursor.fetchone()[0] or 0
+        # 2. Get Total Classes and Active Classes
+        total_classes = Center.objects.filter(
+            id__in=center_ids
+        ).count()
+        
+        active_classes = ClassModel.objects.filter(
+            center_id__in=center_ids,
+            status=1,  # Active status
+            started_date__date=scan_date_obj
+        ).count()
+        
+        # 3. Get Completed and Upcoming Classes
+        # Classes that started on scan_date
+        classes_on_date = ClassModel.objects.filter(
+            center_id__in=center_ids,
+            started_date__date=scan_date_obj
+        )
+        
+        completed_class_count = classes_on_date.filter(
+            status=2  # Completed status
+        ).count()
+        
+        # Centers that don't have a class on scan_date (upcoming)
+        center_ids_with_class = classes_on_date.values_list('center_id', flat=True)
+        upcoming_class_count = Center.objects.filter(
+            id__in=center_ids
+        ).exclude(
+            id__in=center_ids_with_class
+        ).count()
+        
+        # 4. Get Cancel Class Count
+        today = datetime.now().date()
+        cancel_class_count = ClassCancelByTeacher.objects.filter(
+            center_id__in=center_ids,
+            starting_date__date__lte=today,
+            ending_date__date__gte=today
+        ).count()
         
         return {
+            'totalStudents': total_students,
             'presentStudents': present_students,
-            'totalStudents': total_students
+            'totalClasses': total_classes,
+            'totalActiveClasses': active_classes,
+            'completedClassCount': completed_class_count,
+            'upComingClassCount': upcoming_class_count,
+            'cancelClassCount': cancel_class_count,
+            'time': None
         }
         
     except Exception as e:
@@ -4016,7 +4068,7 @@ def get_total_student_present(scan_date, user_id):
 
 def get_all_students(user_id, district_id=0, vidhan_sabha_id=0, panchayat_id=0, village_id=0):
     """Get all students with filters"""
-    logger.info(f"StudentRepository : GetAllStudents : Started")
+    logger.info(f"StudentHelper : GetAllStudents : Started")
     
     try:
         # Get user type
@@ -4083,7 +4135,7 @@ def get_all_students(user_id, district_id=0, vidhan_sabha_id=0, panchayat_id=0, 
             return result
             
     except Exception as e:
-        logger.error(f"StudentRepository : GetAllStudents : {str(e)}")
+        logger.error(f"StudentHelper : GetAllStudents : {str(e)}")
         raise e
     
     
@@ -4093,7 +4145,7 @@ def get_all_students(user_id, district_id=0, vidhan_sabha_id=0, panchayat_id=0, 
 
 def save_school(school_data):
     """Save or update school"""
-    logger.info(f"SchoolRepository : SaveSchool : Started")
+    logger.info(f"SchoolHelper : SaveSchool : Started")
     
     try:
         school_id = school_data.get('Id', 0)
@@ -4120,7 +4172,7 @@ def save_school(school_data):
         return get_school_by_id(school_id)
         
     except Exception as e:
-        logger.error(f"SchoolRepository : SaveSchool : {str(e)}")
+        logger.error(f"SchoolHelper : SaveSchool : {str(e)}")
         raise e
 
 def get_school_by_id(school_id):
@@ -4135,12 +4187,12 @@ def get_school_by_id(school_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"SchoolRepository : get_school_by_id : {str(e)}")
+        logger.error(f"SchoolHelper : get_school_by_id : {str(e)}")
         raise e
 
 def get_all_schools():
     """Get all schools"""
-    logger.info(f"SchoolRepository : GetAllSchools : Started")
+    logger.info(f"SchoolHelper : GetAllSchools : Started")
     
     try:
         sql = "SELECT Id, SchoolName, CreatedOn, CreatedBy FROM School ORDER BY Id"
@@ -4153,7 +4205,7 @@ def get_all_schools():
                 result.append(dict(zip(columns, row)))
             return result
     except Exception as e:
-        logger.error(f"SchoolRepository : GetAllSchools : {str(e)}")
+        logger.error(f"SchoolHelper : GetAllSchools : {str(e)}")
         raise e
     
 #---------------------------------------------------------
@@ -4162,7 +4214,7 @@ def get_all_schools():
 
 def save_student_attendance(attendance_data, is_automatic=False, is_manual=False):
     """Save student attendance"""
-    logger.info(f"StudentAttendanceRepository : SaveStudentAttendance : Started")
+    logger.info(f"StudentAttendanceHelper : SaveStudentAttendance : Started")
     
     try:
         student_ids = attendance_data.get('StudentIds', [])
@@ -4248,70 +4300,67 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
         return 1
         
     except Exception as e:
-        logger.error(f"StudentAttendanceRepository : SaveStudentAttendance : {str(e)}")
+        logger.error(f"StudentAttendanceHelper : SaveStudentAttendance : {str(e)}")
         raise e
 
 def get_all_student_with_avg_attendance(center_id):
-    """Get all students with average attendance"""
+    """Get all students with average attendance - matches .NET logic exactly"""
     logger.info(f"StudentAttendanceRepository : GetAllStudentWihAvgAttendance : Started")
     
     try:
-        # Get class count
-        class_sql = "SELECT COUNT(*) FROM Class WHERE CenterId = %s AND Status IN (1, 2)"
-        with connection.cursor() as cursor:
-            cursor.execute(class_sql, [center_id])
-            class_count = cursor.fetchone()[0] or 0
+        # Get class count for this center (Active or Completed)
+        class_count = ClassModel.objects.filter(
+            center_id=center_id,
+            status__in=[1, 2]  # Active (1) or Completed (2)
+        ).count()
         
-        if class_count == 0:
-            sql = """
-                SELECT 
-                    Id,
-                    EnrollmentId,
-                    FullName,
-                    JoiningDate,
-                    Status,
-                    0 as AvgAttendance,
-                    CASE WHEN Status = 1 THEN '1' ELSE '0' END as StudentStaus
-                FROM Student
-                WHERE CenterId = %s
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [center_id])
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                result = []
-                for row in rows:
-                    result.append(dict(zip(columns, row)))
-                return result
-        else:
-            sql = """
-                SELECT 
-                    s.Id,
-                    s.EnrollmentId,
-                    s.FullName,
-                    s.JoiningDate,
-                    s.Status,
-                    (SELECT COUNT(*) FROM StudentAttendance WHERE StudentId = s.Id) * 100 / %s as AvgAttendance,
-                    CASE WHEN s.Status = 1 THEN '1' ELSE '0' END as StudentStaus
-                FROM Student s
-                WHERE s.CenterId = %s
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [class_count, center_id])
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                result = []
-                for row in rows:
-                    result.append(dict(zip(columns, row)))
-                return result
-                
+        students = []
+        
+        # Get all students in the center
+        student_queryset = Student.objects.filter(
+            center_id=center_id
+        ).values(
+            'id', 'enrollment_id', 'full_name', 'joining_date', 'status'
+        )
+        
+        for student in student_queryset:
+            student_id = student['id']
+            
+            # Count attendance for this student
+            attendance_count = StudentAttendance.objects.filter(
+                student_id=student_id
+            ).count()
+            
+            # Calculate average attendance
+            # avgAttendance = (attendance_count * 100) / class_count
+            if class_count > 0:
+                avg_attendance = (attendance_count * 100) / class_count
+            else:
+                avg_attendance = 0
+            
+            # Determine attendance status
+            # This would be based on the student's attendance for a specific date
+            # For now, we'll set it to None or you can calculate based on today's date
+            attendance_status = None
+            
+            students.append({
+                'id': student_id,
+                'enrollmentId': student['enrollment_id'],
+                'fullName': student['full_name'],
+                'attendanceStatus': attendance_status,
+                'averageAttendance': avg_attendance,
+                'date': student['joining_date']  # Or you can use today's date
+            })
+        
+        return students
+        
     except Exception as e:
         logger.error(f"StudentAttendanceRepository : GetAllStudentWihAvgAttendance : {str(e)}")
         raise e
 
 def get_all_absent_attendance(center_id):
     """Get all absent students"""
-    logger.info(f"StudentAttendanceRepository : GetAllAbsentAttendance : Started")
+    logger.info(f"StudentAttendanceHelper : GetAllAbsentAttendance : Started")
     
     try:
         today = datetime.now().date()
@@ -4352,12 +4401,12 @@ def get_all_absent_attendance(center_id):
             return result
             
     except Exception as e:
-        logger.error(f"StudentAttendanceRepository : GetAllAbsentAttendance : {str(e)}")
+        logger.error(f"StudentAttendanceHelper : GetAllAbsentAttendance : {str(e)}")
         raise e
 
 def get_all_student_attendance_status(center_id, scan_date):
     """Get all student attendance status"""
-    logger.info(f"StudentAttendanceRepository : GetAllStudentAttendancStatus : Started")
+    logger.info(f"StudentAttendanceHelper : GetAllStudentAttendancStatus : Started")
     
     try:
         scan_date = parse_any_datetime(scan_date)
@@ -4382,12 +4431,12 @@ def get_all_student_attendance_status(center_id, scan_date):
             return result
             
     except Exception as e:
-        logger.error(f"StudentAttendanceRepository : GetAllStudentAttendancStatus : {str(e)}")
+        logger.error(f"StudentAttendanceHelper : GetAllStudentAttendancStatus : {str(e)}")
         raise e
 
 def get_all_student_attendance_by_month(center_id, student_id, month, year):
     """Get student attendance by month"""
-    logger.info(f"StudentAttendanceRepository : GetAllStudentAttendancByMonth : Started")
+    logger.info(f"StudentAttendanceHelper : GetAllStudentAttendancByMonth : Started")
     
     try:
         import calendar
@@ -4429,7 +4478,7 @@ def get_all_student_attendance_by_month(center_id, student_id, month, year):
             return result
             
     except Exception as e:
-        logger.error(f"StudentAttendanceRepository : GetAllStudentAttendancByMonth : {str(e)}")
+        logger.error(f"StudentAttendanceHelper : GetAllStudentAttendancByMonth : {str(e)}")
         raise e
     
     
@@ -4439,7 +4488,7 @@ def get_all_student_attendance_by_month(center_id, student_id, month, year):
 
 def login_teacher(name, password):
     """Login teacher by name and password"""
-    logger.info(f"TeacherRepository : LoginTeacher : Started")
+    logger.info(f"TeacherHelper : LoginTeacher : Started")
     
     try:
         hashed_password = hash_password(password)
@@ -4474,12 +4523,12 @@ def login_teacher(name, password):
         return None
         
     except Exception as e:
-        logger.error(f"TeacherRepository : LoginTeacher : {str(e)}")
+        logger.error(f"TeacherHelper : LoginTeacher : {str(e)}")
         raise e
 
 def save_teacher(teacher_data):
     """Save or update teacher"""
-    logger.info(f"TeacherRepository : SaveTeacher : Started")
+    logger.info(f"TeacherHelper : SaveTeacher : Started")
     
     try:
         teacher_id = teacher_data.get('Id', 0)
@@ -4562,7 +4611,7 @@ def save_teacher(teacher_data):
         return get_teacher_by_id(teacher_id)
         
     except Exception as e:
-        logger.error(f"TeacherRepository : SaveTeacher : {str(e)}")
+        logger.error(f"TeacherHelper : SaveTeacher : {str(e)}")
         raise e
 
 def get_teacher_by_id(teacher_id):
@@ -4586,7 +4635,7 @@ def get_teacher_by_id(teacher_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"TeacherRepository : get_teacher_by_id : {str(e)}")
+        logger.error(f"TeacherHelper : get_teacher_by_id : {str(e)}")
         raise e
     
     
@@ -4596,7 +4645,7 @@ def get_teacher_by_id(teacher_id):
 
 def get_all_vidhan_sabhas(offset, limit):
     """Get all VidhanSabhas with pagination"""
-    logger.info(f"VidhanSabhaRepository : GetAllVidhanSabha : Started")
+    logger.info(f"VidhanSabhaHelper : GetAllVidhanSabha : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -4642,12 +4691,12 @@ def get_all_vidhan_sabhas(offset, limit):
             return result
             
     except Exception as e:
-        logger.error(f"VidhanSabhaRepository : GetAllVidhanSabha : {str(e)}")
+        logger.error(f"VidhanSabhaHelper : GetAllVidhanSabha : {str(e)}")
         raise e
 
 def save_vidhan_sabha(vidhan_sabha_data):
     """Save or update VidhanSabha"""
-    logger.info(f"VidhanSabhaRepository : SaveVidhanSabha : Started")
+    logger.info(f"VidhanSabhaHelper : SaveVidhanSabha : Started")
     
     try:
         vidhan_sabha_id = vidhan_sabha_data.get('Id', 0)
@@ -4698,7 +4747,7 @@ def save_vidhan_sabha(vidhan_sabha_data):
         return get_vidhan_sabha_by_id(vidhan_sabha_id)
         
     except Exception as e:
-        logger.error(f"VidhanSabhaRepository : SaveVidhanSabha : {str(e)}")
+        logger.error(f"VidhanSabhaHelper : SaveVidhanSabha : {str(e)}")
         raise e
 
 def get_vidhan_sabha_by_id(vidhan_sabha_id):
@@ -4726,12 +4775,12 @@ def get_vidhan_sabha_by_id(vidhan_sabha_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"VidhanSabhaRepository : get_vidhan_sabha_by_id : {str(e)}")
+        logger.error(f"VidhanSabhaHelper : get_vidhan_sabha_by_id : {str(e)}")
         raise e
 
 def get_vidhan_sabha_by_district_id(district_id):
     """Get VidhanSabha by district ID"""
-    logger.info(f"VidhanSabhaRepository : GetVidhanSabhaByDistrictId : Started")
+    logger.info(f"VidhanSabhaHelper : GetVidhanSabhaByDistrictId : Started")
     
     try:
         sql = """
@@ -4749,12 +4798,12 @@ def get_vidhan_sabha_by_district_id(district_id):
         return None
         
     except Exception as e:
-        logger.error(f"VidhanSabhaRepository : GetVidhanSabhaByDistrictId : {str(e)}")
+        logger.error(f"VidhanSabhaHelper : GetVidhanSabhaByDistrictId : {str(e)}")
         raise e
 
 def check_vidhan_sabha_name(name):
     """Check if VidhanSabha name exists"""
-    logger.info(f"VidhanSabhaRepository : CheckVidhanSabhaName : Started")
+    logger.info(f"VidhanSabhaHelper : CheckVidhanSabhaName : Started")
     
     try:
         sql = "SELECT Name FROM VidhanSabha WHERE Name = %s"
@@ -4763,7 +4812,7 @@ def check_vidhan_sabha_name(name):
             row = cursor.fetchone()
             return row[0] if row else None
     except Exception as e:
-        logger.error(f"VidhanSabhaRepository : CheckVidhanSabhaName : {str(e)}")
+        logger.error(f"VidhanSabhaHelper : CheckVidhanSabhaName : {str(e)}")
         raise e
     
     
@@ -4773,7 +4822,7 @@ def check_vidhan_sabha_name(name):
 
 def get_all_villages(offset, limit):
     """Get all villages with pagination"""
-    logger.info(f"VillageRepository : GetAllVillage : Started")
+    logger.info(f"VillageHelper : GetAllVillage : Started")
     
     try:
         with connection.cursor() as cursor:
@@ -4831,12 +4880,12 @@ def get_all_villages(offset, limit):
             return result
             
     except Exception as e:
-        logger.error(f"VillageRepository : GetAllVillage : {str(e)}")
+        logger.error(f"VillageHelper : GetAllVillage : {str(e)}")
         raise e
 
 def save_village(village_data):
     """Save or update village"""
-    logger.info(f"VillageRepository : SaveVillage : Started")
+    logger.info(f"VillageHelper : SaveVillage : Started")
     
     try:
         village_id = village_data.get('Id', 0)
@@ -4892,7 +4941,7 @@ def save_village(village_data):
         return get_village_by_id(village_id)
         
     except Exception as e:
-        logger.error(f"VillageRepository : SaveVillage : {str(e)}")
+        logger.error(f"VillageHelper : SaveVillage : {str(e)}")
         raise e
 
 def get_village_by_id(village_id):
@@ -4926,12 +4975,12 @@ def get_village_by_id(village_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"VillageRepository : get_village_by_id : {str(e)}")
+        logger.error(f"VillageHelper : get_village_by_id : {str(e)}")
         raise e
 
 def get_village_by_district_vidhan_sabha_and_panchayat(district_id, vidhan_sabha_id, panchayat_id):
     """Get village by district, vidhan sabha and panchayat IDs"""
-    logger.info(f"VillageRepository : GetVillageByDistrictVidhanSabhaAndPanchId : Started")
+    logger.info(f"VillageHelper : GetVillageByDistrictVidhanSabhaAndPanchId : Started")
     
     try:
         sql = """
@@ -4950,12 +4999,12 @@ def get_village_by_district_vidhan_sabha_and_panchayat(district_id, vidhan_sabha
         return None
         
     except Exception as e:
-        logger.error(f"VillageRepository : GetVillageByDistrictVidhanSabhaAndPanchId : {str(e)}")
+        logger.error(f"VillageHelper : GetVillageByDistrictVidhanSabhaAndPanchId : {str(e)}")
         raise e
 
 def check_village_name(name):
     """Check if village name exists"""
-    logger.info(f"VillageRepository : CheckVillageName : Started")
+    logger.info(f"VillageHelper : CheckVillageName : Started")
     
     try:
         sql = "SELECT Name FROM Village WHERE Name = %s"
@@ -4964,7 +5013,7 @@ def check_village_name(name):
             row = cursor.fetchone()
             return row[0] if row else None
     except Exception as e:
-        logger.error(f"VillageRepository : CheckVillageName : {str(e)}")
+        logger.error(f"VillageHelper : CheckVillageName : {str(e)}")
         raise e
     
 #---------------------------------------------------------
@@ -4973,7 +5022,7 @@ def check_village_name(name):
 
 def get_all_regional_admins():
     """Get all regional admins"""
-    logger.info(f"RegionalAdminRepository : GetAllRegionalAdmin : Started")
+    logger.info(f"RegionalAdminHelper : GetAllRegionalAdmin : Started")
     
     try:
         sql = """
@@ -4996,12 +5045,12 @@ def get_all_regional_admins():
             return result
             
     except Exception as e:
-        logger.error(f"RegionalAdminRepository : GetAllRegionalAdmin : {str(e)}")
+        logger.error(f"RegionalAdminHelper : GetAllRegionalAdmin : {str(e)}")
         raise e
 
 def login_regional_admin(name, password):
     """Login regional admin by name and password"""
-    logger.info(f"RegionalAdminRepository : LoginRegionalAdmin : Started")
+    logger.info(f"RegionalAdminHelper : LoginRegionalAdmin : Started")
     
     try:
         hashed_password = hash_password(password)
@@ -5036,12 +5085,12 @@ def login_regional_admin(name, password):
         return None
         
     except Exception as e:
-        logger.error(f"RegionalAdminRepository : LoginRegionalAdmin : {str(e)}")
+        logger.error(f"RegionalAdminHelper : LoginRegionalAdmin : {str(e)}")
         raise e
 
 def save_regional_admin(regional_admin_data):
     """Save or update regional admin"""
-    logger.info(f"RegionalAdminRepository : SaveRegionalAdmin : Started")
+    logger.info(f"RegionalAdminHelper : SaveRegionalAdmin : Started")
     
     try:
         regional_admin_id = regional_admin_data.get('Id', 0)
@@ -5125,7 +5174,7 @@ def save_regional_admin(regional_admin_data):
         return get_regional_admin_by_id(regional_admin_id)
         
     except Exception as e:
-        logger.error(f"RegionalAdminRepository : SaveRegionalAdmin : {str(e)}")
+        logger.error(f"RegionalAdminHelper : SaveRegionalAdmin : {str(e)}")
         raise e
 
 def get_regional_admin_by_id(regional_admin_id):
@@ -5149,7 +5198,7 @@ def get_regional_admin_by_id(regional_admin_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"RegionalAdminRepository : get_regional_admin_by_id : {str(e)}")
+        logger.error(f"RegionalAdminHelper : get_regional_admin_by_id : {str(e)}")
         raise e
     
 #---------------------------------------------------------
@@ -5158,7 +5207,7 @@ def get_regional_admin_by_id(regional_admin_id):
 
 def save_announcement(announcement_data):
     """Save or update announcement"""
-    logger.info(f"AnnouncementRepository : SaveAnnouncement : Started")
+    logger.info(f"AnnouncementHelper : SaveAnnouncement : Started")
     
     try:
         announcement_id = announcement_data.get('Id', 0)
@@ -5206,7 +5255,7 @@ def save_announcement(announcement_data):
         return get_announcement_by_id(announcement_id)
         
     except Exception as e:
-        logger.error(f"AnnouncementRepository : SaveAnnouncement : {str(e)}")
+        logger.error(f"AnnouncementHelper : SaveAnnouncement : {str(e)}")
         raise e
 
 def get_announcement_by_id(announcement_id):
@@ -5221,12 +5270,12 @@ def get_announcement_by_id(announcement_id):
                 return dict(zip(columns, row))
         return None
     except Exception as e:
-        logger.error(f"AnnouncementRepository : get_announcement_by_id : {str(e)}")
+        logger.error(f"AnnouncementHelper : get_announcement_by_id : {str(e)}")
         raise e
 
 def get_all_announcements():
     """Get all announcements"""
-    logger.info(f"AnnouncementRepository : GetAnnouncement : Started")
+    logger.info(f"AnnouncementHelper : GetAnnouncement : Started")
     
     try:
         sql = "SELECT Id, Title, Description, Image, CreatedOn, CreatedBy FROM Announcement ORDER BY Id"
@@ -5239,7 +5288,7 @@ def get_all_announcements():
                 result.append(dict(zip(columns, row)))
             return result
     except Exception as e:
-        logger.error(f"AnnouncementRepository : GetAnnouncement : {str(e)}")
+        logger.error(f"AnnouncementHelper : GetAnnouncement : {str(e)}")
         raise e
 
 def upload_announcement_images(image_files):
