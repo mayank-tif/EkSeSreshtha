@@ -64,7 +64,7 @@ urlpatterns = [
     
     path('Student/SaveStudent/', StudentSavestudentPostView.as_view(), name='student-savestudent-post'),
     path('Student/GetStudentById/', StudentGetstudentbyidGetView.as_view(), name='student-getstudentbyid-get'),
-    path('Student/UpdateStudentActiveOrInactive/', StudentUpdatestudentactiveorinactivePostView.as_view(), name='student-updatestudentactiveorinactive-post'),
+    path('Student/UpdateStudentActiveOrInactive', StudentUpdatestudentactiveorinactivePostView.as_view(), name='student-updatestudentactiveorinactive-post'),
     path('Student/GetTotalStudentPresent/', StudentGettotalstudentpresentGetView.as_view(), name='student-gettotalstudentpresent-get'),
     path('Student/GetAllStudents/', StudentGetallstudentsGetView.as_view(), name='student-getallstudents-get'),
     
@@ -78,7 +78,7 @@ urlpatterns = [
     
     path("User/LoginUser", UserLoginView.as_view(), name="login"),
     path('User/SaveSuperAdmin/', UserSaveSuperAdminView.as_view(), name='user-save-superadmin'),
-    path('User/UpdateDeviceId/', UserUpdateDeviceIdView.as_view(), name='user-update-deviceid'),
+    path('User/UpdateDeviceId', UserUpdateDeviceIdView.as_view(), name='user-update-deviceid'),
     path('User/SaveUser/', UserSaveUserView.as_view(), name='user-save-user'),
     path('User/UpdateSuperAdminUser/', UserUpdateSuperAdminUserView.as_view(), name='user-update-superadmin'),
     path('User/GetUserById/', UserGetUserByIdView.as_view(), name='user-get-user-by-id'),

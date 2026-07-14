@@ -3256,7 +3256,7 @@ class UserUpdateDeviceIdView(APIView):
                 )
             
             user_id = serializer.validated_data.get('userId')
-            device_id = serializer.validated_data.get('deviceId')
+            device_id = serializer.validated_data.get('DeviceId')
             
             updated_user = update_user_device_id(user_id, device_id)
             
