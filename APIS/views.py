@@ -569,33 +569,40 @@ class CenterGetallcenterattendanceGetView(APIView):
     
     def get(self, request):
         try:
-            logger.info("UserView : UpdateCenterActiveOrDeactive : Started")
+            logger.info("UserView : GetAllCenterAttendance : Started")
             
-            serializer = api_serializers.CenterGetAllCenterAttendanceQuerySerializer(data=request.query_params)
-            if not serializer.is_valid():
+            user_id = request.query_params.get('userId')
+            date = request.query_params.get('date')
+            offset = request.query_params.get('offset', 0)
+            limit = request.query_params.get('limit', 0)
+            if not offset:
+                offset = 0
+            if not limit:
+                limit = 0
+            
+            if not user_id or not date:
                 return Response(
                     {
                         "status": False,
-                        "message": "Invalid parameters",
+                        "message": "userId and date are required",
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            user_id = serializer.validated_data.get('userId')
-            date = serializer.validated_data.get('date')
-            offset = serializer.validated_data.get('offset', 0)
-            limit = serializer.validated_data.get('limit', 0)
-            
-            centers = get_all_center_attendance(user_id, date, offset, limit)
+            centers = get_all_center_attendance(
+                int(user_id), 
+                date, 
+                int(offset), 
+                int(limit)
+            )
             
             if centers is not None and len(centers) > 0:
-                response_serializer = api_serializers.CenterAttendanceDtoSerializer(centers, many=True)
                 return Response(
                     {
                         "status": True,
-                        "data": response_serializer.data,
-                        "message": "Centers avilable",
+                        "data": centers,
+                        "message": "Centers available",
                         "code": status.HTTP_200_OK
                     },
                     status=status.HTTP_200_OK
@@ -604,7 +611,7 @@ class CenterGetallcenterattendanceGetView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "message": "Centers not avilable",
+                        "message": "Centers not available",
                         "code": status.HTTP_404_NOT_FOUND
                     },
                     status=status.HTTP_404_NOT_FOUND
@@ -710,21 +717,20 @@ class CenterGettotalattendancecountofcenterGetView(APIView):
         try:
             logger.info("UserView : GetTotalAttendanceCountOfCenter : Started")
             
-            serializer = api_serializers.CenterGetTotalAttendanceCountOfCenterQuerySerializer(data=request.query_params)
-            if not serializer.is_valid():
+            user_id = request.query_params.get('userId')
+            date = request.query_params.get('date')
+            
+            if not user_id or not date:
                 return Response(
                     {
                         "status": False,
-                        "message": "Invalid parameters",
+                        "message": "userId and date are required",
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            user_id = serializer.validated_data.get('userId')
-            date = serializer.validated_data.get('date')
-            
-            result = get_total_attendance_count_of_center(user_id, date)
+            result = get_total_attendance_count_of_center(int(user_id), date)
             
             if result:
                 return Response(
@@ -2021,12 +2027,43 @@ class HolidaysSaveholidaysPostView(APIView):
         try:
             logger.info("UserView : SaveHolidays : Started")
             
-            serializer = api_serializers.HolidaysSaveHolidaysRequestSerializer(data=request.data)
+            # Get data from request
+            data = request.data.copy()
+            
+            # Ensure ListCenterIds is a string and has valid values
+            if 'ListCenterIds' in data:
+                if isinstance(data['ListCenterIds'], list):
+                    data['ListCenterIds'] = ','.join(str(x) for x in data['ListCenterIds'] if x)
+                elif data['ListCenterIds'] is None:
+                    data['ListCenterIds'] = ''
+            
+            # Parse dates from ISO format
+            date_fields = ['StartDate', 'EndDate', 'CreatedOn']
+            for field in date_fields:
+                if field in data and data[field]:
+                    try:
+                        date_str = data[field].replace('Z', '+00:00')
+                        data[field] = datetime.fromisoformat(date_str)
+                    except (ValueError, AttributeError):
+                        return Response(
+                            {
+                                "status": False,
+                                "error": f"Invalid date format for {field}. Expected ISO format like 2026-07-15T09:21:32.948Z",
+                                "code": status.HTTP_400_BAD_REQUEST
+                            },
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+            
+            logger.info(f"HolidaysSaveholidaysPostView data: {data}")
+            
+            serializer = api_serializers.HolidaysSaveHolidaysRequestSerializer(data=data)
             if not serializer.is_valid():
+                logger.error(f"HolidaysSaveholidaysPostView validation errors: {serializer.errors}")
                 return Response(
                     {
                         "status": False,
                         "error": "Invalid parameters",
+                        "details": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -2070,7 +2107,7 @@ class HolidaysSaveholidaysPostView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-
+            
 class HolidaysGetallholidaysbyteacheridGetView(APIView):
     """Lists holidays for the center assigned to a teacher."""
     

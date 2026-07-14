@@ -47,7 +47,7 @@ urlpatterns = [
     path('File/SendNotification/', FileSendnotificationPostView.as_view(), name='file-sendnotification-post'),
     path('File/UploadProfileImage/', FileUploadprofileimagePostView.as_view(), name='file-uploadprofileimage-post'),
     
-    path('Holidays/SaveHolidays/', HolidaysSaveholidaysPostView.as_view(), name='holidays-saveholidays-post'),
+    path('Holidays/SaveHolidays', HolidaysSaveholidaysPostView.as_view(), name='holidays-saveholidays-post'),
     path('Holidays/GetAllHolidaysByTeacherId/', HolidaysGetallholidaysbyteacheridGetView.as_view(), name='holidays-getallholidaysbyteacherid-get'),
     path('Holidays/GetAllHolidaysByCenterId/', HolidaysGetallholidaysbycenteridGetView.as_view(), name='holidays-getallholidaysbycenterid-get'),
     path('Holidays/GetAllHolidaysByYear/', HolidaysGetallholidaysbyyearGetView.as_view(), name='holidays-getallholidaysbyyear-get'),

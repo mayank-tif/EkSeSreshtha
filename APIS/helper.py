@@ -598,162 +598,185 @@ def get_all_center_attendance(user_id, date, offset, limit):
     logger.info(f"CenterHelper : GetAllCenterAttendance : Started")
     
     try:
-        # Get user type
-        user_type_sql = "SELECT Type FROM Users WHERE Id = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(user_type_sql, [user_id])
-            user_row = cursor.fetchone()
-            user_type = user_row[0] if user_row else None
-        
-        centers = []
-        
-        if user_type == 1:
-            sql = """
-                SELECT 
-                    c.Id,
-                    c.CenterName,
-                    c.AssignedTeachers,
-                    c.AssignedRegionalAdmin,
-                    cls.StartedDate as ClassStartedDate,
-                    cls.EndDate as ClassEndDate,
-                    cls.TotalStudents,
-                    cls.AvilableStudents as PresentStudents,
-                    u1.Name as TeacherName,
-                    u2.Name as RegionalAdminName,
-                    CASE WHEN cls.Id IS NOT NULL THEN 1 ELSE 2 END as Type
-                FROM Center c
-                LEFT JOIN Class cls ON c.Id = cls.CenterId AND DATE(cls.StartedDate) = %s
-                LEFT JOIN Users u1 ON c.AssignedTeachers = u1.Id
-                LEFT JOIN Users u2 ON c.AssignedRegionalAdmin = u2.Id
-                ORDER BY c.Id
-                LIMIT %s OFFSET %s
-            """
-            cursor.execute(sql, [date, limit, offset])
+        # Parse the date
+        if isinstance(date, str):
+            date_obj = parse_any_datetime(date)
+            date_obj = date_obj.date() if date_obj else datetime.now().date()
+        elif hasattr(date, 'date'):
+            date_obj = date.date()
         else:
-            sql = """
-                SELECT 
-                    c.Id,
-                    c.CenterName,
-                    c.AssignedTeachers,
-                    c.AssignedRegionalAdmin,
-                    cls.StartedDate as ClassStartedDate,
-                    cls.EndDate as ClassEndDate,
-                    cls.TotalStudents,
-                    cls.AvilableStudents as PresentStudents,
-                    u1.Name as TeacherName,
-                    u2.Name as RegionalAdminName,
-                    CASE WHEN cls.Id IS NOT NULL THEN 1 ELSE 2 END as Type
-                FROM Center c
-                LEFT JOIN Class cls ON c.Id = cls.CenterId AND DATE(cls.StartedDate) = %s
-                LEFT JOIN Users u1 ON c.AssignedTeachers = u1.Id
-                LEFT JOIN Users u2 ON c.AssignedRegionalAdmin = u2.Id
-                WHERE c.AssignedRegionalAdmin = %s
-                ORDER BY c.Id
-                LIMIT %s OFFSET %s
-            """
-            cursor.execute(sql, [date, user_id, limit, offset])
+            date_obj = date
         
-        rows = cursor.fetchall()
-        columns = [col[0] for col in cursor.description]
+        # Get user type
+        try:
+            user = User.objects.get(id=user_id)
+            user_type = user.type
+        except User.DoesNotExist:
+            logger.error(f"User not found with ID: {user_id}")
+            return []
         
-        for row in rows:
-            center_dict = dict(zip(columns, row))
+        # Get centers based on user type - order by id descending
+        if user_type == 1:
+            centers = Center.objects.all().order_by('-id')
+        else:
+            centers = Center.objects.filter(
+                assigned_regional_admin=user_id
+            ).order_by('-id')
+        
+        # Apply pagination
+        if limit > 0:
+            centers = centers[offset:offset + limit]
+        
+        result = []
+        
+        for center in centers:
+            # Get class for this center on the given date
+            class_obj = ClassModel.objects.filter(
+                center_id=center.id,
+                started_date__date=date_obj
+            ).first()
             
-            # Set null fields
-            center_dict['StartDate'] = None
-            center_dict['EndDate'] = None
-            center_dict['Reason'] = None
+            # Get teacher name
+            teacher_name = None
+            if center.assigned_teachers:
+                try:
+                    teacher = User.objects.get(id=center.assigned_teachers)
+                    teacher_name = teacher.name
+                except User.DoesNotExist:
+                    pass
             
-            # If no class exists (Type == 2), check for holidays and cancellations
-            if center_dict.get('Type') == 2:
-                center_id = center_dict.get('Id')
-                
-                # Check holidays
-                holiday_sql = """
-                    SELECT StartDate, EndDate
-                    FROM Holidays
-                    WHERE CenterId = %s AND DATE(StartDate) <= %s AND DATE(EndDate) >= %s
-                """
-                cursor.execute(holiday_sql, [center_id, date, date])
-                holiday_row = cursor.fetchone()
-                
-                if holiday_row:
-                    center_dict['Type'] = 3
-                    center_dict['Reason'] = 'Holiday'
-                    center_dict['StartDate'] = holiday_row[0]
-                    center_dict['EndDate'] = holiday_row[1]
-                
-                # Check class cancel by teacher
-                cancel_sql = """
-                    SELECT StartingDate, EndingDate
-                    FROM ClassCancelByTeacher
-                    WHERE CenterId = %s AND DATE(StartingDate) <= %s AND DATE(EndingDate) >= %s
-                """
-                cursor.execute(cancel_sql, [center_id, date, date])
-                cancel_row = cursor.fetchone()
-                
-                if cancel_row:
-                    center_dict['Type'] = 4
-                    center_dict['Reason'] = 'Class cancel by teacher'
-                    center_dict['StartDate'] = cancel_row[0]
-                    center_dict['EndDate'] = cancel_row[1]
+            # Get regional admin name
+            regional_admin_name = None
+            if center.assigned_regional_admin:
+                try:
+                    regional_admin = User.objects.get(id=center.assigned_regional_admin)
+                    regional_admin_name = regional_admin.name
+                except User.DoesNotExist:
+                    pass
             
-            centers.append(center_dict)
+            center_type = 1 if class_obj else 2
+            
+            center_data = {
+                'id': center.id,
+                'centerName': center.center_name,
+                'type': center_type,
+                'classStartedDate': class_obj.started_date if class_obj else None,
+                'classEndDate': class_obj.end_date if class_obj else None,
+                'totalStudents': class_obj.total_students if class_obj else 0,
+                'presentStudents': class_obj.avilable_students if class_obj else 0,
+                'teacherName': teacher_name,
+                'regionalAdminName': regional_admin_name,
+                'startDate': None,
+                'endDate': None,
+                'reason': None
+            }
+            
+            if center_type == 2:
+                holiday = Holidays.objects.filter(
+                    center_id=center.id,
+                    start_date__date__lte=date_obj,
+                    end_date__date__gte=date_obj
+                ).first()
+                
+                if holiday:
+                    center_data['type'] = 3
+                    center_data['reason'] = 'Holiday'
+                    center_data['startDate'] = holiday.start_date
+                    center_data['endDate'] = holiday.end_date
+                
+                cancel = ClassCancelByTeacher.objects.filter(
+                    center_id=center.id,
+                    starting_date__date__lte=date_obj,
+                    ending_date__date__gte=date_obj
+                ).first()
+                
+                if cancel:
+                    center_data['type'] = 4
+                    center_data['reason'] = 'Class cancel by teacher'
+                    center_data['startDate'] = cancel.starting_date
+                    center_data['endDate'] = cancel.ending_date
+            
+            result.append(center_data)
         
         logger.info(f"CenterHelper : GetAllCenterAttendance : End")
-        return centers
+        return result
         
     except Exception as e:
         logger.error(f"CenterHelper : GetAllCenterAttendance : {str(e)}")
         raise e
 
 def get_total_attendance_count_of_center(user_id, date):
-    """Get total attendance count of center"""
+    """Get total attendance count of center """
     logger.info(f"CenterHelper : GetTotalAttendanceCountOfCenter : Started")
     
     try:
-        # Get user type
-        user_type_sql = "SELECT Type FROM Users WHERE Id = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(user_type_sql, [user_id])
-            user_row = cursor.fetchone()
-            user_type = user_row[0] if user_row else None
-        
-        if user_type == 1:
-            sql = """
-                SELECT 
-                    COUNT(CASE WHEN cls.Id IS NULL THEN 1 END) as NotStarted,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents = 0 AND cls.EndDate IS NULL THEN 1 END) as EndDateWithNoAttendance,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents > 0 AND cls.EndDate IS NULL THEN 1 END) as EndDateWithAttendance,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents > 0 AND cls.EndDate IS NOT NULL THEN 1 END) as CompletedWithAttendance,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents = 0 AND cls.EndDate IS NOT NULL THEN 1 END) as NoAttendance
-                FROM Center c
-                LEFT JOIN Class cls ON c.Id = cls.CenterId
-            """
-            cursor.execute(sql, [date, date, date, date])
+        # Parse the date
+        if isinstance(date, str):
+            date_obj = parse_any_datetime(date)
+            date_obj = date_obj.date() if date_obj else datetime.now().date()
+        elif hasattr(date, 'date'):
+            date_obj = date.date()
         else:
-            sql = """
-                SELECT 
-                    COUNT(CASE WHEN cls.Id IS NULL THEN 1 END) as NotStarted,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents = 0 AND cls.EndDate IS NULL THEN 1 END) as EndDateWithNoAttendance,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents > 0 AND cls.EndDate IS NULL THEN 1 END) as EndDateWithAttendance,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents > 0 AND cls.EndDate IS NOT NULL THEN 1 END) as CompletedWithAttendance,
-                    COUNT(CASE WHEN cls.Id IS NOT NULL AND DATE(cls.StartedDate) = %s AND cls.AvilableStudents = 0 AND cls.EndDate IS NOT NULL THEN 1 END) as NoAttendance
-                FROM Center c
-                LEFT JOIN Class cls ON c.Id = cls.CenterId
-                WHERE c.AssignedRegionalAdmin = %s
-            """
-            cursor.execute(sql, [date, date, date, date, user_id])
+            date_obj = date
         
-        row = cursor.fetchone()
+        # Get user type
+        try:
+            user = User.objects.get(id=user_id)
+            user_type = user.type
+        except User.DoesNotExist:
+            logger.error(f"User not found with ID: {user_id}")
+            return {
+                "NotStarted": 0,
+                "NoEndDateWithNoAttendance": 0,
+                "NoEndDateWithAttendance": 0,
+                "Completed": 0,
+                "NoAttendance": 0,
+            }
+        
+        # Get centers based on user type
+        if user_type == 1:  # SuperAdmin
+            centers = Center.objects.all()
+        else:  # Regional Admin (Type 2)
+            centers = Center.objects.filter(assigned_regional_admin=user_id)
+        
+        # Initialize counters
+        not_started = 0
+        end_date_with_no_attendance = 0
+        end_date_with_attendance = 0
+        completed = 0
+        no_attendance = 0
+        
+        for center in centers:
+            # Check if class exists for this center on the given date
+            class_obj = ClassModel.objects.filter(
+                center_id=center.id,
+                started_date__date=date_obj
+            ).first()
+            
+            if class_obj is None:
+                # No class exists for this center on this date
+                not_started += 1
+            else:
+                # Class exists, check its status
+                if class_obj.avilable_students == 0 and class_obj.end_date is None:
+                    # Class has started but no attendance and not ended
+                    end_date_with_no_attendance += 1
+                elif class_obj.avilable_students > 0 and class_obj.end_date is None:
+                    # Class has started with attendance and not ended
+                    end_date_with_attendance += 1
+                elif class_obj.avilable_students > 0 and class_obj.end_date is not None:
+                    # Class completed with attendance
+                    completed += 1
+                elif class_obj.avilable_students == 0 and class_obj.end_date is not None:
+                    # Class completed with no attendance
+                    no_attendance += 1
         
         result = {
-            "NotStarted": row[0] or 0,
-            "NoEndDateWithNoAttendance": row[1] or 0,
-            "NoEndDateWithAttendance": row[2] or 0,
-            "Completed": row[3] or 0,
-            "NoAttendance": row[4] or 0,
-            "Status": True
+            "NotStarted": not_started,
+            "NoEndDateWithNoAttendance": end_date_with_no_attendance,
+            "NoEndDateWithAttendance": end_date_with_attendance,
+            "Completed": completed,
+            "NoAttendance": no_attendance,
         }
         
         logger.info(f"CenterHelper : GetTotalAttendanceCountOfCenter : End")
@@ -3250,7 +3273,29 @@ def save_holidays(holidays_data):
     
     try:
         holiday_id = holidays_data.get('Id', 0)
-        center_ids = holidays_data.get('ListCenterIds', [])
+        list_center_ids = holidays_data.get('ListCenterIds', '')
+        
+        # Parse center IDs from comma-separated string
+        center_ids = []
+        if list_center_ids and isinstance(list_center_ids, str):
+            center_ids = [int(x.strip()) for x in list_center_ids.split(',') if x.strip()]
+        elif isinstance(list_center_ids, list):
+            center_ids = [int(x) for x in list_center_ids if x]
+        elif list_center_ids:
+            center_ids = [int(list_center_ids)]
+        
+        if not center_ids:
+            logger.error("No valid center IDs provided")
+            return None
+        
+        # Get values
+        start_date = holidays_data.get('StartDate')
+        end_date = holidays_data.get('EndDate')
+        name = holidays_data.get('Name')
+        description = holidays_data.get('Description')
+        status = holidays_data.get('Status')
+        created_by = holidays_data.get('CreatedBy')
+        created_on = holidays_data.get('CreatedOn') or datetime.now()
         
         with connection.cursor() as cursor:
             if holiday_id > 0:
@@ -3260,7 +3305,7 @@ def save_holidays(holidays_data):
                     FROM Holidays
                     WHERE Name = %s
                 """
-                cursor.execute(existing_sql, [holidays_data.get('Name')])
+                cursor.execute(existing_sql, [name])
                 existing_rows = cursor.fetchall()
                 
                 existing_center_ids = [row[1] for row in existing_rows]
@@ -3268,11 +3313,12 @@ def save_holidays(holidays_data):
                 # Remove holidays that are not in the new list
                 center_ids_to_remove = [cid for cid in existing_center_ids if cid not in center_ids]
                 if center_ids_to_remove:
-                    remove_sql = """
+                    placeholders = ','.join(['%s'] * len(center_ids_to_remove))
+                    remove_sql = f"""
                         DELETE FROM Holidays 
-                        WHERE Name = %s AND CenterId IN ({})
-                    """.format(','.join(['%s'] * len(center_ids_to_remove)))
-                    params = [holidays_data.get('Name')] + center_ids_to_remove
+                        WHERE Name = %s AND CenterId IN ({placeholders})
+                    """
+                    params = [name] + center_ids_to_remove
                     cursor.execute(remove_sql, params)
                 
                 # Add new holidays
@@ -3280,17 +3326,18 @@ def save_holidays(holidays_data):
                 for center_id in center_ids_to_add:
                     insert_sql = """
                         INSERT INTO Holidays (
-                            StartDate, EndDate, Name, Status, CenterId, CreatedOn, CreatedBy
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            StartDate, EndDate, Name, Description, Status, CenterId, CreatedOn, CreatedBy
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """
                     cursor.execute(insert_sql, [
-                        holidays_data.get('StartDate'),
-                        holidays_data.get('EndDate'),
-                        holidays_data.get('Name'),
-                        holidays_data.get('Status'),
+                        start_date,
+                        end_date,
+                        name,
+                        description,
+                        status,
                         center_id,
-                        datetime.now(),
-                        holidays_data.get('CreatedBy')
+                        created_on,
+                        created_by
                     ])
                 
                 # Update existing holidays
@@ -3298,15 +3345,16 @@ def save_holidays(holidays_data):
                     if center_id in center_ids:
                         update_sql = """
                             UPDATE Holidays 
-                            SET StartDate = %s, EndDate = %s, Name = %s, Status = %s
+                            SET StartDate = %s, EndDate = %s, Name = %s, Description = %s, Status = %s
                             WHERE Name = %s AND CenterId = %s
                         """
                         cursor.execute(update_sql, [
-                            holidays_data.get('StartDate'),
-                            holidays_data.get('EndDate'),
-                            holidays_data.get('Name'),
-                            holidays_data.get('Status'),
-                            holidays_data.get('Name'),
+                            start_date,
+                            end_date,
+                            name,
+                            description,
+                            status,
+                            name,
                             center_id
                         ])
                         
@@ -3315,17 +3363,18 @@ def save_holidays(holidays_data):
                 for center_id in center_ids:
                     insert_sql = """
                         INSERT INTO Holidays (
-                            StartDate, EndDate, Name, Status, CenterId, CreatedOn, CreatedBy
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            StartDate, EndDate, Name, Description, Status, CenterId, CreatedOn, CreatedBy
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """
                     cursor.execute(insert_sql, [
-                        holidays_data.get('StartDate'),
-                        holidays_data.get('EndDate'),
-                        holidays_data.get('Name'),
-                        holidays_data.get('Status'),
+                        start_date,
+                        end_date,
+                        name,
+                        description,
+                        status,
                         center_id,
-                        datetime.now(),
-                        holidays_data.get('CreatedBy')
+                        created_on,
+                        created_by
                     ])
         
         logger.info(f"HolidaysHelper : SaveHolidays : End")
@@ -3334,7 +3383,7 @@ def save_holidays(holidays_data):
     except Exception as e:
         logger.error(f"HolidaysHelper : SaveHolidays : {str(e)}")
         raise e
-
+    
 def get_all_holidays_by_teacher_id(teacher_id):
     """Get all holidays by teacher ID"""
     logger.info(f"HolidaysHelper : GetAllHolidaysByTeacherId : Started")
@@ -4304,7 +4353,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
         raise e
 
 def get_all_student_with_avg_attendance(center_id):
-    """Get all students with average attendance - matches .NET logic exactly"""
+    """Get all students with average attendance """
     logger.info(f"StudentAttendanceHelper : GetAllStudentWihAvgAttendance : Started")
     
     try:
@@ -4405,7 +4454,7 @@ def get_all_absent_attendance(center_id):
         raise e
 
 def get_all_student_attendance_status(center_id, scan_date):
-    """Get all student attendance status for a specific date - matches .NET logic exactly"""
+    """Get all student attendance status for a specific date """
     logger.info(f"StudentAttendanceHelper : GetAllStudentAttendancStatus : Started")
     
     try:

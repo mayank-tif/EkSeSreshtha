@@ -438,8 +438,7 @@ class FileUploadProfileImageRequestSerializer(RequestSerializer):
 
 # Holidays Serializers
 class HolidaysSaveHolidaysRequestSerializer(RequestSerializer):
-    foreign_key_list_fields = {"ListCenterIds": Center}
-    
+    # Remove foreign_key_list_fields for ListCenterIds
     Id = optional_int()
     Name = required_char()
     Description = optional_char()
@@ -448,7 +447,31 @@ class HolidaysSaveHolidaysRequestSerializer(RequestSerializer):
     EndDate = optional_datetime()
     CreatedBy = required_int()
     CreatedOn = optional_datetime()
-    ListCenterIds = serializers.ListField(child=serializers.IntegerField(), required=True, allow_empty=False)
+    ListCenterIds = serializers.CharField(required=True, allow_blank=False)
+
+    def validate_ListCenterIds(self, value):
+        """Validate that ListCenterIds contains valid integers and centers exist"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("ListCenterIds cannot be empty")
+        
+        # Split and get IDs
+        ids = [x.strip() for x in value.split(',') if x.strip()]
+        if not ids:
+            raise serializers.ValidationError("ListCenterIds must contain at least one valid ID")
+        
+        # Validate each ID is an integer
+        try:
+            center_ids = [int(x) for x in ids]
+        except ValueError:
+            raise serializers.ValidationError("ListCenterIds must contain valid integer IDs separated by commas")
+        
+        # Check if centers exist
+        existing_centers = Center.objects.filter(id__in=center_ids).values_list('id', flat=True)
+        missing_ids = [str(cid) for cid in center_ids if cid not in existing_centers]
+        if missing_ids:
+            raise serializers.ValidationError(f"Center ids do not exist: {missing_ids}")
+        
+        return value
 
 class HolidaysTeacherIdQuerySerializer(RequestSerializer):
     teacherId = required_int()
