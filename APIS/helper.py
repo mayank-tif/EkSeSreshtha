@@ -1199,6 +1199,20 @@ def save_user(user_data):
                     update_fields = []
                     update_values = []
                     
+                    # Always add UpdatedOn and UpdatedBy for any update
+                    update_fields.append("UpdatedOn = %s")
+                    update_values.append(datetime.now())
+                    
+                    # Use CreatedBy from request as UpdatedBy
+                    created_by = user_data.get('CreatedBy')
+                    if created_by:
+                        update_fields.append("UpdatedBy = %s")
+                        update_values.append(created_by)
+                    else:
+                        # If CreatedBy is not provided, use the user's own ID as fallback
+                        update_fields.append("UpdatedBy = %s")
+                        update_values.append(user_id)
+                    
                     # If Type == 1 (SuperAdmin) - can change anything
                     if user_type == 1:
                         # SuperAdmin can change password
@@ -1230,7 +1244,8 @@ def save_user(user_data):
                             'GuardianName': 'GuardianName',
                             'GuardianNumber': 'GuardianNumber',
                             'AssignedTeacherStatus': 'AssignedTeacherStatus',
-                            'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus'
+                            'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus',
+                            'CreatedBy': 'CreatedBy',
                         }
                         
                         for key, column in field_mapping.items():
@@ -1240,9 +1255,6 @@ def save_user(user_data):
                     else:
                         # Non-superadmin: preserve EnrolmentRollId, Password, Status, CreatedOn
                         # Only update specific fields from ConvertUpdateUsertoToUser
-                        # In .NET, only these fields are updated for non-superadmin:
-                        # DateOfBirth, GuardianName, GuardianNumber, Email, PhoneNumber, Name
-                        
                         if user_data.get('DateOfBirth'):
                             update_fields.append("DateOfBirth = %s")
                             update_values.append(user_data['DateOfBirth'])
@@ -1279,6 +1291,36 @@ def save_user(user_data):
                         
                         update_fields.append("CreatedOn = %s")
                         update_values.append(existing_created_on)
+                        
+                        # Update PanchayatId for teachers (Type == 3)
+                        print("user_type", user_type)
+                        list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                        if user_type == 3 and list_of_panchayat_ids:
+                            if isinstance(list_of_panchayat_ids, str):
+                                panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                            else:
+                                panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                                
+                            print("panchayat_list", panchayat_list)
+
+                            if len(panchayat_list) == 1:
+                                update_fields.append("PanchayatId = %s")
+                                update_values.append(panchayat_list[0])
+
+                        # Update DistrictId for teachers if provided
+                        if user_type == 3 and user_data.get('DistrictId') is not None:
+                            update_fields.append("DistrictId = %s")
+                            update_values.append(user_data['DistrictId'])
+
+                        # Update VidhanSabhaId for teachers if provided
+                        if user_type == 3 and user_data.get('VidhanSabhaId') is not None:
+                            update_fields.append("VidhanSabhaId = %s")
+                            update_values.append(user_data['VidhanSabhaId'])
+
+                        # Update VillageId for teachers if provided
+                        if user_type == 3 and user_data.get('VillageId') is not None:
+                            update_fields.append("VillageId = %s")
+                            update_values.append(user_data['VillageId'])
                     
                     # Handle ListOfPanchayatIds for RegionalAdmin
                     if user_type == 2:  # RegionalAdmin
@@ -1313,7 +1355,6 @@ def save_user(user_data):
             else:
                 print("else")
                 # Insert new user
-                # Generate EnrolmentRollId: Name.Substring(0,2) + "-" + DateOfBirth + "-" + Gender(M/F)
                 name = user_data.get('Name', '')
                 date_of_birth = user_data.get('DateOfBirth', '')
                 gender = user_data.get('Gender', '')
@@ -1326,14 +1367,9 @@ def save_user(user_data):
                 
                 created_on = datetime.now()
                 
-                # Set default values
-                columns = [
-                    'EnrolmentRollId', 'Status', 'CreatedOn', 
-                    'AssignedTeacherStatus', 'AssignedRegionalAdminStatus'
-                ]
-                values = [
-                    enrolment_roll_id, 1, created_on, 0, 0
-                ]
+                # Start with required columns and values
+                columns = ['EnrolmentRollId', 'Status', 'CreatedOn']
+                values = [enrolment_roll_id, 1, created_on]
                 
                 # Map fields to column names
                 field_mapping = {
@@ -1361,7 +1397,8 @@ def save_user(user_data):
                     'GuardianName': 'GuardianName',
                     'GuardianNumber': 'GuardianNumber',
                     'AssignedTeacherStatus': 'AssignedTeacherStatus',
-                    'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus'
+                    'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus',
+                    'CreatedBy': 'CreatedBy',
                 }
                 
                 for key, column in field_mapping.items():
@@ -1374,6 +1411,7 @@ def save_user(user_data):
                 # Handle ListOfPanchayatIds for Teacher
                 if user_type == 3:  # Teacher
                     list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                    print("list_of_panchayat_ids", list_of_panchayat_ids)
                     if list_of_panchayat_ids:
                         if isinstance(list_of_panchayat_ids, str):
                             panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
@@ -1414,6 +1452,10 @@ def save_user(user_data):
                                 cursor.execute(insert_sql, [user_id, panchayat_id, panchayat_name])
         
         return get_user_by_id(user_id)
+        
+    except Exception as e:
+        logger.error(f"UserRepository : SaveLogin : {str(e)}")
+        raise e
         
     except Exception as e:
         logger.error(f"UserRepository : SaveLogin : {str(e)}")
