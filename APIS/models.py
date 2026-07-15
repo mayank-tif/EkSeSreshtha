@@ -139,6 +139,7 @@ class Village(models.Model):
 class School(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     school_name = models.CharField(db_column="SchoolName", max_length=50, null=True, blank=True)
+    status= models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -157,6 +158,7 @@ class School(models.Model):
 class SchoolName(models.Model):
     id = models.IntegerField(db_column="Id", primary_key=True)
     school_name = models.CharField(db_column="SchoolName", max_length=50, unique=True)
+    status= models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -375,6 +377,7 @@ class ClassDetail(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     class_guid_id = models.CharField(db_column="ClassGuidId", max_length=36, unique=True)
     sccan_time_spam = models.BinaryField(db_column="SccanTimeSpam", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     
     # Foreign Keys
     student = models.ForeignKey(
@@ -757,6 +760,7 @@ class HolidayCenter(models.Model):
         blank=True,
         related_name='holiday_centers'
     )
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -773,6 +777,7 @@ class HolidayCenter(models.Model):
 class TeacherActivityLog(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     teacher_acivity_guid_id = models.CharField(db_column="TeacherAcivityGuidId", max_length=36, unique=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     login_time = models.CharField(db_column="LoginTime", max_length=50, null=True, blank=True)
     logout_time = models.CharField(db_column="LogoutTime", max_length=50, null=True, blank=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
@@ -795,6 +800,7 @@ class Announcement(models.Model):
     title = models.CharField(db_column="Title", max_length=50, null=True, blank=True)
     description = models.TextField(db_column="Description", null=True, blank=True)
     image = models.TextField(db_column="Image", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -813,6 +819,7 @@ class CenterAssignUser(models.Model):
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     type = models.IntegerField(db_column="Type", null=True, blank=True)
     date = models.DateTimeField(db_column="Date", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     
     # Foreign Keys
     center = models.ForeignKey(
@@ -841,6 +848,7 @@ class CenterLog(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     reason = models.CharField(db_column="Reason", max_length=50, null=True, blank=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     
     # Foreign Keys
     center = models.ForeignKey(
@@ -870,6 +878,7 @@ class ClassCancelByTeacher(models.Model):
     starting_date = models.DateTimeField(db_column="StartingDate", null=True, blank=True)
     ending_date = models.DateTimeField(db_column="EndingDate", null=True, blank=True)
     reason = models.CharField(db_column="Reason", max_length=50, null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     
     # Foreign Keys
     center = models.ForeignKey(
@@ -899,6 +908,7 @@ class Concern(models.Model):
     type = models.CharField(db_column="Type", max_length=50, null=True, blank=True)
     description = models.CharField(db_column="Description", max_length=50, null=True, blank=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -916,6 +926,7 @@ class RegionalAdminPanchayat(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     panchayat_name = models.CharField(db_column="PanchayatName", max_length=50, null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     
     # Foreign Keys
     panchayat = models.ForeignKey(
@@ -944,7 +955,7 @@ class StudentAttendance(models.Model):
     scan_date = models.DateTimeField(db_column="ScanDate", null=True, blank=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
     type = models.BooleanField(db_column="Type", null=True, blank=True)
-    
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     # Foreign Keys
     class_obj = models.ForeignKey(
         ClassModel,
@@ -994,6 +1005,7 @@ class UserActivityLog(models.Model):
     activity_date = models.DateTimeField(db_column="ActivityDate", null=True, blank=True)
     data = models.TextField(db_column="Data", null=True, blank=True)
     url = models.CharField(db_column="Url", max_length=50, null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)

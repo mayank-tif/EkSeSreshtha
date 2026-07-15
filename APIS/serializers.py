@@ -319,19 +319,19 @@ class CancelClassDtoSerializer(serializers.Serializer):
     cancelBy = serializers.IntegerField(required=True)
 
 class EndClassDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField(required=True)
+    Id = serializers.IntegerField(required=True)
 
 class UpdateClassSubStatusDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField(required=True)
+    Id = serializers.IntegerField(required=True)
 
 class ClassCancelTeacherDtoSerializer(serializers.Serializer):
-    id = serializers.IntegerField(required=False)
-    centerId = serializers.IntegerField(required=True)
-    startingDate = serializers.DateTimeField(required=True)
-    endingDate = serializers.DateTimeField(required=True)
-    createdOn = serializers.DateTimeField(allow_null=True, required=False)
-    usersId = serializers.IntegerField(required=True)
-    reason = serializers.CharField(allow_null=True, required=False)
+    Id = serializers.IntegerField(required=False)
+    CenterId = serializers.IntegerField(required=True)
+    StartingDate = serializers.DateTimeField(required=True)
+    EndingDate = serializers.DateTimeField(required=True)
+    CreatedOn = serializers.DateTimeField(allow_null=True, required=False)
+    UsersId = serializers.IntegerField(required=True)
+    Reason = serializers.CharField(allow_null=True, required=False)
 
 class ClassLiveDetailDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()

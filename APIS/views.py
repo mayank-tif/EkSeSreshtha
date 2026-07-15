@@ -912,7 +912,7 @@ class ClassUpdateendclasstimePostView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            class_id = serializer.validated_data.get('id')
+            class_id = serializer.validated_data.get('Id')
             result = update_end_class_time(class_id)
             
             if result:
@@ -963,7 +963,7 @@ class ClassUpdateclasssubstatusPostView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            class_id = serializer.validated_data.get('id')
+            class_id = serializer.validated_data.get('Id')
             result = update_class_sub_status(class_id)
             
             if result:
@@ -1015,7 +1015,7 @@ class ClassCancelclassbyteacherPostView(APIView):
                 )
             
             data = serializer.validated_data
-            result = cancel_class_by_teacher(data)
+            result = cancel_class_by_teacher(data, request)
             
             if result:
                 return Response(

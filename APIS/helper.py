@@ -1961,7 +1961,7 @@ def save_class(class_data):
                 INSERT INTO Class (
                     ClassEnrolmentId, Name, CenterId, UsersId, 
                     TotalStudents, AvilableStudents, StartedDate, 
-                    Status, SubStatus
+                    Status, SubStatus, CreatedOn, CreatedBy
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(insert_sql, [
@@ -1973,7 +1973,9 @@ def save_class(class_data):
                 class_data.get('avilableStudents'),
                 datetime.now(),
                 1,  # Active status
-                0   # SubStatus
+                0,   # SubStatus
+                datetime.now(),
+                class_data.get('userId')
             ])
             
             # Get the inserted ID
@@ -2094,24 +2096,26 @@ def update_class_sub_status(class_id):
         logger.error(f"ClassHelper : UpdateClassSubStatus : {str(e)}")
         raise e
 
-def cancel_class_by_teacher(class_cancel_data):
+def cancel_class_by_teacher(class_cancel_data, request):
     """Cancel class by teacher"""
     logger.info(f"ClassHelper : CancelClassByTeacher : Started")
+    current_user_id = get_user_id_from_token(request)
     
     try:
         insert_sql = """
             INSERT INTO ClassCancelByTeacher (
                 CenterId, UserId, StartingDate, EndingDate, 
-                Reason, CreatedOn
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+                Reason, CreatedBy ,CreatedOn
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
         with connection.cursor() as cursor:
             cursor.execute(insert_sql, [
-                class_cancel_data.get('centerId'),
-                class_cancel_data.get('usersId'),
-                class_cancel_data.get('startingDate'),
-                class_cancel_data.get('endingDate'),
-                class_cancel_data.get('reason'),
+                class_cancel_data.get('CenterId'),
+                class_cancel_data.get('UsersId'),
+                class_cancel_data.get('StartingDate'),
+                class_cancel_data.get('EndingDate'),
+                class_cancel_data.get('Reason'),
+                current_user_id,
                 datetime.now()
             ])
             
@@ -2268,7 +2272,18 @@ def get_live_class_detail(class_id):
             
             if row:
                 columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+                row_dict = dict(zip(columns, row))
+                # Convert PascalCase to camelCase to match serializer
+                return {
+                    'id': row_dict.get('Id'),
+                    'name': row_dict.get('Name'),
+                    'status': row_dict.get('Status'),
+                    'startDate': row_dict.get('StartDate'),
+                    'endDate': row_dict.get('EndDate'),
+                    'totalStudents': row_dict.get('TotalStudents'),
+                    'avilableStudents': row_dict.get('AvilableStudents'),
+                    'subStatus': row_dict.get('SubStatus')
+                }
         
         return None
         
