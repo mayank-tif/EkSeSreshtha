@@ -6,7 +6,7 @@ class District(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     district_guid_id = models.CharField(db_column="DistrictGuidId", max_length=36, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -26,7 +26,7 @@ class VidhanSabha(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     vidhan_sabha_guid_id = models.CharField(db_column="VidhanSabhaGuidId", unique=True, max_length=36)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     district = models.ForeignKey(
         District, 
         db_column="DistrictId", 
@@ -55,7 +55,7 @@ class Panchayat(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     panchayat_guid_id = models.CharField(db_column="PanchayatGuidId", unique=True, max_length=36)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     district = models.ForeignKey(
         District,
         db_column="DistrictId",
@@ -93,7 +93,7 @@ class Village(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     village_guid_id = models.CharField(db_column="VillageGuidId",max_length=36, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     district = models.ForeignKey(
         District,
         db_column="DistrictId",
@@ -177,7 +177,7 @@ class Center(models.Model):
     center_name = models.CharField(db_column="CenterName", max_length=50, null=True, blank=True, unique=True)
     created_date = models.DateTimeField(db_column="CreatedDate", null=True, blank=True)
     started_date = models.DateTimeField(db_column="StartedDate", null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     class_status = models.BooleanField(db_column="ClassStatus", null=True, blank=True)
     assigned_teachers = models.IntegerField(db_column="AssignedTeachers", null=True, blank=True)
     assigned_regional_admin = models.IntegerField(db_column="AssignedRegionalAdmin", null=True, blank=True)
@@ -252,7 +252,7 @@ class User(models.Model):
     date_of_birth = models.CharField(db_column="DateOfBirth", max_length=50, null=True, blank=True)
     phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
     whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     role_id = models.IntegerField(db_column="RoleId", null=True, blank=True)
     picture = models.TextField(db_column="Picture", null=True, blank=True)
     last_login_time = models.CharField(db_column="LastLoginTime", max_length=50, null=True, blank=True)
@@ -339,6 +339,7 @@ class ClassModel(models.Model):
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     cancel_date = models.DateTimeField(db_column="CancelDate", null=True, blank=True)
     sub_status = models.IntegerField(db_column="SubStatus")
+    active_status = models.BooleanField(db_column="active_status", null=True, blank=True, default=True)
     
     # Foreign Keys
     center = models.ForeignKey(
@@ -442,7 +443,7 @@ class RegionalAdmin(models.Model):
     whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
     email = models.EmailField(db_column="Email", max_length=50, null=True, blank=True, unique=True)
     contact = models.CharField(db_column="Contact", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     role_id = models.IntegerField(db_column="RoleId", null=True, blank=True)
     picture = models.CharField(db_column="Picture", max_length=50, null=True, blank=True)
     last_login_time = models.CharField(db_column="LastLoginTime", max_length=50, null=True, blank=True)
@@ -527,7 +528,7 @@ class Teacher(models.Model):
     phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
     whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
     email = models.EmailField(db_column="Email", max_length=50, null=True, blank=True, unique=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     count = models.IntegerField(db_column="Count", null=True, blank=True)
     picture = models.CharField(db_column="Picture", max_length=50, null=True, blank=True)
     last_login_time = models.CharField(db_column="LastLoginTime", max_length=50, null=True, blank=True)
@@ -608,7 +609,7 @@ class Student(models.Model):
     full_name = models.CharField(db_column="FullName", max_length=50, null=True, blank=True)
     age = models.IntegerField(db_column="Age", null=True, blank=True)
     gender = models.CharField(db_column="Gender", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
     contact = models.CharField(db_column="Contact", max_length=50, null=True, blank=True)
     counter = models.IntegerField(db_column="Counter", null=True, blank=True)
@@ -712,7 +713,7 @@ class Holidays(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     description = models.CharField(db_column="Description", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     start_date = models.DateTimeField(db_column="StartDate", null=True, blank=True)
     end_date = models.DateTimeField(db_column="EndDate", null=True, blank=True)
     

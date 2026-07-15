@@ -797,25 +797,24 @@ def update_center_active_or_deactive(center_log_data):
         user_id = center_log_data.get('userId')
         reason = center_log_data.get('reason')
         
-        with connection.cursor() as cursor:
-            # Get current center status
-            center_sql = "SELECT Status FROM Center WHERE Id = %s"
-            cursor.execute(center_sql, [center_id])
-            center_row = cursor.fetchone()
-            
-            if not center_row:
-                return None
-            
-            # Update center status
-            update_sql = "UPDATE Center SET Status = %s WHERE Id = %s"
-            cursor.execute(update_sql, [status, center_id])
-            
-            # Insert center log
-            log_sql = """
-                INSERT INTO CenterLog (CenterId, UserId, Reason, CreatedOn)
-                VALUES (%s, %s, %s, %s)
-            """
-            cursor.execute(log_sql, [center_id, user_id, reason, datetime.now()])
+        # Update center status
+        center = Center.objects.filter(id=center_id).first()
+        if not center:
+            logger.error(f"Center not found with ID: {center_id}")
+            return None
+        
+        center.status = status
+        center.updated_on = datetime.now()
+        center.updated_by = user_id
+        center.save()
+        
+        # Insert center log
+        CenterLog.objects.create(
+            center_id=center_id,
+            user_id=user_id,
+            reason=reason,
+            created_on=datetime.now()
+        )
         
         logger.info(f"CenterHelper : UpdateCenterActiveOrDeactive : End")
         return {'centerId': center_id, 'status': status}
@@ -833,11 +832,10 @@ def save_center(center_data, request):
         current_user_id = get_user_id_from_token(request)
         
         if center_id > 0:
-            # Update existing center - NEVER update CenterGuidId
+            # Update existing center
             try:
                 center = Center.objects.get(id=center_id)
                 
-                # Update only the fields that are in the DTO
                 if 'CenterName' in center_data and center_data['CenterName'] is not None:
                     center.center_name = center_data['CenterName']
                 if 'AssignedTeachers' in center_data and center_data['AssignedTeachers'] is not None:
@@ -863,7 +861,6 @@ def save_center(center_data, request):
                 logger.error(f"Center not found with ID: {center_id}")
                 return None
         else:
-            
             center_guid = str(uuid.uuid4())
             
             center = Center(
@@ -886,40 +883,35 @@ def save_center(center_data, request):
             
             # Update assigned teacher status
             if center.assigned_teachers:
-                try:
-                    User.objects.filter(id=center.assigned_teachers).update(
-                        assigned_teacher_status=True,
-                        assigned_regional_admin_status=True
-                    )
-                except User.DoesNotExist:
-                    pass
+                User.objects.filter(id=center.assigned_teachers).update(
+                    assigned_teacher_status=True,
+                    assigned_regional_admin_status=True
+                )
             
             # Update assigned regional admin status
             if center.assigned_regional_admin:
-                try:
-                    User.objects.filter(id=center.assigned_regional_admin).update(
-                        assigned_teacher_status=True,
-                        assigned_regional_admin_status=True
-                    )
-                except User.DoesNotExist:
-                    pass
+                User.objects.filter(id=center.assigned_regional_admin).update(
+                    assigned_teacher_status=True,
+                    assigned_regional_admin_status=True
+                )
             
             # Save history of user assign
             if center.assigned_teachers:
                 CenterAssignUser.objects.create(
                     center_id=center.id,
                     users_id=center.assigned_teachers,
-                    date=datetime.now()
+                    date=datetime.now(),
+                    status=True
                 )
             
             if center.assigned_regional_admin:
                 CenterAssignUser.objects.create(
                     center_id=center.id,
                     users_id=center.assigned_regional_admin,
-                    date=datetime.now()
+                    date=datetime.now(),
+                    status=True
                 )
         
-        # Get the saved center
         return get_center_by_id(center_id)
         
     except Exception as e:
@@ -2129,30 +2121,37 @@ def cancel_class_by_teacher(class_cancel_data, request):
         raise e
 
 def delete_class_by_teacher_id(class_id):
-    """Delete class by teacher ID"""
+    """Soft delete class by teacher ID - set active_status to False"""
     logger.info(f"ClassHelper : DeleteClassByTeacherId : Started")
     
     try:
-        with connection.cursor() as cursor:
-            # Get class to find users_id
-            class_sql = "SELECT UsersId FROM Class WHERE Id = %s"
-            cursor.execute(class_sql, [class_id])
-            row = cursor.fetchone()
-            
-            if not row:
-                return None
-            
-            users_id = row[0]
-            
-            # Delete class cancel by teacher
-            cursor.execute("DELETE FROM ClassCancelByTeacher WHERE UserId = %s", [users_id])
-            
-            # Delete student attendance
-            cursor.execute("DELETE FROM StudentAttendance WHERE ClassId = %s", [class_id])
-            
-            # Delete class
-            cursor.execute("DELETE FROM Class WHERE Id = %s", [class_id])
+        # Get class
+        class_obj = ClassModel.objects.filter(id=class_id).first()
+        if not class_obj:
+            logger.error(f"Class not found with ID: {class_id}")
+            return None
         
+        # Get users_id from class
+        users_id = class_obj.users_id
+        
+        # Soft delete - set active_status to False
+        class_obj.active_status = False
+        class_obj.updated_on = datetime.now()
+        class_obj.save()
+        
+        # Soft delete class cancel by teacher
+        ClassCancelByTeacher.objects.filter(user_id=users_id).update(
+            status=False,
+            updated_on=datetime.now()
+        )
+        
+        # Soft delete student attendance
+        StudentAttendance.objects.filter(class_obj_id=class_id).update(
+            status=False,
+            updated_on=datetime.now()
+        )
+        
+        logger.info(f"ClassHelper : DeleteClassByTeacherId : End")
         return {'id': class_id, 'deleted': True}
         
     except Exception as e:
@@ -3372,85 +3371,57 @@ def save_holidays(holidays_data):
         created_by = holidays_data.get('CreatedBy')
         created_on = holidays_data.get('CreatedOn') or datetime.now()
         
-        with connection.cursor() as cursor:
-            if holiday_id > 0:
-                # Get existing holidays with same name
-                existing_sql = """
-                    SELECT Id, CenterId, StartDate, EndDate, Name, Status, CreatedBy
-                    FROM Holidays
-                    WHERE Name = %s
-                """
-                cursor.execute(existing_sql, [name])
-                existing_rows = cursor.fetchall()
-                
-                existing_center_ids = [row[1] for row in existing_rows]
-                
-                # Remove holidays that are not in the new list
-                center_ids_to_remove = [cid for cid in existing_center_ids if cid not in center_ids]
-                if center_ids_to_remove:
-                    placeholders = ','.join(['%s'] * len(center_ids_to_remove))
-                    remove_sql = f"""
-                        DELETE FROM Holidays 
-                        WHERE Name = %s AND CenterId IN ({placeholders})
-                    """
-                    params = [name] + center_ids_to_remove
-                    cursor.execute(remove_sql, params)
-                
-                # Add new holidays
-                center_ids_to_add = [cid for cid in center_ids if cid not in existing_center_ids]
-                for center_id in center_ids_to_add:
-                    insert_sql = """
-                        INSERT INTO Holidays (
-                            StartDate, EndDate, Name, Description, Status, CenterId, CreatedOn, CreatedBy
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """
-                    cursor.execute(insert_sql, [
-                        start_date,
-                        end_date,
-                        name,
-                        description,
-                        status,
-                        center_id,
-                        created_on,
-                        created_by
-                    ])
-                
-                # Update existing holidays
-                for center_id in existing_center_ids:
-                    if center_id in center_ids:
-                        update_sql = """
-                            UPDATE Holidays 
-                            SET StartDate = %s, EndDate = %s, Name = %s, Description = %s, Status = %s
-                            WHERE Name = %s AND CenterId = %s
-                        """
-                        cursor.execute(update_sql, [
-                            start_date,
-                            end_date,
-                            name,
-                            description,
-                            status,
-                            name,
-                            center_id
-                        ])
-                        
-            else:
-                # Insert new holidays
-                for center_id in center_ids:
-                    insert_sql = """
-                        INSERT INTO Holidays (
-                            StartDate, EndDate, Name, Description, Status, CenterId, CreatedOn, CreatedBy
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """
-                    cursor.execute(insert_sql, [
-                        start_date,
-                        end_date,
-                        name,
-                        description,
-                        status,
-                        center_id,
-                        created_on,
-                        created_by
-                    ])
+        if holiday_id > 0:
+            # Get existing holidays with same name
+            existing_holidays = Holidays.objects.filter(name=name, status=True)
+            existing_center_ids = list(existing_holidays.values_list('center_id', flat=True))
+            
+            # Remove holidays that are not in the new list - soft delete
+            center_ids_to_remove = [cid for cid in existing_center_ids if cid not in center_ids]
+            if center_ids_to_remove:
+                Holidays.objects.filter(name=name, center_id__in=center_ids_to_remove).update(
+                    status=False,
+                    updated_on=datetime.now()
+                )
+            
+            # Add new holidays
+            center_ids_to_add = [cid for cid in center_ids if cid not in existing_center_ids]
+            for center_id in center_ids_to_add:
+                Holidays.objects.create(
+                    start_date=start_date,
+                    end_date=end_date,
+                    name=name,
+                    description=description,
+                    status=status,
+                    center_id=center_id,
+                    created_on=created_on,
+                    created_by=created_by
+                )
+            
+            # Update existing holidays
+            for center_id in existing_center_ids:
+                if center_id in center_ids:
+                    Holidays.objects.filter(name=name, center_id=center_id).update(
+                        start_date=start_date,
+                        end_date=end_date,
+                        name=name,
+                        description=description,
+                        status=status,
+                        updated_on=datetime.now()
+                    )
+        else:
+            # Insert new holidays
+            for center_id in center_ids:
+                Holidays.objects.create(
+                    start_date=start_date,
+                    end_date=end_date,
+                    name=name,
+                    description=description,
+                    status=status,
+                    center_id=center_id,
+                    created_on=created_on,
+                    created_by=created_by
+                )
         
         logger.info(f"HolidaysHelper : SaveHolidays : End")
         return {'status': True, 'message': 'Holidays saved successfully'}
@@ -3636,25 +3607,23 @@ def get_all_holidays(status, user_id=0):
         raise e
 
 def delete_holiday_by_id(holiday_id):
-    """Delete holiday by ID"""
+    """Soft delete holiday by ID - set status to False"""
     logger.info(f"HolidaysHelper : DeleteHolidayById : Started")
     
     try:
-        with connection.cursor() as cursor:
-            # Check if holiday exists
-            check_sql = "SELECT Id FROM Holidays WHERE Id = %s"
-            cursor.execute(check_sql, [holiday_id])
-            row = cursor.fetchone()
-            
-            if not row:
-                return None
-            
-            # Delete holiday
-            delete_sql = "DELETE FROM Holidays WHERE Id = %s"
-            cursor.execute(delete_sql, [holiday_id])
-            
-            return {'id': holiday_id, 'deleted': True}
-            
+        holiday = Holidays.objects.filter(id=holiday_id).first()
+        if not holiday:
+            logger.error(f"Holiday not found with ID: {holiday_id}")
+            return None
+        
+        # Soft delete - set status to False
+        holiday.status = False
+        holiday.updated_on = datetime.now()
+        holiday.save()
+        
+        logger.info(f"HolidaysHelper : DeleteHolidayById : End")
+        return {'id': holiday_id, 'deleted': True}
+        
     except Exception as e:
         logger.error(f"HolidaysHelper : DeleteHolidayById : {str(e)}")
         raise e
@@ -4067,9 +4036,14 @@ def update_student_active_or_inactive(student_id, status):
     try:
         status_bool = True if status == 1 else False
         
-        sql = "UPDATE Student SET Status = %s WHERE Id = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [status_bool, student_id])
+        student = Student.objects.filter(id=student_id).first()
+        if not student:
+            logger.error(f"Student not found with ID: {student_id}")
+            return None
+        
+        student.status = status_bool
+        student.updated_on = datetime.now()
+        student.save()
         
         return get_student_by_id(student_id)
         
