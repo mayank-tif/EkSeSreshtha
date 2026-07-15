@@ -1054,7 +1054,7 @@ class ClassDeleteclassbyteacheridPostView(APIView):
         try:
             logger.info("UserView : SaveClass : Started")
             
-            serializer = api_serializers.ClassDeleteClassByTeacherIdQuerySerializer(data=request.data)
+            serializer = api_serializers.ClassDeleteClassByTeacherIdQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
                 return Response(
                     {

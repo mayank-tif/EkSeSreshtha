@@ -2016,13 +2016,16 @@ def cancel_class(class_data):
         reason = class_data.get('reason')
         cancel_by = class_data.get('cancelBy')
         
-        sql = """
-            UPDATE Class 
-            SET Reason = %s, CancelBy = %s, CancelDate = %s, Status = 3
-            WHERE Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [reason, cancel_by, datetime.now(), class_id])
+        class_obj = ClassModel.objects.filter(id=class_id).first()
+        if not class_obj:
+            return None
+        
+        class_obj.reason = reason
+        class_obj.cancel_by = cancel_by
+        class_obj.cancel_date = datetime.now()
+        class_obj.status = 3  # Cancel status
+        class_obj.updated_on = datetime.now()
+        class_obj.save()
         
         return get_class_by_id(class_id)
         
@@ -2094,27 +2097,29 @@ def cancel_class_by_teacher(class_cancel_data, request):
     current_user_id = get_user_id_from_token(request)
     
     try:
-        insert_sql = """
-            INSERT INTO ClassCancelByTeacher (
-                CenterId, UserId, StartingDate, EndingDate, 
-                Reason, CreatedBy ,CreatedOn
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(insert_sql, [
-                class_cancel_data.get('CenterId'),
-                class_cancel_data.get('UsersId'),
-                class_cancel_data.get('StartingDate'),
-                class_cancel_data.get('EndingDate'),
-                class_cancel_data.get('Reason'),
-                current_user_id,
-                datetime.now()
-            ])
-            
-            cursor.execute("SELECT LAST_INSERT_ID()")
-            cancel_id = cursor.fetchone()[0]
+        # Create new cancel record
+        cancel = ClassCancelByTeacher(
+            center_id=class_cancel_data.get('CenterId'),
+            user_id=class_cancel_data.get('UsersId'),
+            starting_date=class_cancel_data.get('StartingDate'),
+            ending_date=class_cancel_data.get('EndingDate'),
+            reason=class_cancel_data.get('Reason'),
+            created_by=current_user_id,
+            created_on=datetime.now(),
+            status=True
+        )
+        cancel.save()
         
-        return {'id': cancel_id}
+        # Update class status
+        ClassModel.objects.filter(
+            center_id=class_cancel_data.get('CenterId'),
+            started_date__date=datetime.now().date()
+        ).update(
+            status=3,  # Cancel status
+            updated_on=datetime.now()
+        )
+        
+        return {'id': cancel.id}
         
     except Exception as e:
         logger.error(f"ClassHelper : CancelClassByTeacher : {str(e)}")
@@ -3381,7 +3386,8 @@ def save_holidays(holidays_data):
             if center_ids_to_remove:
                 Holidays.objects.filter(name=name, center_id__in=center_ids_to_remove).update(
                     status=False,
-                    updated_on=datetime.now()
+                    updated_on=datetime.now(),
+                    updated_by=created_by
                 )
             
             # Add new holidays
@@ -4029,9 +4035,10 @@ def get_student_by_id(student_id):
         logger.error(f"StudentHelper : GetStudentById : {str(e)}")
         raise e
 
-def update_student_active_or_inactive(student_id, status):
+def update_student_active_or_inactive(student_id, status,):
     """Update student active or inactive status"""
     logger.info(f"StudentHelper : UpdateStudentActiveOrInactive : Started")
+    current_user_id = get_user_id_from_token(request)
     
     try:
         status_bool = True if status == 1 else False
