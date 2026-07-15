@@ -11,6 +11,7 @@ from datetime import timedelta
 import os
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from .utils import *
 
 
 logger = logging.getLogger(__name__)
@@ -823,109 +824,102 @@ def update_center_active_or_deactive(center_log_data):
         logger.error(f"CenterHelper : UpdateCenterActiveOrDeactive : {str(e)}")
         raise e
     
-def save_center(center_data):
-    """Save or update center with full .NET logic"""
+def save_center(center_data, request):
+    """Save or update center"""
     logger.info(f"CenterHelper : SaveCenter : Started")
     
     try:
-        center_id = center_data.get('Id', 0)
+        center_id = int(center_data.get('Id', 0))
+        current_user_id = get_user_id_from_token(request)
         
-        with connection.cursor() as cursor:
-            if center_id > 0:
-                # Update existing center
-                # Get existing values to preserve
-                select_sql = "SELECT Status, ClassStatus FROM Center WHERE Id = %s"
-                cursor.execute(select_sql, [center_id])
-                existing = cursor.fetchone()
+        if center_id > 0:
+            # Update existing center - NEVER update CenterGuidId
+            try:
+                center = Center.objects.get(id=center_id)
                 
-                if existing:
-                    update_fields = []
-                    update_values = []
-                    
-                    for key, value in center_data.items():
-                        if key != 'Id' and value is not None:
-                            column_name = {
-                                'CenterName': 'CenterName',
-                                'AssignedTeachers': 'AssignedTeachers',
-                                'AssignedRegionalAdmin': 'AssignedRegionalAdmin',
-                                'StartedDate': 'StartedDate',
-                                'VidhanSabhaId': 'VidhanSabhaId',
-                                'DistrictId': 'DistrictId',
-                                'PanchayatId': 'PanchayatId',
-                                'VillageId': 'VillageId'
-                            }.get(key, key)
-                            
-                            update_fields.append(f"{column_name} = %s")
-                            update_values.append(value)
-                    
-                    # Preserve existing Status and ClassStatus
-                    update_fields.append("Status = %s")
-                    update_values.append(existing[0])
-                    
-                    update_fields.append("ClassStatus = %s")
-                    update_values.append(existing[1])
-                    
-                    update_values.append(center_id)
-                    sql = f"UPDATE Center SET {', '.join(update_fields)} WHERE Id = %s"
-                    cursor.execute(sql, update_values)
-            else:
-                # Insert new center
-                created_date = datetime.now()
+                # Update only the fields that are in the DTO
+                if 'CenterName' in center_data and center_data['CenterName'] is not None:
+                    center.center_name = center_data['CenterName']
+                if 'AssignedTeachers' in center_data and center_data['AssignedTeachers'] is not None:
+                    center.assigned_teachers = center_data['AssignedTeachers']
+                if 'AssignedRegionalAdmin' in center_data and center_data['AssignedRegionalAdmin'] is not None:
+                    center.assigned_regional_admin = center_data['AssignedRegionalAdmin']
+                if 'StartedDate' in center_data and center_data['StartedDate'] is not None:
+                    center.started_date = center_data['StartedDate']
+                if 'VidhanSabhaId' in center_data and center_data['VidhanSabhaId'] is not None:
+                    center.vidhan_sabha_id = center_data['VidhanSabhaId']
+                if 'DistrictId' in center_data and center_data['DistrictId'] is not None:
+                    center.district_id = center_data['DistrictId']
+                if 'PanchayatId' in center_data and center_data['PanchayatId'] is not None:
+                    center.panchayat_id = center_data['PanchayatId']
+                if 'VillageId' in center_data and center_data['VillageId'] is not None:
+                    center.village_id = center_data['VillageId']
                 
-                columns = ['Status', 'ClassStatus', 'CreatedDate']
-                values = [1, 0, created_date]
+                center.updated_on = datetime.now()
+                center.updated_by = current_user_id
+                center.save()
                 
-                field_mapping = {
-                    'CenterGuidId': 'CenterGuidId',
-                    'CenterName': 'CenterName',
-                    'AssignedTeachers': 'AssignedTeachers',
-                    'AssignedRegionalAdmin': 'AssignedRegionalAdmin',
-                    'StartedDate': 'StartedDate',
-                    'VidhanSabhaId': 'VidhanSabhaId',
-                    'DistrictId': 'DistrictId',
-                    'PanchayatId': 'PanchayatId',
-                    'VillageId': 'VillageId'
-                }
-                
-                for key, column in field_mapping.items():
-                    if key in center_data and center_data[key] is not None:
-                        columns.append(column)
-                        values.append(center_data[key])
-                
-                placeholders = ', '.join(['%s'] * len(columns))
-                sql = f"INSERT INTO Center ({', '.join(columns)}) VALUES ({placeholders})"
-                cursor.execute(sql, values)
-                
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                center_id = cursor.fetchone()[0]
-                
-                # Update assigned teacher status
-                assigned_teacher = center_data.get('AssignedTeachers')
-                assigned_regional_admin = center_data.get('AssignedRegionalAdmin')
-                
-                if assigned_teacher:
-                    update_user_sql = "UPDATE Users SET AssignedTeacherStatus = 1, AssignedRegionalAdminStatus = 1 WHERE Id = %s"
-                    cursor.execute(update_user_sql, [assigned_teacher])
-                
-                if assigned_regional_admin:
-                    update_user_sql = "UPDATE Users SET AssignedTeacherStatus = 1, AssignedRegionalAdminStatus = 1 WHERE Id = %s"
-                    cursor.execute(update_user_sql, [assigned_regional_admin])
-                
-                # Save history of user assign
-                if assigned_teacher:
-                    insert_assign_sql = """
-                        INSERT INTO CenterAssignUser (CenterId, UsersId, Date)
-                        VALUES (%s, %s, %s)
-                    """
-                    cursor.execute(insert_assign_sql, [center_id, assigned_teacher, datetime.now()])
-                
-                if assigned_regional_admin:
-                    insert_assign_sql = """
-                        INSERT INTO CenterAssignUser (CenterId, UsersId, Date)
-                        VALUES (%s, %s, %s)
-                    """
-                    cursor.execute(insert_assign_sql, [center_id, assigned_regional_admin, datetime.now()])
+            except Center.DoesNotExist:
+                logger.error(f"Center not found with ID: {center_id}")
+                return None
+        else:
+            
+            center_guid = str(uuid.uuid4())
+            
+            center = Center(
+                center_guid_id=center_guid,
+                center_name=center_data.get('CenterName'),
+                assigned_teachers=center_data.get('AssignedTeachers'),
+                assigned_regional_admin=center_data.get('AssignedRegionalAdmin'),
+                started_date=center_data.get('StartedDate'),
+                vidhan_sabha_id=center_data.get('VidhanSabhaId'),
+                district_id=center_data.get('DistrictId'),
+                panchayat_id=center_data.get('PanchayatId'),
+                village_id=center_data.get('VillageId'),
+                status=True,
+                class_status=False,
+                created_date=datetime.now(),
+                created_by=current_user_id
+            )
+            center.save()
+            center_id = center.id
+            
+            # Update assigned teacher status
+            if center.assigned_teachers:
+                try:
+                    User.objects.filter(id=center.assigned_teachers).update(
+                        assigned_teacher_status=True,
+                        assigned_regional_admin_status=True
+                    )
+                except User.DoesNotExist:
+                    pass
+            
+            # Update assigned regional admin status
+            if center.assigned_regional_admin:
+                try:
+                    User.objects.filter(id=center.assigned_regional_admin).update(
+                        assigned_teacher_status=True,
+                        assigned_regional_admin_status=True
+                    )
+                except User.DoesNotExist:
+                    pass
+            
+            # Save history of user assign
+            if center.assigned_teachers:
+                CenterAssignUser.objects.create(
+                    center_id=center.id,
+                    users_id=center.assigned_teachers,
+                    date=datetime.now()
+                )
+            
+            if center.assigned_regional_admin:
+                CenterAssignUser.objects.create(
+                    center_id=center.id,
+                    users_id=center.assigned_regional_admin,
+                    date=datetime.now()
+                )
         
+        # Get the saved center
         return get_center_by_id(center_id)
         
     except Exception as e:
@@ -1231,10 +1225,6 @@ def save_user(user_data):
                     if created_by:
                         update_fields.append("UpdatedBy = %s")
                         update_values.append(created_by)
-                    else:
-                        # If CreatedBy is not provided, use the user's own ID as fallback
-                        update_fields.append("UpdatedBy = %s")
-                        update_values.append(user_id)
                     
                     # If Type == 1 (SuperAdmin) - can change anything
                     if user_type == 1:
@@ -2347,55 +2337,45 @@ def save_district(district_data):
     logger.info(f"DistrictHelper : SaveDistrict : Started")
     
     try:
-        district_id = district_data.get('Id', 0)
+        district_id = int(district_data.get('Id', 0))
         
         if district_id > 0:
-            # Update existing district
-            update_fields = []
-            update_values = []
-            
-            for key, value in district_data.items():
-                if key != 'Id' and value is not None:
-                    column_name = {
-                        'Name': 'Name',
-                        'Status': 'Status',
-                        'CreatedBy': 'CreatedBy',
-                        'DistrictGuidId': 'DistrictGuidId'
-                    }.get(key, key)
-                    
-                    update_fields.append(f"{column_name} = %s")
-                    update_values.append(value)
-            
-            if update_fields:
-                update_values.append(district_id)
-                sql = f"""
-                    UPDATE District 
-                    SET {', '.join(update_fields)}
-                    WHERE Id = %s
-                """
-                with connection.cursor() as cursor:
-                    cursor.execute(sql, update_values)
+            # Update existing district - NEVER update DistrictGuidId
+            try:
+                district = District.objects.get(id=district_id)
+                
+                # Update fields
+                if 'Name' in district_data and district_data['Name'] is not None:
+                    district.name = district_data['Name']
+                if 'Status' in district_data and district_data['Status'] is not None:
+                    district.status = district_data['Status']
+                if 'CreatedBy' in district_data and district_data['CreatedBy'] is not None:
+                    district.created_by = district_data['CreatedBy']
+                
+                # Always update timestamps
+                district.updated_on = datetime.now()
+                updated_by = district_data.get('UpdatedBy') or district_data.get('CreatedBy')
+                if updated_by:
+                    district.updated_by = updated_by
+                
+                district.save()
+                
+            except District.DoesNotExist:
+                logger.error(f"District not found with ID: {district_id}")
+                return None
         else:
             # Insert new district
             district_guid = str(uuid.uuid4())
-            created_on = datetime.now()
             
-            sql = """
-                INSERT INTO District (
-                    DistrictGuidId, Name, Status, CreatedOn, CreatedBy
-                ) VALUES (%s, %s, %s, %s, %s)
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [
-                    district_guid,
-                    district_data.get('Name'),
-                    district_data.get('Status'),
-                    created_on,
-                    district_data.get('CreatedBy')
-                ])
-                
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                district_id = cursor.fetchone()[0]
+            district = District(
+                district_guid_id=district_guid,
+                name=district_data.get('Name'),
+                status=district_data.get('Status'),
+                created_on=datetime.now(),
+                created_by=district_data.get('CreatedBy')
+            )
+            district.save()
+            district_id = district.id
         
         # Get the saved district
         return get_district_by_id(district_id)
@@ -3688,60 +3668,51 @@ def save_panchayat(panchayat_data):
     logger.info(f"PanchayatHelper : SavePanchayat : Started")
     
     try:
-        panchayat_id = panchayat_data.get('Id', 0)
+        panchayat_id = int(panchayat_data.get('Id', 0))
         
         if panchayat_id > 0:
-            # Update existing panchayat
-            update_fields = []
-            update_values = []
-            
-            for key, value in panchayat_data.items():
-                if key != 'Id' and value is not None:
-                    column_name = {
-                        'Name': 'Name',
-                        'Status': 'Status',
-                        'CreatedBy': 'CreatedBy',
-                        'PanchayatGuidId': 'PanchayatGuidId',
-                        'DistrictId': 'DistrictId',
-                        'VidhanSabhaId': 'VidhanSabhaId'
-                    }.get(key, key)
-                    
-                    update_fields.append(f"{column_name} = %s")
-                    update_values.append(value)
-            
-            if update_fields:
-                update_values.append(panchayat_id)
-                sql = f"""
-                    UPDATE Panchayat 
-                    SET {', '.join(update_fields)}
-                    WHERE Id = %s
-                """
-                with connection.cursor() as cursor:
-                    cursor.execute(sql, update_values)
+            # Update existing panchayat - NEVER update PanchayatGuidId
+            try:
+                panchayat = Panchayat.objects.get(id=panchayat_id)
+                
+                # Update fields
+                if 'Name' in panchayat_data and panchayat_data['Name'] is not None:
+                    panchayat.name = panchayat_data['Name']
+                if 'Status' in panchayat_data and panchayat_data['Status'] is not None:
+                    panchayat.status = panchayat_data['Status']
+                if 'DistrictId' in panchayat_data and panchayat_data['DistrictId'] is not None:
+                    panchayat.district_id = panchayat_data['DistrictId']
+                if 'VidhanSabhaId' in panchayat_data and panchayat_data['VidhanSabhaId'] is not None:
+                    panchayat.vidhan_sabha_id = panchayat_data['VidhanSabhaId']
+                if 'CreatedBy' in panchayat_data and panchayat_data['CreatedBy'] is not None:
+                    panchayat.created_by = panchayat_data['CreatedBy']
+                
+                # Always update timestamps
+                panchayat.updated_on = datetime.now()
+                updated_by = panchayat_data.get('UpdatedBy') or panchayat_data.get('CreatedBy')
+                if updated_by:
+                    panchayat.updated_by = updated_by
+                
+                panchayat.save()
+                
+            except Panchayat.DoesNotExist:
+                logger.error(f"Panchayat not found with ID: {panchayat_id}")
+                return None
         else:
             # Insert new panchayat
             panchayat_guid = str(uuid.uuid4())
-            created_on = datetime.now()
             
-            sql = """
-                INSERT INTO Panchayat (
-                    PanchayatGuidId, Name, Status, CreatedOn, CreatedBy, 
-                    DistrictId, VidhanSabhaId
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [
-                    panchayat_guid,
-                    panchayat_data.get('Name'),
-                    panchayat_data.get('Status'),
-                    created_on,
-                    panchayat_data.get('CreatedBy'),
-                    panchayat_data.get('DistrictId'),
-                    panchayat_data.get('VidhanSabhaId')
-                ])
-                
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                panchayat_id = cursor.fetchone()[0]
+            panchayat = Panchayat(
+                panchayat_guid_id=panchayat_guid,
+                name=panchayat_data.get('Name'),
+                status=panchayat_data.get('Status'),
+                district_id=panchayat_data.get('DistrictId'),
+                vidhan_sabha_id=panchayat_data.get('VidhanSabhaId'),
+                created_on=datetime.now(),
+                created_by=panchayat_data.get('CreatedBy')
+            )
+            panchayat.save()
+            panchayat_id = panchayat.id
         
         # Get the saved panchayat
         return get_panchayat_by_id(panchayat_id)
@@ -4997,53 +4968,53 @@ def save_village(village_data):
         village_id = village_data.get('Id', 0)
         
         if village_id > 0:
-            update_fields = []
-            update_values = []
-            
-            for key, value in village_data.items():
-                if key != 'Id' and value is not None:
-                    column_name = {
-                        'Name': 'Name',
-                        'Status': 'Status',
-                        'CreatedBy': 'CreatedBy',
-                        'VillageGuidId': 'VillageGuidId',
-                        'DistrictId': 'DistrictId',
-                        'VidhanSabhaId': 'VidhanSabhaId',
-                        'PanchayatId': 'PanchayatId'
-                    }.get(key, key)
-                    
-                    update_fields.append(f"{column_name} = %s")
-                    update_values.append(value)
-            
-            if update_fields:
-                update_values.append(village_id)
-                sql = f"UPDATE Village SET {', '.join(update_fields)} WHERE Id = %s"
-                with connection.cursor() as cursor:
-                    cursor.execute(sql, update_values)
+            # Update existing village - NEVER update VillageGuidId
+            try:
+                village = Village.objects.get(id=village_id)
+                
+                # Update fields
+                if 'Name' in village_data and village_data['Name'] is not None:
+                    village.name = village_data['Name']
+                if 'Status' in village_data and village_data['Status'] is not None:
+                    village.status = village_data['Status']
+                if 'DistrictId' in village_data and village_data['DistrictId'] is not None:
+                    village.district_id = village_data['DistrictId']
+                if 'VidhanSabhaId' in village_data and village_data['VidhanSabhaId'] is not None:
+                    village.vidhan_sabha_id = village_data['VidhanSabhaId']
+                if 'PanchayatId' in village_data and village_data['PanchayatId'] is not None:
+                    village.panchayat_id = village_data['PanchayatId']
+                if 'CreatedBy' in village_data and village_data['CreatedBy'] is not None:
+                    village.created_by = village_data['CreatedBy']
+                
+                # Always update timestamps
+                village.updated_on = datetime.now()
+                updated_by = village_data.get('UpdatedBy') or village_data.get('CreatedBy')
+                if updated_by:
+                    village.updated_by = updated_by
+                
+                village.save()
+                
+            except Village.DoesNotExist:
+                logger.error(f"Village not found with ID: {village_id}")
+                return None
         else:
+            # Insert new village
             village_guid = str(uuid.uuid4())
-            created_on = datetime.now()
             
-            sql = """
-                INSERT INTO Village (
-                    VillageGuidId, Name, Status, CreatedOn, CreatedBy,
-                    DistrictId, VidhanSabhaId, PanchayatId
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [
-                    village_guid,
-                    village_data.get('Name'),
-                    village_data.get('Status'),
-                    created_on,
-                    village_data.get('CreatedBy'),
-                    village_data.get('DistrictId'),
-                    village_data.get('VidhanSabhaId'),
-                    village_data.get('PanchayatId')
-                ])
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                village_id = cursor.fetchone()[0]
+            village = Village(
+                village_guid_id=village_guid,
+                name=village_data.get('Name'),
+                status=village_data.get('Status'),
+                district_id=village_data.get('DistrictId'),
+                vidhan_sabha_id=village_data.get('VidhanSabhaId'),
+                panchayat_id=village_data.get('PanchayatId'),
+                created_on=datetime.now(),
+                created_by=village_data.get('CreatedBy')
+            )
+            village.save()
+            village_id = village.id
         
+        # Get the saved village
         return get_village_by_id(village_id)
         
     except Exception as e:

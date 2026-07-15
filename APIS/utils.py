@@ -20,7 +20,38 @@ from .serializers import *
 from EkSeSreshtha.env_details import *
 from .models import *
 
+from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
+
 SHA256_HEX_LENGTH = 64
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+def get_user_id_from_token(request):
+    """
+    Extract user ID from JWT token in the request header.
+    Returns user_id if found, None otherwise.
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return None
+        
+        # Extract token from "Bearer <token>"
+        parts = auth_header.split(' ')
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return None
+        
+        token = parts[1]
+        access_token = AccessToken(token)
+        user_id = access_token.get('user_id')
+        return user_id
+        
+    except (TokenError, InvalidToken, Exception) as e:
+        logger.error(f"Error extracting user ID from token: {str(e)}")
+        return None
 
 
 # ==========Validate Mobile number function===============

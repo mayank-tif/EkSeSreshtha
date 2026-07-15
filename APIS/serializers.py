@@ -221,24 +221,24 @@ class AllCenterStatusDtoSerializer(serializers.Serializer):
 
 class CenterSaveCenterRequestSerializer(RequestSerializer):
     foreign_key_fields = {
-        "AssignedTeachers": Teacher,
-        "AssignedRegionalAdmin": RegionalAdmin,
+        "AssignedTeachers": User,
+        "AssignedRegionalAdmin": User,
         "VidhanSabhaId": VidhanSabha,
         "DistrictId": District,
         "PanchayatId": Panchayat,
         "VillageId": Village,
     }
 
-    Id = optional_int()
-    CenterGuidId = optional_char()
-    CenterName = required_char()
-    AssignedTeachers = required_int()
-    AssignedRegionalAdmin = required_int()
-    StartedDate = optional_datetime()
-    VidhanSabhaId = required_int()
-    DistrictId = required_int()
-    PanchayatId = required_int()
-    VillageId = optional_int()
+    Id = serializers.IntegerField(required=False, allow_null=True)
+    CenterGuidId = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    CenterName = serializers.CharField(required=True)
+    AssignedTeachers = serializers.IntegerField(required=True)
+    AssignedRegionalAdmin = serializers.IntegerField(required=True)
+    StartedDate = serializers.DateTimeField(required=False, allow_null=True)
+    VidhanSabhaId = serializers.IntegerField(required=True)
+    DistrictId = serializers.IntegerField(required=True)
+    PanchayatId = serializers.IntegerField(required=True)
+    VillageId = serializers.IntegerField(required=False, allow_null=True)
 
 
 
@@ -259,7 +259,7 @@ class CenterDetailDtoSerializer(serializers.Serializer):
     regionalAdminId = serializers.IntegerField(source='RegionalAdminId', allow_null=True, required=False)
     regionalAdminName = serializers.CharField(source='RegionalAdminName', allow_null=True, required=False)
     totalStudents = serializers.IntegerField(source='TotalStudents', allow_null=True, required=False)
-    teacher = serializers.DictField(source='teacher', allow_null=True, required=False)
+    teacher = serializers.DictField(allow_null=True, required=False)
 
 class UserDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()

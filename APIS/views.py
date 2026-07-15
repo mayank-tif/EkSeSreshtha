@@ -286,36 +286,50 @@ class AnnouncementGetannouncementGetView(APIView):
 #---------------------------------------------------------
 
 class CenterSavecenterPostView(APIView):
-    """Saves or updates a center and creates a guid when needed."""
+    """Saves or updates a center."""
     
     def post(self, request):
         try:
-            logger.info("UserView : LoginSuperAdmin : Started")
+            logger.info("CenterView : SaveCenter : Started")
             
-            serializer = api_serializers.CenterSaveCenterRequestSerializer(data=request.data)
+            data = request.data.copy()
+            
+            # If updating, remove CenterGuidId to prevent duplicate key error
+            if data.get('Id') and int(data.get('Id')) > 0:
+                data.pop('CenterGuidId', None)
+            
+            # Parse StartedDate
+            if 'StartedDate' in data and data['StartedDate']:
+                try:
+                    date_str = data['StartedDate'].replace('Z', '+00:00')
+                    data['StartedDate'] = datetime.fromisoformat(date_str)
+                except (ValueError, AttributeError):
+                    pass
+            
+            logger.info(f"CenterSavecenterPostView data: {data}")
+            
+            serializer = api_serializers.CenterSaveCenterRequestSerializer(data=data)
             if not serializer.is_valid():
+                logger.error(f"CenterSavecenterPostView validation errors: {serializer.errors}")
                 return Response(
                     {
                         "status": False,
                         "error": "Invalid parameters",
+                        "details": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
             center_data = serializer.validated_data
-            
-            # Generate CenterGuidId if not provided
-            if not center_data.get('CenterGuidId'):
-                center_data['CenterGuidId'] = str(uuid.uuid4())
-            
-            saved_center = save_center(center_data)
+            saved_center = save_center(center_data, request)
             
             if saved_center:
+                response_serializer = api_serializers.CenterDetailDtoSerializer(saved_center)
                 return Response(
                     {
                         "status": True,
-                        "data": saved_center,
+                        "data": response_serializer.data,
                         "message": "Center save successfully",
                         "code": status.HTTP_200_OK
                     },
@@ -332,7 +346,7 @@ class CenterSavecenterPostView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"UserView : SaveCenter : {str(e)}")
+            logger.error(f"CenterView : SaveCenter : {str(e)}")
             return Response(
                 {
                     "status": False,
