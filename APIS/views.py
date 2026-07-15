@@ -3267,23 +3267,100 @@ class UserSaveSuperAdminView(APIView):
         try:
             logger.info("UserView : SaveSuperAdmin : Started")
             
-            serializer = api_serializers.SuperAdminDtoSerializer(data=request.data)
+            data = request.data.copy()
+            
+            # Get user ID from token for CreatedBy if not provided
+            if not data.get('CreatedBy'):
+                current_user_id = get_user_id_from_token(request)
+                if current_user_id:
+                    data['CreatedBy'] = current_user_id
+            
+            # Parse dates from ISO format
+            if 'CreatedOn' in data and data['CreatedOn']:
+                try:
+                    date_str = data['CreatedOn'].replace('Z', '+00:00')
+                    data['CreatedOn'] = datetime.fromisoformat(date_str)
+                except (ValueError, AttributeError):
+                    data['CreatedOn'] = None
+            
+            if 'EnrollmentDate' in data and data['EnrollmentDate']:
+                try:
+                    date_str = data['EnrollmentDate'].replace('Z', '+00:00')
+                    data['EnrollmentDate'] = datetime.fromisoformat(date_str)
+                except (ValueError, AttributeError):
+                    data['EnrollmentDate'] = None
+            
+            # Validate Age
+            if data.get('Age'):
+                try:
+                    age = int(data['Age'])
+                    if age > 100:
+                        data['Age'] = None
+                except (ValueError, TypeError):
+                    data['Age'] = None
+            
+            # Handle Status
+            if 'Status' in data and isinstance(data['Status'], str):
+                data['Status'] = data['Status'].lower() in ['true', '1', 'yes']
+            
+            # Handle Contact
+            if data.get('Contact'):
+                data['Contact'] = str(data['Contact']).lstrip('0')
+            
+            logger.info(f"UserSaveSuperAdminView data: {data}")
+            
+            # Use SuperAdminDtoSerializer for validation
+            serializer = api_serializers.SuperAdminDtoSerializer(data=data)
             if not serializer.is_valid():
+                logger.error(f"UserSaveSuperAdminView validation errors: {serializer.errors}")
                 return Response(
                     {
                         "status": False,
                         "error": "Invalid parameters",
+                        "details": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            user_data = serializer.validated_data
+            # Get validated data
+            validated_data = serializer.validated_data
+            
+            # Convert SuperAdminDto to UserDto format (matches .NET ConvertSuperAdminUsertoToUserDto)
+            user_data = {
+                'Id': validated_data.get('Id'),
+                'EnrolmentRollId': validated_data.get('EnrolmentRollId'),
+                'Name': validated_data.get('Name'),
+                'Token': validated_data.get('Token'),
+                'FullAddress': validated_data.get('FullAddress'),
+                'Status': validated_data.get('Status'),
+                'Age': validated_data.get('Age'),
+                'Gender': validated_data.get('Gender'),
+                'DateOfBirth': validated_data.get('DateOfBirth'),
+                'PhoneNumber': validated_data.get('PhoneNumber'),
+                'WhatsApp': validated_data.get('WhatsApp'),
+                'Email': validated_data.get('Email'),
+                'Contact': validated_data.get('Contact'),
+                'RoleId': validated_data.get('RoleId'),
+                'Picture': validated_data.get('Picture'),
+                'LastLoginTime': validated_data.get('LastLoginTime'),
+                'Password': validated_data.get('Password'),
+                'Type': validated_data.get('Type'),
+                'CreatedBy': validated_data.get('CreatedBy'),
+                'CreatedOn': validated_data.get('CreatedOn'),
+                'EnrollmentDate': validated_data.get('EnrollmentDate'),
+            }
+            
+            # Remove None values
+            user_data = {k: v for k, v in user_data.items() if v is not None}
             
             # Hash password
-            if user_data.get('password'):
-                user_data['password'] = hash_password(user_data['password'])
+            if user_data.get('Password'):
+                user_data['Password'] = hash_password(user_data['Password'])
             
+            logger.info(f"UserSaveSuperAdminView converted data: {user_data}")
+            
+            # Call save_user (matches .NET SaveLogin)
             saved_user = save_user(user_data)
             
             if saved_user:
@@ -3316,7 +3393,8 @@ class UserSaveSuperAdminView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
-
+            
+            
 class UserUpdateDeviceIdView(APIView):
     """Updates user device ID"""
     
