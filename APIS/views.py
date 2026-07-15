@@ -2375,14 +2375,43 @@ class StudentSavestudentPostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserView : LoginSuperAdmin : Started")
+            logger.info("UserView : SaveStudent : Started")
             
-            serializer = api_serializers.StudentSaveStudentRequestSerializer(data=request.data)
+            # Get data from request
+            data = request.data.copy()
+            
+            # Parse dates from ISO format
+            date_fields = ['JoiningDate', 'CreatedOn']
+            for field in date_fields:
+                if field in data and data[field]:
+                    try:
+                        date_str = data[field].replace('Z', '+00:00')
+                        data[field] = datetime.fromisoformat(date_str)
+                    except (ValueError, AttributeError):
+                        return Response(
+                            {
+                                "status": False,
+                                "error": f"Invalid date format for {field}",
+                                "code": status.HTTP_400_BAD_REQUEST
+                            },
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+            
+            # Convert Bpl to boolean
+            if 'Bpl' in data:
+                if isinstance(data['Bpl'], str):
+                    data['Bpl'] = data['Bpl'].lower() in ['true', '1', 'yes']
+            
+            logger.info(f"StudentSavestudentPostView data: {data}")
+            
+            serializer = api_serializers.StudentSaveStudentRequestSerializer(data=data)
             if not serializer.is_valid():
+                logger.error(f"StudentSavestudentPostView validation errors: {serializer.errors}")
                 return Response(
                     {
                         "status": False,
                         "error": "Invalid parameters",
+                        "details": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -3398,9 +3427,78 @@ class UserSaveUserView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class UserUpdateSuperAdminUserView(UserSaveUserView):
+class UserUpdateSuperAdminUserView(APIView):
     """Updates a super admin user"""
-    pass
+    
+    def post(self, request):
+        try:
+            logger.info("UserView : UpdateSuperAdminUser : Started")
+            
+            # Get data from request
+            data = request.data.copy()
+            
+            # Hash password if present
+            if data.get('Password'):
+                data['Password'] = hash_password(data['Password'])
+            
+            # Parse dates from ISO format
+            date_fields = ['CreatedOn', 'EnrollmentDate']
+            for field in date_fields:
+                if field in data and data[field]:
+                    try:
+                        date_str = data[field].replace('Z', '+00:00')
+                        data[field] = datetime.fromisoformat(date_str)
+                    except (ValueError, AttributeError):
+                        pass
+            
+            logger.info(f"UserUpdateSuperAdminUserView data: {data}")
+            
+            serializer = api_serializers.UserSaveUserRequestSerializer(data=data)
+            if not serializer.is_valid():
+                logger.error(f"UserUpdateSuperAdminUserView validation errors: {serializer.errors}")
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "details": serializer.errors,
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            user_data = serializer.validated_data
+            saved_user = update_super_admin_user(user_data)
+            
+            if saved_user:
+                return Response(
+                    {
+                        "status": True,
+                        "data": saved_user,
+                        "message": "Data save successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "data doesn't save",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"UserView : UpdateSuperAdminUser : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 class UserGetUserByIdView(APIView):
     """Get user by ID"""

@@ -1902,6 +1902,43 @@ def search_data(search_type, query_string):
         logger.error(f"UserHelper : SearchData : {str(e)}")
         raise e
 
+def update_super_admin_user(user_data):
+    """Update super admin user - matches .NET logic exactly"""
+    logger.info(f"UserHelper : UpdateSuperAdminUser : Started")
+    
+    try:
+        user_id = user_data.get('Id')
+        if not user_id:
+            logger.error("User ID is required")
+            return None
+        
+        # Get existing user
+        try:
+            existing_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            logger.error(f"User not found with ID: {user_id}")
+            return None
+        
+        # Preserve these fields from existing user (matches .NET logic)
+        user_data['Type'] = existing_user.type
+        user_data['EnrolmentRollId'] = existing_user.enrolment_roll_id
+        user_data['Password'] = existing_user.password
+        user_data['CreatedOn'] = existing_user.created_on
+        user_data['Status'] = existing_user.status
+        
+        # Save the user using the existing save_user function
+        saved_user = save_user(user_data)
+        
+        if saved_user:
+            logger.info(f"UserHelper : UpdateSuperAdminUser : End")
+            return saved_user
+        else:
+            return None
+        
+    except Exception as e:
+        logger.error(f"UserHelper : UpdateSuperAdminUser : {str(e)}")
+        raise e
+
 #---------------------------------------------------------
 # Class APIs Helper Functions
 #---------------------------------------------------------
@@ -3800,137 +3837,142 @@ def save_student(student_data):
     try:
         student_id = student_data.get('Id', 0)
         
-        with connection.cursor() as cursor:
-            if student_id > 0:
-                # Get existing student
-                select_sql = "SELECT Status, LastClass, ActiveClassStatus, Counter FROM Student WHERE Id = %s"
-                cursor.execute(select_sql, [student_id])
-                existing = cursor.fetchone()
+        if student_id > 0:
+            # Update existing student
+            try:
+                student = Student.objects.get(id=student_id)
                 
-                if existing:
-                    update_fields = []
-                    update_values = []
-                    
-                    for key, value in student_data.items():
-                        if key != 'Id' and value is not None:
-                            column_name = {
-                                'EnrollmentId': 'EnrollmentId',
-                                'FullName': 'FullName',
-                                'MotherName': 'MotherName',
-                                'FatherName': 'FatherName',
-                                'Age': 'Age',
-                                'Gender': 'Gender',
-                                'Contact': 'Contact',
-                                'DateOfBirth': 'DateOfBirth',
-                                'Email': 'Email',
-                                'Remarks': 'Remarks',
-                                'Grade': 'Grade',
-                                'PhoneNumber': 'PhoneNumber',
-                                'ProfileImage': 'ProfileImage',
-                                'WhatsApp': 'WhatsApp',
-                                'FullAddress': 'FullAddress',
-                                'JoiningDate': 'JoiningDate',
-                                'VidhanSabhaId': 'VidhanSabhaId',
-                                'DistrictId': 'DistrictId',
-                                'PanchayatId': 'PanchayatId',
-                                'CenterId': 'CenterId',
-                                'CreatedBy': 'CreatedBy',
-                                'VillageId': 'VillageId',
-                                'Education': 'Education',
-                                'FatherMobileNumber': 'FatherMobileNumber',
-                                'FatherOccupation': 'FatherOccupation',
-                                'MotherMobileNumber': 'MotherMobileNumber',
-                                'MotherOccupation': 'MotherOccupation',
-                                'Category': 'Category',
-                                'Bpl': 'Bpl',
-                                'SchoolId': 'SchoolId',
-                                'SchoolName': 'SchoolName'
-                            }.get(key, key)
-                            
-                            update_fields.append(f"{column_name} = %s")
-                            update_values.append(value)
-                    
-                    # Keep existing values for certain fields
-                    update_fields.append("Status = %s")
-                    update_values.append(existing[0])
-                    
-                    update_fields.append("LastClass = %s")
-                    update_values.append(existing[1])
-                    
-                    update_fields.append("ActiveClassStatus = %s")
-                    update_values.append(existing[2])
-                    
-                    update_fields.append("Counter = %s")
-                    update_values.append(existing[3])
-                    
-                    update_fields.append("CreatedOn = %s")
-                    update_values.append(datetime.now())
-                    
-                    update_fields.append("ManualAttendance = %s")
-                    update_values.append(0)
-                    
-                    update_values.append(student_id)
-                    sql = f"UPDATE Student SET {', '.join(update_fields)} WHERE Id = %s"
-                    cursor.execute(sql, update_values)
-            else:
-                # Insert new student
-                enrollment_id = student_data.get('EnrollmentId') or str(uuid.uuid4())
-                created_on = datetime.now()
+                # Preserve these fields from existing record
+                status = student.status
+                last_class = student.last_class
+                active_class_status = student.active_class_status
+                counter = student.counter
                 
-                columns = ['EnrollmentId', 'Status', 'CreatedOn', 'ActiveClassStatus', 'ManualAttendance']
-                values = [enrollment_id, 1, created_on, 0, 0]
+                # Update fields from request data
+                if student_data.get('EnrollmentId') is not None:
+                    student.enrollment_id = student_data['EnrollmentId']
+                if student_data.get('FullName') is not None:
+                    student.full_name = student_data['FullName']
+                if student_data.get('MotherName') is not None:
+                    student.mother_name = student_data['MotherName']
+                if student_data.get('FatherName') is not None:
+                    student.father_name = student_data['FatherName']
+                if student_data.get('Age') is not None:
+                    student.age = student_data['Age']
+                if student_data.get('Gender') is not None:
+                    student.gender = student_data['Gender']
+                if student_data.get('Contact') is not None:
+                    student.contact = student_data['Contact']
+                if student_data.get('DateOfBirth') is not None:
+                    student.date_of_birth = student_data['DateOfBirth']
+                if student_data.get('Email') is not None:
+                    student.email = student_data['Email']
+                if student_data.get('Remarks') is not None:
+                    student.remarks = student_data['Remarks']
+                if student_data.get('Grade') is not None:
+                    student.grade = student_data['Grade']
+                if student_data.get('PhoneNumber') is not None:
+                    student.phone_number = student_data['PhoneNumber']
+                if student_data.get('ProfileImage') is not None:
+                    student.profile_image = student_data['ProfileImage']
+                if student_data.get('WhatsApp') is not None:
+                    student.whats_app = student_data['WhatsApp']
+                if student_data.get('FullAddress') is not None:
+                    student.full_address = student_data['FullAddress']
+                if student_data.get('JoiningDate') is not None:
+                    student.joining_date = student_data['JoiningDate']
+                if student_data.get('VidhanSabhaId') is not None:
+                    student.vidhan_sabha_id = student_data['VidhanSabhaId']
+                if student_data.get('DistrictId') is not None:
+                    student.district_id = student_data['DistrictId']
+                if student_data.get('PanchayatId') is not None:
+                    student.panchayat_id = student_data['PanchayatId']
+                if student_data.get('CenterId') is not None:
+                    student.center_id = student_data['CenterId']
+                # if student_data.get('CreatedBy') is not None:
+                #     student.created_by = student_data['CreatedBy']
+                if student_data.get('VillageId') is not None:
+                    student.village_id = student_data['VillageId']
+                if student_data.get('Education') is not None:
+                    student.education = student_data['Education']
+                if student_data.get('FatherMobileNumber') is not None:
+                    student.father_mobile_number = student_data['FatherMobileNumber']
+                if student_data.get('FatherOccupation') is not None:
+                    student.father_occupation = student_data['FatherOccupation']
+                if student_data.get('MotherMobileNumber') is not None:
+                    student.mother_mobile_number = student_data['MotherMobileNumber']
+                if student_data.get('MotherOccupation') is not None:
+                    student.mother_occupation = student_data['MotherOccupation']
+                if student_data.get('Category') is not None:
+                    student.category = student_data['Category']
+                if student_data.get('SchoolId') is not None:
+                    student.school_id = student_data['SchoolId']
                 
-                field_mapping = {
-                    'FullName': 'FullName',
-                    'MotherName': 'MotherName',
-                    'FatherName': 'FatherName',
-                    'Age': 'Age',
-                    'Gender': 'Gender',
-                    'Contact': 'Contact',
-                    'DateOfBirth': 'DateOfBirth',
-                    'Email': 'Email',
-                    'Remarks': 'Remarks',
-                    'Grade': 'Grade',
-                    'PhoneNumber': 'PhoneNumber',
-                    'ProfileImage': 'ProfileImage',
-                    'WhatsApp': 'WhatsApp',
-                    'FullAddress': 'FullAddress',
-                    'JoiningDate': 'JoiningDate',
-                    'VidhanSabhaId': 'VidhanSabhaId',
-                    'DistrictId': 'DistrictId',
-                    'PanchayatId': 'PanchayatId',
-                    'CenterId': 'CenterId',
-                    'CreatedBy': 'CreatedBy',
-                    'VillageId': 'VillageId',
-                    'Education': 'Education',
-                    'FatherMobileNumber': 'FatherMobileNumber',
-                    'FatherOccupation': 'FatherOccupation',
-                    'MotherMobileNumber': 'MotherMobileNumber',
-                    'MotherOccupation': 'MotherOccupation',
-                    'Category': 'Category',
-                    'Bpl': 'Bpl',
-                    'SchoolId': 'SchoolId',
-                    'SchoolName': 'SchoolName'
-                }
+                # Preserve existing values (matches .NET logic)
+                student.bpl = False
+                student.status = status
+                student.last_class = last_class
+                student.active_class_status = active_class_status
+                student.counter = counter
+                student.updated_on = datetime.now()
+                student.updated_by = student_data.get('CreatedBy')
+                student.manual_attendance = 0
                 
-                for key, column in field_mapping.items():
-                    if key in student_data and student_data[key] is not None:
-                        columns.append(column)
-                        values.append(student_data[key])
+                student.save()
                 
-                placeholders = ', '.join(['%s'] * len(columns))
-                sql = f"INSERT INTO Student ({', '.join(columns)}) VALUES ({placeholders})"
-                cursor.execute(sql, values)
-                
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                student_id = cursor.fetchone()[0]
+            except Student.DoesNotExist:
+                logger.error(f"Student not found with ID: {student_id}")
+                return None
+        else:
+            # Insert new student
+            enrollment_id = student_data.get('EnrollmentId') or str(uuid.uuid4())
+            
+            student = Student(
+                enrollment_id=enrollment_id,
+                full_name=student_data.get('FullName'),
+                mother_name=student_data.get('MotherName'),
+                father_name=student_data.get('FatherName'),
+                age=student_data.get('Age'),
+                gender=student_data.get('Gender'),
+                contact=student_data.get('Contact'),
+                date_of_birth=student_data.get('DateOfBirth'),
+                email=student_data.get('Email'),
+                remarks=student_data.get('Remarks'),
+                grade=student_data.get('Grade'),
+                phone_number=student_data.get('PhoneNumber'),
+                profile_image=student_data.get('ProfileImage'),
+                whats_app=student_data.get('WhatsApp'),
+                full_address=student_data.get('FullAddress'),
+                joining_date=student_data.get('JoiningDate'),
+                vidhan_sabha_id=student_data.get('VidhanSabhaId'),
+                district_id=student_data.get('DistrictId'),
+                panchayat_id=student_data.get('PanchayatId'),
+                center_id=student_data.get('CenterId'),
+                created_by=student_data.get('CreatedBy'),
+                village_id=student_data.get('VillageId'),
+                education=student_data.get('Education'),
+                father_mobile_number=student_data.get('FatherMobileNumber'),
+                father_occupation=student_data.get('FatherOccupation'),
+                mother_mobile_number=student_data.get('MotherMobileNumber'),
+                mother_occupation=student_data.get('MotherOccupation'),
+                category=student_data.get('Category'),
+                bpl=student_data.get('Bpl') or False,
+                school_id=student_data.get('SchoolId'),
+                status=True,
+                created_on=datetime.now(),
+                active_class_status=False,
+                manual_attendance=0
+            )
+            student.save()
+            student_id = student.id
         
+        # Get the saved student
         return get_student_by_id(student_id)
         
     except Exception as e:
         logger.error(f"StudentHelper : SaveStudent : {str(e)}")
         raise e
-
+    
 def get_student_by_id(student_id):
     """Get student by ID"""
     logger.info(f"StudentHelper : GetStudentById : Started")
@@ -4767,48 +4809,47 @@ def save_vidhan_sabha(vidhan_sabha_data):
         vidhan_sabha_id = vidhan_sabha_data.get('Id', 0)
         
         if vidhan_sabha_id > 0:
-            update_fields = []
-            update_values = []
-            
-            for key, value in vidhan_sabha_data.items():
-                if key != 'Id' and value is not None:
-                    column_name = {
-                        'Name': 'Name',
-                        'Status': 'Status',
-                        'CreatedBy': 'CreatedBy',
-                        'VidhanSabhaGuidId': 'VidhanSabhaGuidId',
-                        'DistrictId': 'DistrictId'
-                    }.get(key, key)
-                    
-                    update_fields.append(f"{column_name} = %s")
-                    update_values.append(value)
-            
-            if update_fields:
-                update_values.append(vidhan_sabha_id)
-                sql = f"UPDATE VidhanSabha SET {', '.join(update_fields)} WHERE Id = %s"
-                with connection.cursor() as cursor:
-                    cursor.execute(sql, update_values)
+            # Update existing VidhanSabha
+            try:
+                vidhan_sabha = VidhanSabha.objects.get(id=vidhan_sabha_id)
+                
+                # Update fields (never update VidhanSabhaGuidId)
+                if 'Name' in vidhan_sabha_data and vidhan_sabha_data['Name'] is not None:
+                    vidhan_sabha.name = vidhan_sabha_data['Name']
+                if 'Status' in vidhan_sabha_data and vidhan_sabha_data['Status'] is not None:
+                    vidhan_sabha.status = vidhan_sabha_data['Status']
+                if 'DistrictId' in vidhan_sabha_data and vidhan_sabha_data['DistrictId'] is not None:
+                    vidhan_sabha.district_id = vidhan_sabha_data['DistrictId']
+                
+                # Always update timestamps
+                vidhan_sabha.updated_on = datetime.now()
+                updated_by = vidhan_sabha_data.get('UpdatedBy') or vidhan_sabha_data.get('CreatedBy')
+                if updated_by:
+                    vidhan_sabha.updated_by = updated_by
+                
+                vidhan_sabha.save()
+                
+            except VidhanSabha.DoesNotExist:
+                logger.error(f"VidhanSabha not found with ID: {vidhan_sabha_id}")
+                return None
         else:
-            vidhan_sabha_guid = str(uuid.uuid4())
-            created_on = datetime.now()
+            # Insert new VidhanSabha
+            vidhan_sabha_guid = vidhan_sabha_data.get('VidhanSabhaGuidId')
+            if not vidhan_sabha_guid or vidhan_sabha_guid == '00000000-0000-0000-0000-000000000000':
+                vidhan_sabha_guid = str(uuid.uuid4())
             
-            sql = """
-                INSERT INTO VidhanSabha (
-                    VidhanSabhaGuidId, Name, Status, CreatedOn, CreatedBy, DistrictId
-                ) VALUES (%s, %s, %s, %s, %s, %s)
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [
-                    vidhan_sabha_guid,
-                    vidhan_sabha_data.get('Name'),
-                    vidhan_sabha_data.get('Status'),
-                    created_on,
-                    vidhan_sabha_data.get('CreatedBy'),
-                    vidhan_sabha_data.get('DistrictId')
-                ])
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                vidhan_sabha_id = cursor.fetchone()[0]
+            vidhan_sabha = VidhanSabha(
+                vidhan_sabha_guid_id=vidhan_sabha_guid,
+                name=vidhan_sabha_data.get('Name'),
+                status=vidhan_sabha_data.get('Status'),
+                district_id=vidhan_sabha_data.get('DistrictId'),
+                created_on=datetime.now(),
+                created_by=vidhan_sabha_data.get('CreatedBy')
+            )
+            vidhan_sabha.save()
+            vidhan_sabha_id = vidhan_sabha.id
         
+        # Get the saved VidhanSabha with related data
         return get_vidhan_sabha_by_id(vidhan_sabha_id)
         
     except Exception as e:
