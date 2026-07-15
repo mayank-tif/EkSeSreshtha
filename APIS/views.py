@@ -802,7 +802,7 @@ class ClassSaveclassPostView(APIView):
             
             data = serializer.validated_data
             class_data = {
-                'classEnrolmentId': data.get('ClassEnrolmentId') or str(uuid.uuid4()),
+                'classEnrolmentId': data.get('ClassEnrolmentId'),
                 'name': data.get('Name'),
                 'centerId': data.get('CenterId'),
                 'userId': data.get('UserId'),
