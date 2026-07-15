@@ -2486,12 +2486,18 @@ def get_class_count_by_month(center_id, start_date, end_date):
         raise e
 
 def get_total_gender_ratio_by_center_id(center_id, start_date, end_date):
-    """Get total gender ratio by center ID"""
+    """Get total gender ratio by center ID - matches C# logic exactly"""
     logger.info(f"DashboardHelper : GetTotalGenderRatioByCenterId : Started")
     
     try:
+        result = {
+            "Status": True,
+            "Data": []
+        }
+        
         with connection.cursor() as cursor:
-            # Get total students
+            # Get total students WITH date filter (matches C# exactly)
+            # C#: .Where(x => x.CenterId == centerId && x.CreatedOn.Value.Date >= startDate.Date && x.CreatedOn.Value.Date <= endDate.Date)
             total_sql = """
                 SELECT COUNT(*) 
                 FROM Student 
@@ -2502,7 +2508,8 @@ def get_total_gender_ratio_by_center_id(center_id, start_date, end_date):
             cursor.execute(total_sql, [center_id, start_date.date(), end_date.date()])
             total_students = cursor.fetchone()[0] or 0
             
-            # Get female students
+            # Get female students WITH date filter (matches C# exactly)
+            # C#: .Where(x => x.CenterId == centerId && x.Gender == "FeMale" && x.CreatedOn.Value.Date >= startDate.Date && x.CreatedOn.Value.Date <= endDate.Date)
             female_sql = """
                 SELECT COUNT(*) 
                 FROM Student 
@@ -2514,29 +2521,18 @@ def get_total_gender_ratio_by_center_id(center_id, start_date, end_date):
             cursor.execute(female_sql, [center_id, start_date.date(), end_date.date()])
             female_count = cursor.fetchone()[0] or 0
             
-            # Get male students
-            male_sql = """
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE CenterId = %s 
-                AND Gender = 'Male'
-                AND DATE(CreatedOn) >= %s 
-                AND DATE(CreatedOn) <= %s
-            """
-            cursor.execute(male_sql, [center_id, start_date.date(), end_date.date()])
-            male_count = cursor.fetchone()[0] or 0
+            # Get male students (from total students list which already has date filter)
+            # C#: int MaleCount = TotalStudents.Where(x => x.Gender == "Male").ToList().Count();
+            # Since we already have total_students and female_count, we can calculate male_count
+            male_count = total_students - female_count
             
-            result = {
-                "status": True,
-                "data": [
-                    {
-                        "feMaleCount": female_count,
-                        "maleCount": male_count,
-                        "totalStudentCount": total_students
-                    }
-                ]
-            }
+            result["Data"].append({
+                "FeMaleCount": female_count,
+                "MaleCount": male_count,
+                "TotalStudentCount": total_students
+            })
             
+            logger.info(f"DashboardHelper : GetTotalGenderRatioByCenterId : End")
             return json.dumps(result)
             
     except Exception as e:
@@ -2578,40 +2574,40 @@ def get_total_student_of_class(center_id, start_date, end_date):
             total_students = cursor.fetchone()[0] or 0
             
             result = {
-                "status": True,
-                "totalStudents": total_students,
-                "data": []
+                "Status": True,
+                "TotalStudents": total_students,
+                "Data": []
             }
             
             grade_list = []
             for row in rows:
                 grade = row[0]
                 grade_list.append(grade)
-                result["data"].append({
-                    "grade": grade,
-                    "feMaleCount": row[2] or 0,
-                    "maleCount": row[3] or 0,
-                    "totalStudentCount": row[1] or 0
+                result["Gata"].append({
+                    "Grade": grade,
+                    "FeMaleCount": row[2] or 0,
+                    "MaleCount": row[3] or 0,
+                    "TotalStudentCount": row[1] or 0
                 })
             
             # If no data, add all grades with 0
             if len(rows) == 0:
                 for grade in list_of_existing_grade:
-                    result["data"].append({
-                        "grade": grade,
-                        "feMaleCount": 0,
-                        "maleCount": 0,
-                        "totalStudentCount": 0
+                    result["Data"].append({
+                        "Grade": grade,
+                        "FeMaleCount": 0,
+                        "MaleCount": 0,
+                        "TotalStudentCount": 0
                     })
             else:
                 # Add missing grades with 0
                 list_not_in_db = [g for g in list_of_existing_grade if g not in grade_list]
                 for grade in list_not_in_db:
-                    result["data"].append({
-                        "grade": grade,
-                        "feMaleCount": 0,
-                        "maleCount": 0,
-                        "totalStudentCount": 0
+                    result["Data"].append({
+                        "Grade": grade,
+                        "FeMaleCount": 0,
+                        "MaleCount": 0,
+                        "TotalStudentCount": 0
                     })
             
             return json.dumps(result)
@@ -2739,13 +2735,13 @@ def get_total_bpl(center_id, start_date, end_date):
             total_students = cursor.fetchone()[0] or 0
             
             result = {
-                "status": True,
-                "totalStudents": total_students,
-                "data": [
+                "Status": True,
+                "TotalStudents": total_students,
+                "Data": [
                     {
-                        "feMaleCount": female_count,
-                        "maleCount": male_count,
-                        "totalBplStudents": bpl_count
+                        "FeMaleCount": female_count,
+                        "MaleCount": male_count,
+                        "TotalBplStudents": bpl_count
                     }
                 ]
             }
@@ -2794,15 +2790,15 @@ def get_total_student_category_of_class(center_id, start_date, end_date):
             total_students = cursor.fetchone()[0] or 0
             
             result = {
-                "status": True,
-                "totalStudents": total_students,
-                "data": []
+                "Status": True,
+                "TotalStudents": total_students,
+                "Data": []
             }
             
             for category in categories:
-                result["data"].append({
-                    "category": category,
-                    "totalStudentCount": category_dict.get(category, 0)
+                result["Data"].append({
+                    "Category": category,
+                    "TotalStudentCount": category_dict.get(category, 0)
                 })
             
             return json.dumps(result)
@@ -2870,89 +2866,134 @@ def get_user_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, s
 
 def get_total_bpl_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
     """Get total BPL by filter"""
-    logger.info(f"DashboardHelper : GetTotalBplByFilter : Started")
-    
+    logger.info("DashboardHelper : GetTotalBplByFilter : Started")
+
     try:
         with connection.cursor() as cursor:
-            # Build WHERE clause
+
+            # -----------------------------
+            # BPL WHERE CLAUSE
+            # -----------------------------
             where_conditions = [
                 "DATE(CreatedOn) >= %s",
                 "DATE(CreatedOn) <= %s",
                 "Bpl = 1",
                 "DistrictId = %s"
             ]
-            params = [start_date.date(), end_date.date(), district_id]
-            
+
+            params = [
+                start_date.date(),
+                end_date.date(),
+                district_id
+            ]
+
             if vidhan_sabha_id:
                 where_conditions.append("(VidhanSabhaId IS NULL OR VidhanSabhaId = %s)")
                 params.append(vidhan_sabha_id)
+
             if panchayta_id:
                 where_conditions.append("(PanchayatId IS NULL OR PanchayatId = %s)")
                 params.append(panchayta_id)
+
             if village_id:
                 where_conditions.append("(VillageId IS NULL OR VillageId = %s)")
                 params.append(village_id)
-            
+
             where_clause = " AND ".join(where_conditions)
-            
-            # Get total BPL students
+
+            # -----------------------------
+            # Total BPL Students
+            # -----------------------------
             bpl_sql = f"""
-                SELECT COUNT(*) 
-                FROM Student 
+                SELECT COUNT(*)
+                FROM Student
                 WHERE {where_clause}
             """
             cursor.execute(bpl_sql, params)
             bpl_count = cursor.fetchone()[0] or 0
-            
-            # Get female BPL students
-            female_params = params.copy()
+
+            # -----------------------------
+            # Female BPL Students
+            # -----------------------------
             female_sql = f"""
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE {where_clause} AND Gender = 'FeMale'
+                SELECT COUNT(*)
+                FROM Student
+                WHERE {where_clause}
+                AND Gender = 'FeMale'
             """
-            cursor.execute(female_sql, female_params)
+            cursor.execute(female_sql, params)
             female_count = cursor.fetchone()[0] or 0
-            
-            # Get male BPL students
+
+            # -----------------------------
+            # Male BPL Students
+            # -----------------------------
             male_sql = f"""
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE {where_clause} AND Gender = 'Male'
+                SELECT COUNT(*)
+                FROM Student
+                WHERE {where_clause}
+                AND Gender = 'Male'
             """
             cursor.execute(male_sql, params)
             male_count = cursor.fetchone()[0] or 0
-            
-            # Get total students
-            total_where = where_clause.replace("Bpl = 1 AND ", "")
+
+            # -----------------------------
+            # Total Students (Without BPL Filter)
+            # -----------------------------
+            total_where_conditions = [
+                "DATE(CreatedOn) >= %s",
+                "DATE(CreatedOn) <= %s",
+                "DistrictId = %s"
+            ]
+
+            total_params = [
+                start_date.date(),
+                end_date.date(),
+                district_id
+            ]
+
+            if vidhan_sabha_id:
+                total_where_conditions.append("(VidhanSabhaId IS NULL OR VidhanSabhaId = %s)")
+                total_params.append(vidhan_sabha_id)
+
+            if panchayta_id:
+                total_where_conditions.append("(PanchayatId IS NULL OR PanchayatId = %s)")
+                total_params.append(panchayta_id)
+
+            if village_id:
+                total_where_conditions.append("(VillageId IS NULL OR VillageId = %s)")
+                total_params.append(village_id)
+
+            total_where_clause = " AND ".join(total_where_conditions)
+
             total_sql = f"""
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE {total_where}
+                SELECT COUNT(*)
+                FROM Student
+                WHERE {total_where_clause}
             """
-            cursor.execute(total_sql, params[:3] + params[4:])
+
+            cursor.execute(total_sql, total_params)
             total_students = cursor.fetchone()[0] or 0
-            
+
             result = {
-                "status": True,
-                "totalStudents": total_students,
-                "data": [
+                "Status": True,
+                "TotalStudents": total_students,
+                "Data": [
                     {
-                        "feMaleCount": female_count,
-                        "maleCount": male_count,
-                        "totalBplStudents": bpl_count
+                        "FeMaleCount": female_count,
+                        "MaleCount": male_count,
+                        "TotalBplStudents": bpl_count
                     }
                 ]
             }
-            
+
             return json.dumps(result)
-            
+
     except Exception as e:
         logger.error(f"DashboardHelper : GetTotalBplByFilter : {str(e)}")
         raise e
 
 def get_total_gender_ratio_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
-    """Get total gender ratio by filter"""
+    """Get total gender ratio by filter - matches C# logic exactly"""
     logger.info(f"DashboardHelper : GetTotalGenderRatioByFilter : Started")
     
     try:
@@ -2977,16 +3018,27 @@ def get_total_gender_ratio_by_filter(district_id, vidhan_sabha_id, panchayta_id,
             
             where_clause = " AND ".join(where_conditions)
             
-            # Get total students
-            total_sql = f"""
-                SELECT COUNT(*) 
+            #Query 1: Get ALL students (with all filters) - matches C# TotalStudents
+            # C#: List<Student> TotalStudents = appDbContext.Student.Where(x => ...).ToList();
+            total_students_sql = f"""
+                SELECT 
+                    Id,
+                    Gender
                 FROM Student 
                 WHERE {where_clause}
             """
-            cursor.execute(total_sql, params)
-            total_students = cursor.fetchone()[0] or 0
+            cursor.execute(total_students_sql, params)
+            total_rows = cursor.fetchall()
             
-            # Get female students
+            # Total count
+            total_students = len(total_rows)
+            
+            # Male count from TotalStudents list (matches C# exactly)
+            # C#: int MaleCount = TotalStudents.Where(x => x.Gender == "Male").Count();
+            male_count = sum(1 for row in total_rows if row[1] == 'Male')
+            
+            #Query 2: Get Female students only (with all filters) - matches C# FeMaleStudents
+            # C#: List<Student> FeMaleStudents = appDbContext.Student.Where(x => x.Gender == "FeMale" && ...).ToList();
             female_sql = f"""
                 SELECT COUNT(*) 
                 FROM Student 
@@ -2995,26 +3047,18 @@ def get_total_gender_ratio_by_filter(district_id, vidhan_sabha_id, panchayta_id,
             cursor.execute(female_sql, params)
             female_count = cursor.fetchone()[0] or 0
             
-            # Get male students
-            male_sql = f"""
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE {where_clause} AND Gender = 'Male'
-            """
-            cursor.execute(male_sql, params)
-            male_count = cursor.fetchone()[0] or 0
-            
             result = {
-                "status": True,
-                "data": [
+                "Status": True,
+                "Data": [
                     {
-                        "feMaleCount": female_count,
-                        "maleCount": male_count,
-                        "totalStudentCount": total_students
+                        "FeMaleCount": female_count,
+                        "MaleCount": male_count,
+                        "TotalStudentCount": total_students
                     }
                 ]
             }
             
+            logger.info(f"DashboardHelper : GetTotalGenderRatioByFilter : End")
             return json.dumps(result)
             
     except Exception as e:
@@ -3022,10 +3066,10 @@ def get_total_gender_ratio_by_filter(district_id, vidhan_sabha_id, panchayta_id,
         raise e
 
 def get_total_student_category_of_class_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, start_date, end_date):
-    """Get total student category of class by filter"""
     logger.info(f"DashboardHelper : GetTotalStudentCategoryOfClassByFilter : Started")
     
-    categories = ["General", "OBC", "SC", "ST", "EWS", "Others"]
+    # Match C# exactly - ST NOT in list (even though it's in switch case)
+    categories = ["General", "OBC", "SC", "EWS", "Others"]
     
     try:
         with connection.cursor() as cursor:
@@ -3049,7 +3093,6 @@ def get_total_student_category_of_class_by_filter(district_id, vidhan_sabha_id, 
             
             where_clause = " AND ".join(where_conditions)
             
-            # Get students grouped by category
             category_sql = f"""
                 SELECT 
                     Category,
@@ -3062,22 +3105,22 @@ def get_total_student_category_of_class_by_filter(district_id, vidhan_sabha_id, 
             cursor.execute(category_sql, params)
             rows = cursor.fetchall()
             
-            # Create dict for quick lookup
             category_dict = {}
             for row in rows:
                 category_dict[row[0]] = row[1]
             
             result = {
-                "status": True,
-                "data": []
+                "Status": True,  # PascalCase to match C#
+                "Data": []       # PascalCase to match C#
             }
             
             for category in categories:
-                result["data"].append({
-                    "category": category,
-                    "totalStudentCount": category_dict.get(category, 0)
+                result["Data"].append({
+                    "Category": category,              # PascalCase
+                    "TotalStudentCount": category_dict.get(category, 0)  # PascalCase
                 })
             
+            logger.info(f"DashboardHelper : GetTotalStudentCategoryOfClassByFilter : End")
             return json.dumps(result)
             
     except Exception as e:
@@ -3257,21 +3300,21 @@ def get_student_attendance_by_percentage():
     
     try:
         result = {
-            "data": [
+            "Data": [
                 {
-                    "tenPercentage": 10,
-                    "twentyPercentage": 20,
-                    "thrityPercentage": 30,
-                    "fourtyPercentage": 40,
-                    "fiftyPercentage": 50,
-                    "sixtyPercentage": 60,
-                    "seventyPercentage": 70,
-                    "eightyPercentage": 80,
-                    "nintyPercentage": 90,
-                    "hunderedPercentage": 100
+                    "TenPercentage": 10,
+                    "TwentyPercentage": 20,
+                    "ThrityPercentage": 30,
+                    "FourtyPercentage": 40,
+                    "FiftyPercentage": 50,
+                    "SixtyPercentage": 60,
+                    "SeventyPercentage": 70,
+                    "EightyPercentage": 80,
+                    "NintyPercentage": 90,
+                    "HunderedPercentage": 100
                 }
             ],
-            "totalStudent": 100
+            "TotalStudent": 100
         }
         
         return json.dumps(result)
