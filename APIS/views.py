@@ -3768,11 +3768,11 @@ class UserGetAllUnAssignedTeacherView(APIView):
             data = []
             for teacher in teachers:
                 data.append({
-                    'id': teacher.id,
-                    'name': teacher.full_name,
+                    'id': teacher.user.id,
+                    'name': teacher.user.name,
                     'assigned': False,
-                    'profile': teacher.picture,
-                    'phoneNumber': teacher.phone_number
+                    'profile': teacher.user.picture,
+                    'phoneNumber': teacher.user.phone_number
                 })
             
             serializer = api_serializers.TeacherUnAssignedDetailSerializer(data, many=True)
