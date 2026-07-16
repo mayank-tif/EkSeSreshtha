@@ -1264,90 +1264,245 @@ def save_user(user_data):
         user_id = int(user_data.get('Id', 0))
         print(f"Saving user with ID: {user_id}")
         
-        if user_id > 0:
-            # Update existing user
-            user = User.objects.get(id=user_id)
-            
-            # Preserve values (matches .NET logic)
-            existing_status = user.status
-            existing_created_on = user.created_on
-            existing_password = user.password
-            existing_role_id = user.role_id
-            
-            # Update fields based on user type
-            user_type = int(user_data.get('Type'))
-            
-            if user_type == 1:  # SuperAdmin - can change anything
-                # Update all fields
-                if 'Name' in user_data and user_data['Name'] is not None:
-                    user.name = user_data['Name']
-                if 'Email' in user_data and user_data['Email'] is not None:
-                    user.email = user_data['Email']
-                if 'PhoneNumber' in user_data and user_data['PhoneNumber'] is not None:
-                    user.phone_number = user_data['PhoneNumber']
-                if 'WhatsApp' in user_data and user_data['WhatsApp'] is not None:
-                    user.whats_app = user_data['WhatsApp']
-                if 'Status' in user_data and user_data['Status'] is not None:
-                    user.status = user_data['Status']
-                if 'Picture' in user_data and user_data['Picture'] is not None:
-                    user.picture = user_data['Picture']
-                if 'DeviceId' in user_data and user_data['DeviceId'] is not None:
-                    user.device_id = user_data['DeviceId']
-                if 'Token' in user_data and user_data['Token'] is not None:
-                    user.token = user_data['Token']
-                if 'EnrolmentRollId' in user_data and user_data['EnrolmentRollId'] is not None:
-                    user.enrolment_roll_id = user_data['EnrolmentRollId']
-                if 'Password' in user_data and user_data['Password'] != existing_password:
-                    user.password = user_data['Password']
-            else:
-                # Non-superadmin: only update specific fields (matches .NET ConvertUpdateUsertoToUser)
-                if 'Email' in user_data and user_data['Email'] is not None:
-                    user.email = user_data['Email']
-                if 'PhoneNumber' in user_data and user_data['PhoneNumber'] is not None:
-                    user.phone_number = user_data['PhoneNumber']
-                if 'Name' in user_data and user_data['Name'] is not None:
-                    user.name = user_data['Name']
+        # Wrap everything in atomic transaction
+        with transaction.atomic():
+            if user_id > 0:
+                # Update existing user
+                user = User.objects.get(id=user_id)
                 
-                # Preserve these fields (matches .NET)
-                user.enrolment_roll_id = user_data.get('EnrolmentRollId') or user.enrolment_roll_id
-                user.status = existing_status
-                user.created_on = existing_created_on
-                user.password = user_data.get('Password') or existing_password
+                # Preserve values (matches .NET logic)
+                existing_status = user.status
+                existing_created_on = user.created_on
+                existing_password = user.password
+                existing_role_id = user.role_id
+                
+                # Update fields based on user type
+                user_type = int(user_data.get('Type'))
+                
+                if user_type == 1:  # SuperAdmin - can change anything
+                    # Update all fields
+                    if 'Name' in user_data and user_data['Name'] is not None:
+                        user.name = user_data['Name']
+                    if 'Email' in user_data and user_data['Email'] is not None:
+                        user.email = user_data['Email']
+                    if 'PhoneNumber' in user_data and user_data['PhoneNumber'] is not None:
+                        user.phone_number = user_data['PhoneNumber']
+                    if 'WhatsApp' in user_data and user_data['WhatsApp'] is not None:
+                        user.whats_app = user_data['WhatsApp']
+                    if 'Status' in user_data and user_data['Status'] is not None:
+                        user.status = user_data['Status']
+                    if 'Picture' in user_data and user_data['Picture'] is not None:
+                        user.picture = user_data['Picture']
+                    if 'DeviceId' in user_data and user_data['DeviceId'] is not None:
+                        user.device_id = user_data['DeviceId']
+                    if 'Token' in user_data and user_data['Token'] is not None:
+                        user.token = user_data['Token']
+                    if 'EnrolmentRollId' in user_data and user_data['EnrolmentRollId'] is not None:
+                        user.enrolment_roll_id = user_data['EnrolmentRollId']
+                    if 'Password' in user_data and user_data['Password'] != existing_password:
+                        user.password = user_data['Password']
+                else:
+                    # Non-superadmin: only update specific fields (matches .NET ConvertUpdateUsertoToUser)
+                    if 'Email' in user_data and user_data['Email'] is not None:
+                        user.email = user_data['Email']
+                    if 'PhoneNumber' in user_data and user_data['PhoneNumber'] is not None:
+                        user.phone_number = user_data['PhoneNumber']
+                    if 'Name' in user_data and user_data['Name'] is not None:
+                        user.name = user_data['Name']
+                    
+                    # Preserve these fields (matches .NET)
+                    user.enrolment_roll_id = user_data.get('EnrolmentRollId') or user.enrolment_roll_id
+                    user.status = existing_status
+                    user.created_on = existing_created_on
+                    user.password = user_data.get('Password') or existing_password
+                
+                user.updated_on = datetime.now()
+                user.updated_by = user_data.get('CreatedBy') or user_id
+                user.save()
+                
+                # Update role-specific table based on type
+                if user_type == 2:  # RegionalAdmin
+                    regional_admin = RegionalAdmin.objects.filter(user=user).first()
+                    if regional_admin:
+                        if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
+                            regional_admin.date_of_birth = user_data['DateOfBirth']
+                        if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
+                            regional_admin.guardian_name = user_data['GuardianName']
+                        if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
+                            regional_admin.guardian_number = user_data['GuardianNumber']
+                        if 'Age' in user_data and user_data['Age'] is not None:
+                            regional_admin.age = user_data['Age']
+                        if 'Gender' in user_data and user_data['Gender'] is not None:
+                            regional_admin.gender = user_data['Gender']
+                        if 'Contact' in user_data and user_data['Contact'] is not None:
+                            regional_admin.contact = user_data['Contact']
+                        if 'FullAddress' in user_data and user_data['FullAddress'] is not None:
+                            regional_admin.full_address = user_data['FullAddress']
+                        if 'Education' in user_data and user_data['Education'] is not None:
+                            regional_admin.education = user_data['Education']
+                        if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
+                            regional_admin.district_id = user_data['DistrictId']
+                        if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
+                            regional_admin.vidhan_sabha_id = user_data['VidhanSabhaId']
+                        if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
+                            regional_admin.panchayat_id = user_data['PanchayatId']
+                        if 'VillageId' in user_data and user_data['VillageId'] is not None:
+                            regional_admin.village_id = user_data['VillageId']
+                        regional_admin.updated_on = datetime.now()
+                        regional_admin.updated_by = user_data.get('CreatedBy') or user_id
+                        regional_admin.save()
+                        
+                        # Handle ListOfPanchayatIds for RegionalAdmin
+                        list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                        if list_of_panchayat_ids:
+                            if isinstance(list_of_panchayat_ids, str):
+                                panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                            else:
+                                panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                            
+                            if panchayat_list:
+                                # Get the regional admin object
+                                regional_admin = RegionalAdmin.objects.filter(user=user).first()
+                                if regional_admin:
+                                    # Soft delete existing records
+                                    RegionalAdminPanchayat.objects.filter(
+                                        regional_admin=regional_admin
+                                    ).update(
+                                        status=False,
+                                        updated_on=datetime.now(),
+                                        updated_by=user_data.get('CreatedBy') or user_id
+                                    )
+                                    
+                                    # Insert new records
+                                    for panchayat_id in panchayat_list:
+                                        panchayat = Panchayat.objects.filter(id=panchayat_id).first()
+                                        if panchayat:
+                                            RegionalAdminPanchayat.objects.create(
+                                                regional_admin=regional_admin,
+                                                panchayat_id=panchayat_id,
+                                                panchayat_name=panchayat.name,
+                                                status=True,
+                                                created_on=datetime.now(),
+                                                created_by=user_data.get('CreatedBy') or user_id
+                                            )
+                
+                elif user_type == 3:  # Teacher
+                    teacher = Teacher.objects.filter(user=user).first()
+                    if teacher:
+                        if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
+                            teacher.date_of_birth = user_data['DateOfBirth']
+                        if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
+                            teacher.guardian_name = user_data['GuardianName']
+                        if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
+                            teacher.guardian_number = user_data['GuardianNumber']
+                        if 'Age' in user_data and user_data['Age'] is not None:
+                            teacher.age = user_data['Age']
+                        if 'Gender' in user_data and user_data['Gender'] is not None:
+                            teacher.gender = user_data['Gender']
+                        if 'Contact' in user_data and user_data['Contact'] is not None:
+                            teacher.contact = user_data['Contact']
+                        if 'FullAddress' in user_data and user_data['FullAddress'] is not None:
+                            teacher.full_address = user_data['FullAddress']
+                        if 'Education' in user_data and user_data['Education'] is not None:
+                            teacher.education = user_data['Education']
+                        if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
+                            teacher.district_id = user_data['DistrictId']
+                        if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
+                            teacher.vidhan_sabha_id = user_data['VidhanSabhaId']
+                        if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
+                            teacher.panchayat_id = user_data['PanchayatId']
+                        if 'VillageId' in user_data and user_data['VillageId'] is not None:
+                            teacher.village_id = user_data['VillageId']
+                        if 'Count' in user_data and user_data['Count'] is not None:
+                            teacher.count = user_data['Count']
+                        
+                        # Handle ListOfPanchayatIds for Teacher
+                        list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                        if list_of_panchayat_ids and teacher:
+                            if isinstance(list_of_panchayat_ids, str):
+                                panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                            else:
+                                panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                            
+                            if len(panchayat_list) == 1:
+                                teacher.panchayat_id = panchayat_list[0]
+                        
+                        teacher.updated_on = datetime.now()
+                        teacher.updated_by = user_data.get('CreatedBy') or user_id
+                        teacher.save()
             
-            user.updated_on = datetime.now()
-            user.updated_by = user_data.get('CreatedBy') or user_id
-            user.save()
-            
-            # Update role-specific table based on type
-            if user_type == 2:  # RegionalAdmin
-                regional_admin = RegionalAdmin.objects.filter(user=user).first()
-                if regional_admin:
-                    if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
-                        regional_admin.date_of_birth = user_data['DateOfBirth']
-                    if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
-                        regional_admin.guardian_name = user_data['GuardianName']
-                    if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
-                        regional_admin.guardian_number = user_data['GuardianNumber']
-                    if 'Age' in user_data and user_data['Age'] is not None:
-                        regional_admin.age = user_data['Age']
-                    if 'Gender' in user_data and user_data['Gender'] is not None:
-                        regional_admin.gender = user_data['Gender']
-                    if 'Contact' in user_data and user_data['Contact'] is not None:
-                        regional_admin.contact = user_data['Contact']
-                    if 'FullAddress' in user_data and user_data['FullAddress'] is not None:
-                        regional_admin.full_address = user_data['FullAddress']
-                    if 'Education' in user_data and user_data['Education'] is not None:
-                        regional_admin.education = user_data['Education']
-                    if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
-                        regional_admin.district_id = user_data['DistrictId']
-                    if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
-                        regional_admin.vidhan_sabha_id = user_data['VidhanSabhaId']
-                    if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
-                        regional_admin.panchayat_id = user_data['PanchayatId']
-                    if 'VillageId' in user_data and user_data['VillageId'] is not None:
-                        regional_admin.village_id = user_data['VillageId']
-                    regional_admin.updated_on = datetime.now()
-                    regional_admin.updated_by = user_data.get('CreatedBy') or user_id
+            else:
+                # Insert new user (matches .NET logic)
+                name = user_data.get('Name', '')
+                date_of_birth = user_data.get('DateOfBirth', '')
+                gender = user_data.get('Gender', '')
+                
+                enrolment_roll_id = f"{name[:2]}-{date_of_birth}-"
+                if gender and gender.lower() == 'male':
+                    enrolment_roll_id += 'M'
+                else:
+                    enrolment_roll_id += 'F'
+                
+                # Get role
+                role = None
+                user_type = int(user_data.get('Type'))
+                
+                # Try to get role by RoleId first (from .NET request)
+                if user_type:
+                    role = Role.objects.filter(id=user_type).first()
+                    
+                # Create user with role
+                user = User(
+                    enrolment_roll_id=enrolment_roll_id,
+                    name=name,
+                    email=user_data.get('Email'),
+                    password=user_data.get('Password'),
+                    phone_number=user_data.get('PhoneNumber'),
+                    whats_app=user_data.get('WhatsApp'),
+                    status=True,
+                    picture=user_data.get('Picture'),
+                    device_id=user_data.get('DeviceId'),
+                    token=user_data.get('Token'),
+                    role=role,
+                    created_on=datetime.now(),
+                    created_by=user_data.get('CreatedBy') or 1
+                )
+                user.save()
+                user_id = user.id
+                
+                # Create role-specific record
+                if user_type == 1:  # SuperAdmin
+                    SuperAdmin.objects.create(
+                        super_admin_guid_id=str(uuid.uuid4()),
+                        user=user,
+                        status=True,
+                        created_on=datetime.now(),
+                        created_by=user_data.get('CreatedBy') or 1
+                    )
+                
+                elif user_type == 2:  # RegionalAdmin
+                    regional_admin = RegionalAdmin(
+                        regional_admin_guid_id=str(uuid.uuid4()),
+                        user=user,
+                        age=user_data.get('Age'),
+                        gender=user_data.get('Gender'),
+                        date_of_birth=user_data.get('DateOfBirth'),
+                        contact=user_data.get('Contact'),
+                        full_address=user_data.get('FullAddress'),
+                        education=user_data.get('Education'),
+                        guardian_name=user_data.get('GuardianName'),
+                        guardian_number=user_data.get('GuardianNumber'),
+                        assigned_teacher_status=False,
+                        assigned_regional_admin_status=False,
+                        enrollment_date=user_data.get('EnrollmentDate'),
+                        district_id=user_data.get('DistrictId'),
+                        vidhan_sabha_id=user_data.get('VidhanSabhaId'),
+                        panchayat_id=user_data.get('PanchayatId'),
+                        village_id=user_data.get('VillageId'),
+                        status=True,
+                        created_on=datetime.now(),
+                        created_by=user_data.get('CreatedBy') or 1
+                    )
                     regional_admin.save()
                     
                     # Handle ListOfPanchayatIds for RegionalAdmin
@@ -1358,198 +1513,46 @@ def save_user(user_data):
                         else:
                             panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
                         
-                        if panchayat_list:
-                            # Soft delete existing records
-                            RegionalAdminPanchayat.objects.filter(
-                                regional_admin=regional_admin
-                            ).update(
-                                status=False,
-                                updated_on=datetime.now(),
-                                updated_by=user_data.get('CreatedBy') or user_id
-                            )
-                            
-                            # Insert new records
-                            for panchayat_id in panchayat_list:
-                                panchayat = Panchayat.objects.filter(id=panchayat_id).first()
-                                if panchayat:
-                                    RegionalAdminPanchayat.objects.create(
-                                        regional_admin=regional_admin,
-                                        panchayat_id=panchayat_id,
-                                        panchayat_name=panchayat.name,
-                                        status=True,
-                                        created_on=datetime.now(),
-                                        created_by=user_data.get('CreatedBy') or user_id
-                                    )
-            
-            elif user_type == 3:  # Teacher
-                teacher = Teacher.objects.filter(user=user).first()
-                if teacher:
-                    if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
-                        teacher.date_of_birth = user_data['DateOfBirth']
-                    if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
-                        teacher.guardian_name = user_data['GuardianName']
-                    if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
-                        teacher.guardian_number = user_data['GuardianNumber']
-                    if 'Age' in user_data and user_data['Age'] is not None:
-                        teacher.age = user_data['Age']
-                    if 'Gender' in user_data and user_data['Gender'] is not None:
-                        teacher.gender = user_data['Gender']
-                    if 'Contact' in user_data and user_data['Contact'] is not None:
-                        teacher.contact = user_data['Contact']
-                    if 'FullAddress' in user_data and user_data['FullAddress'] is not None:
-                        teacher.full_address = user_data['FullAddress']
-                    if 'Education' in user_data and user_data['Education'] is not None:
-                        teacher.education = user_data['Education']
-                    if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
-                        teacher.district_id = user_data['DistrictId']
-                    if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
-                        teacher.vidhan_sabha_id = user_data['VidhanSabhaId']
-                    if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
-                        teacher.panchayat_id = user_data['PanchayatId']
-                    if 'VillageId' in user_data and user_data['VillageId'] is not None:
-                        teacher.village_id = user_data['VillageId']
-                    if 'Count' in user_data and user_data['Count'] is not None:
-                        teacher.count = user_data['Count']
-                    
-                    # Handle ListOfPanchayatIds for Teacher
-                    list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                    if list_of_panchayat_ids and teacher:
-                        if isinstance(list_of_panchayat_ids, str):
-                            panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
-                        else:
-                            panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
-                        
-                        if len(panchayat_list) == 1:
-                            teacher.panchayat_id = panchayat_list[0]
-                    
-                    teacher.updated_on = datetime.now()
-                    teacher.updated_by = user_data.get('CreatedBy') or user_id
+                        for panchayat_id in panchayat_list:
+                            panchayat = Panchayat.objects.filter(id=panchayat_id).first()
+                            if panchayat:
+                                RegionalAdminPanchayat.objects.create(
+                                    regional_admin=regional_admin,
+                                    panchayat_id=panchayat_id,
+                                    panchayat_name=panchayat.name,
+                                    status=True,
+                                    created_on=datetime.now(),
+                                    created_by=user_data.get('CreatedBy') or 1
+                                )
+                
+                elif user_type == 3:  # Teacher
+                    teacher = Teacher(
+                        teacher_guid_id=str(uuid.uuid4()),
+                        user=user,
+                        age=user_data.get('Age'),
+                        gender=user_data.get('Gender'),
+                        date_of_birth=user_data.get('DateOfBirth'),
+                        contact=user_data.get('Contact'),
+                        full_address=user_data.get('FullAddress'),
+                        education=user_data.get('Education'),
+                        guardian_name=user_data.get('GuardianName'),
+                        guardian_number=user_data.get('GuardianNumber'),
+                        count=user_data.get('Count') or 0,
+                        assigned_teacher_status=False,
+                        assigned_regional_admin_status=False,
+                        enrollment_date=user_data.get('EnrollmentDate'),
+                        district_id=user_data.get('DistrictId'),
+                        vidhan_sabha_id=user_data.get('VidhanSabhaId'),
+                        panchayat_id=user_data.get('PanchayatId'),
+                        village_id=user_data.get('VillageId'),
+                        center_id=user_data.get('CenterId'),
+                        status=True,
+                        created_on=datetime.now(),
+                        created_by=user_data.get('CreatedBy') or 1
+                    )
                     teacher.save()
         
-        else:
-            # Insert new user (matches .NET logic)
-            name = user_data.get('Name', '')
-            date_of_birth = user_data.get('DateOfBirth', '')
-            gender = user_data.get('Gender', '')
-            
-            enrolment_roll_id = f"{name[:2]}-{date_of_birth}-"
-            if gender and gender.lower() == 'male':
-                enrolment_roll_id += 'M'
-            else:
-                enrolment_roll_id += 'F'
-            
-            # Get role - this is the key fix
-            role = None
-            user_type = int(user_data.get('Type'))
-            
-            # Try to get role by RoleId first (from .NET request)
-            if user_type:
-                role = Role.objects.filter(id=user_type).first()
-            
-            print(f"Creating new user with enrolment_roll_id: {enrolment_roll_id}, role: {role.role_code if role else 'None'}, role_id: {role.id if role else 'None'}")
-            
-            # Create user with role
-            user = User(
-                enrolment_roll_id=enrolment_roll_id,
-                name=name,
-                email=user_data.get('Email'),
-                password=user_data.get('Password'),
-                phone_number=user_data.get('PhoneNumber'),
-                whats_app=user_data.get('WhatsApp'),
-                status=True,
-                picture=user_data.get('Picture'),
-                device_id=user_data.get('DeviceId'),
-                token=user_data.get('Token'),
-                role=role, 
-                created_on=datetime.now(),
-                created_by=user_data.get('CreatedBy') or 1
-            )
-            user.save()
-            user_id = user.id
-            
-            # Create role-specific record
-            if user_type == 1:  # SuperAdmin
-                SuperAdmin.objects.create(
-                    super_admin_guid_id=str(uuid.uuid4()),
-                    user=user,
-                    status=True,
-                    created_on=datetime.now(),
-                    created_by=user_data.get('CreatedBy') or 1
-                )
-            
-            elif user_type == 2:  # RegionalAdmin
-                regional_admin = RegionalAdmin(
-                    regional_admin_guid_id=str(uuid.uuid4()),
-                    user=user,
-                    age=user_data.get('Age'),
-                    gender=user_data.get('Gender'),
-                    date_of_birth=user_data.get('DateOfBirth'),
-                    contact=user_data.get('Contact'),
-                    full_address=user_data.get('FullAddress'),
-                    education=user_data.get('Education'),
-                    guardian_name=user_data.get('GuardianName'),
-                    guardian_number=user_data.get('GuardianNumber'),
-                    assigned_teacher_status=False,
-                    assigned_regional_admin_status=False,
-                    enrollment_date=user_data.get('EnrollmentDate'),
-                    district_id=user_data.get('DistrictId'),
-                    vidhan_sabha_id=user_data.get('VidhanSabhaId'),
-                    panchayat_id=user_data.get('PanchayatId'),
-                    village_id=user_data.get('VillageId'),
-                    status=True,
-                    created_on=datetime.now(),
-                    created_by=user_data.get('CreatedBy') or 1
-                )
-                regional_admin.save()
-                
-                # Handle ListOfPanchayatIds for RegionalAdmin
-                list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                if list_of_panchayat_ids:
-                    if isinstance(list_of_panchayat_ids, str):
-                        panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
-                    else:
-                        panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
-                    
-                    for panchayat_id in panchayat_list:
-                        panchayat = Panchayat.objects.filter(id=panchayat_id).first()
-                        if panchayat:
-                            RegionalAdminPanchayat.objects.create(
-                                regional_admin=regional_admin,
-                                panchayat_id=panchayat_id,
-                                panchayat_name=panchayat.name,
-                                status=True,
-                                created_on=datetime.now(),
-                                created_by=user_data.get('CreatedBy') or 1
-                            )
-            
-            elif user_type == 3:  # Teacher
-                teacher = Teacher(
-                    teacher_guid_id=str(uuid.uuid4()),
-                    user=user,
-                    age=user_data.get('Age'),
-                    gender=user_data.get('Gender'),
-                    date_of_birth=user_data.get('DateOfBirth'),
-                    contact=user_data.get('Contact'),
-                    full_address=user_data.get('FullAddress'),
-                    education=user_data.get('Education'),
-                    guardian_name=user_data.get('GuardianName'),
-                    guardian_number=user_data.get('GuardianNumber'),
-                    count=user_data.get('Count') or 0,
-                    assigned_teacher_status=False,
-                    assigned_regional_admin_status=False,
-                    enrollment_date=user_data.get('EnrollmentDate'),
-                    district_id=user_data.get('DistrictId'),
-                    vidhan_sabha_id=user_data.get('VidhanSabhaId'),
-                    panchayat_id=user_data.get('PanchayatId'),
-                    village_id=user_data.get('VillageId'),
-                    center_id=user_data.get('CenterId'),
-                    status=True,
-                    created_on=datetime.now(),
-                    created_by=user_data.get('CreatedBy') or 1
-                )
-                teacher.save()
-        
-        # Get the saved user
+        # Get the saved user (outside atomic block)
         return get_user_by_id(user_id)
         
     except User.DoesNotExist:
