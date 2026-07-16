@@ -3813,6 +3813,8 @@ class UserSearchDataView(APIView):
     """Search data by type and query string"""
     
     def get(self, request):
+        log_activity_before(request, 'User', 'SEARCH')
+        
         try:
             logger.info("UserView : SearchData : Started")
             
@@ -3833,6 +3835,8 @@ class UserSearchDataView(APIView):
             results = search_data(search_type, query_string)
             
             if results is not None:
+                log_activity(request, 'User', 'VIEW_SUCCESS', 
+                           data={'type': search_type, 'query': query_string, 'count': len(results)})
                 return Response(
                     {
                         "status": True,
@@ -3843,6 +3847,7 @@ class UserSearchDataView(APIView):
                     status=status.HTTP_200_OK
                 )
             else:
+                log_activity(request, 'User', 'VIEW_NO_DATA')
                 return Response(
                     {
                         "status": False,
@@ -3854,6 +3859,7 @@ class UserSearchDataView(APIView):
                 
         except Exception as e:
             logger.error(f"UserView : SearchData : {str(e)}")
+            log_activity(request, 'User', 'ERROR', data={'error': str(e)})
             return Response(
                 {
                     "status": False,
