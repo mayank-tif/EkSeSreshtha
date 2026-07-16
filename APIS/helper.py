@@ -230,9 +230,6 @@ def get_centers_for_regional_admin(status_param, user_id, today):
     return all_centers
 
 
-
-# helper.py
-
 # ========== ROLE HELPERS ==========
 def get_role_by_code(role_code):
     """Get role by code"""
@@ -248,22 +245,6 @@ def get_role_by_id(role_id):
         return Role.objects.get(id=role_id, status=True)
     except Role.DoesNotExist:
         return None
-# helper.py - Complete Updated Version
-
-# ========== USER SECTION (Updated for new models) ==========
-
-
-
-
-
-
-
-
-
-
-
-# ========== CENTER HELPERS (Updated for new models) ==========
-
 
 
 # CENTER SECTION ---------------------------------------------------------
@@ -1026,9 +1007,6 @@ def get_all_teachers(userId):
         logger.error(f"UserHelper : GetRegisteredTeachers : {str(e)}")
         raise e
 
-    
-
-
 #---------------------------------------------------------
 def get_all_regional_admins():
     """Get all regional admins - matches .NET logic"""
@@ -1054,18 +1032,18 @@ def get_all_regional_admins():
         logger.error(f"UserHelper : GetAllRegionalAdmins : {str(e)}")
         raise e
 
-
-
-
 # USER SECTION---------------------------------------------------------
+# utils.py - Updated login_user function
+
 def login_user(mobile_number, password):
-    """Authenticate user by mobile number and password - matches .NET logic"""
-    logger.info(f"UserHelper : LoginUser : Started")
+    """Authenticate user - EXACT match to .NET LoginUser"""
+    logger.info(f"UserRepository : LoginUser : Started")
     
     try:
+        # Hash password using SHA256 - matches .NET EncryptionUtility.GetHashPassword
         hashed_password = hash_password(password)
         
-        # Get user with role
+        # Get user by phone number and password
         user = User.objects.filter(
             phone_number=mobile_number,
             password=hashed_password,
@@ -1073,14 +1051,14 @@ def login_user(mobile_number, password):
         ).select_related('role').first()
         
         if not user:
+            logger.info(f"UserRepository : LoginUser : End - User not found")
             return None
         
-        # Update last login time (matches .NET)
-        current_time = datetime.now().strftime('%m/%d/%Y %I:%M:%S %p')
-        user.last_login_time = current_time
+        # Update last login time - save as datetime then format for response
+        user.last_login_time = datetime.now()
         user.save(update_fields=['last_login_time'])
         
-        # Generate token
+        # Generate token (matches .NET)
         token = AccessToken()
         token['user_id'] = user.id
         token['user_type'] = user.role.role_code if user.role else None
@@ -1088,7 +1066,15 @@ def login_user(mobile_number, password):
         token['name'] = user.name or mobile_number
         token.set_exp(lifetime=timedelta(days=30))
         
-        # Build response matching .NET exactly
+        # Set token on user object (matches .NET)
+        user.token = str(token)
+        user.save(update_fields=['token'])
+        
+        # Format last login time for response - matches .NET format: M/d/yyyy h:mm:ss tt
+        # Example: 7/16/2026 2:56:27 PM
+        last_login_formatted = format_dotnet_datetime(user.last_login_time)
+        
+        # Build base response from User table
         response_data = {
             "id": user.id,
             "enrolmentRollId": user.enrolment_roll_id,
@@ -1096,75 +1082,178 @@ def login_user(mobile_number, password):
             "name": user.name,
             "token": str(token),
             "deviceId": user.device_id,
-            "type": user.role.role_code if user.role else None,
+            "type": user.role_id,
             "status": user.status,
             "email": user.email,
             "phoneNumber": user.phone_number,
             "picture": user.picture,
             "whatsApp": user.whats_app,
-            "lastLoginTime": user.last_login_time,
-            "createdOn": user.created_on,
-            "createdBy": user.created_by,
+            "lastLoginTime": last_login_formatted,
             "roleId": user.role_id,
+            "createdOn": format_dotnet_datetime(user.created_on) if user.created_on else None,
+            "createdBy": user.created_by,
+            # Default values for role-specific fields
+            "age": None,
+            "gender": None,
+            "contact": None,
+            "dateOfBirth": None,
+            "fullAddress": None,
+            "education": None,
+            "enrollmentDate": None,
+            "guardianName": None,
+            "guardianNumber": None,
+            "assignedTeacherStatus": None,
+            "assignedRegionalAdminStatus": None,
+            "vidhanSabhaId": None,
+            "districtId": None,
+            "villageId": None,
+            "panchayatId": None,
+            "count": None,
+            "centerId": None,
+            "listOfPanchayatId": None,
+            "district": None,
+            "vidhanSabha": None,
+            "panchayat": None,
+            "village": None,
+            "regionalAdminPanchayat": None,
+            "center": None,
+            "centers": None,
+            "centerAssignUser": None
         }
         
-        # Add role-specific data
+        # Add role-specific data based on role
         if user.role:
-            if user.role.role_code == 'SUPER_ADMIN':
-                # Super Admin - only base fields
-                pass
-            elif user.role.role_code == 'REGIONAL_ADMIN':
+            role_code = user.role.role_code
+            
+            if role_code == 'SUPER_ADMIN':
+                super_admin = SuperAdmin.objects.filter(user=user).first()
+                if super_admin:
+                    response_data.update({
+                        "age": super_admin.age,
+                        "gender": super_admin.gender,
+                        "contact": super_admin.contact,
+                        "dateOfBirth": super_admin.date_of_birth,
+                        "fullAddress": super_admin.full_address,
+                        "education": super_admin.education,
+                        "enrollmentDate": format_dotnet_datetime(super_admin.enrollment_date) if super_admin.enrollment_date else None,
+                        "createdOn": format_dotnet_datetime(super_admin.created_on) if super_admin.created_on else user.created_on,
+                    })
+                    
+            elif role_code == 'REGIONAL_ADMIN':
                 regional_admin = RegionalAdmin.objects.filter(user=user).first()
                 if regional_admin:
+                    # Get list of panchayats
+                    list_of_panchayat = []
+                    regional_admin_panchayats = RegionalAdminPanchayat.objects.filter(
+                        regional_admin=regional_admin,
+                        status=True
+                    ).select_related('panchayat')
+                    
+                    for rap in regional_admin_panchayats:
+                        if rap.panchayat:
+                            list_of_panchayat.append({
+                                'id': rap.panchayat.id,
+                                'panchayatGuidId': str(rap.panchayat.panchayat_guid_id) if rap.panchayat.panchayat_guid_id else '00000000-0000-0000-0000-000000000000',
+                                'name': rap.panchayat.name,
+                                'status': rap.panchayat.status,
+                                'createdOn': format_dotnet_datetime(rap.panchayat.created_on) if rap.panchayat.created_on else None,
+                                'createdBy': rap.panchayat.created_by,
+                                'districtId': rap.panchayat.district_id or 0,
+                                'vidhanSabhaId': rap.panchayat.vidhan_sabha_id or 0
+                            })
+                    
+                    # Get list of centers
+                    list_of_centers = []
+                    centers = Center.objects.filter(assigned_regional_admin=regional_admin)
+                    for center in centers:
+                        list_of_centers.append({
+                            'id': center.id,
+                            'centerGuidId': center.center_guid_id,
+                            'centerName': center.center_name,
+                            'assignedTeachers': center.assigned_teachers_id,
+                            'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                            'startedDate': format_dotnet_datetime(center.started_date) if center.started_date else None,
+                            'vidhanSabhaId': center.vidhan_sabha_id or 0,
+                            'districtId': center.district_id or 0,
+                            'panchayatId': center.panchayat_id or 0,
+                            'villageId': center.village_id
+                        })
+                    
                     response_data.update({
                         "age": regional_admin.age,
                         "gender": regional_admin.gender,
-                        "dateOfBirth": regional_admin.date_of_birth,
                         "contact": regional_admin.contact,
+                        "dateOfBirth": regional_admin.date_of_birth,
                         "fullAddress": regional_admin.full_address,
                         "education": regional_admin.education,
+                        "enrollmentDate": format_dotnet_datetime(regional_admin.enrollment_date) if regional_admin.enrollment_date else None,
                         "guardianName": regional_admin.guardian_name,
                         "guardianNumber": regional_admin.guardian_number,
                         "assignedTeacherStatus": regional_admin.assigned_teacher_status,
                         "assignedRegionalAdminStatus": regional_admin.assigned_regional_admin_status,
-                        "enrollmentDate": regional_admin.enrollment_date,
                         "vidhanSabhaId": regional_admin.vidhan_sabha_id,
                         "districtId": regional_admin.district_id,
                         "villageId": regional_admin.village_id,
                         "panchayatId": regional_admin.panchayat_id,
+                        "listOfPanchayatId": [rap.panchayat_id for rap in regional_admin_panchayats if rap.panchayat_id],
+                        "regionalAdminPanchayat": list_of_panchayat,
+                        "centers": list_of_centers,
+                        "createdOn": format_dotnet_datetime(regional_admin.created_on) if regional_admin.created_on else user.created_on,
                     })
-            elif user.role.role_code == 'TEACHER':
+                    
+            elif role_code == 'TEACHER':
                 teacher = Teacher.objects.filter(user=user).first()
                 if teacher:
+                    # Get center data
+                    center_data = None
+                    if teacher.center:
+                        center = teacher.center
+                        center_data = {
+                            'id': center.id,
+                            'centerGuidId': center.center_guid_id,
+                            'centerName': center.center_name,
+                            'classStatus': center.class_status,
+                            'status': center.status,
+                            'createdDate': format_dotnet_datetime(center.created_date) if center.created_date else None,
+                            'startedDate': format_dotnet_datetime(center.started_date) if center.started_date else None,
+                            'assignedTeachers': center.assigned_teachers_id,
+                            'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                            'vidhanSabhaId': center.vidhan_sabha_id or 0,
+                            'districtId': center.district_id or 0,
+                            'panchayatId': center.panchayat_id or 0,
+                            'villageId': center.village_id
+                        }
+                    
                     response_data.update({
                         "age": teacher.age,
                         "gender": teacher.gender,
-                        "dateOfBirth": teacher.date_of_birth,
                         "contact": teacher.contact,
+                        "dateOfBirth": teacher.date_of_birth,
                         "fullAddress": teacher.full_address,
                         "education": teacher.education,
+                        "enrollmentDate": format_dotnet_datetime(teacher.enrollment_date) if teacher.enrollment_date else None,
                         "guardianName": teacher.guardian_name,
                         "guardianNumber": teacher.guardian_number,
                         "count": teacher.count,
                         "assignedTeacherStatus": teacher.assigned_teacher_status,
                         "assignedRegionalAdminStatus": teacher.assigned_regional_admin_status,
-                        "enrollmentDate": teacher.enrollment_date,
                         "vidhanSabhaId": teacher.vidhan_sabha_id,
                         "districtId": teacher.district_id,
                         "villageId": teacher.village_id,
                         "panchayatId": teacher.panchayat_id,
                         "centerId": teacher.center_id,
+                        "center": center_data,
+                        "createdOn": format_dotnet_datetime(teacher.created_on) if teacher.created_on else user.created_on,
                     })
         
-        logger.info(f"UserHelper : LoginUser : End")
+        logger.info(f"UserRepository : LoginUser : End")
         return response_data
         
     except Exception as e:
-        logger.error(f"UserHelper : LoginUser : {str(e)}")
+        logger.error(f"UserRepository : LoginUser : {str(e)}")
         raise e
-
     
-    
+        
 def save_user(user_data):
     """Save or update user - matches .NET SaveLogin logic exactly"""
     logger.info(f"UserHelper : SaveLogin : Started")

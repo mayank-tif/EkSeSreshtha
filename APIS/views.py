@@ -3223,6 +3223,7 @@ class UserLoginView(APIView):
         logger.info("UserView : LoginUser : Started")
         try:
             validate_app_and_device_with_token(request)
+            print("request.data", request.data)
             mobile_number = request.data.get('mobileNumber')
             password = request.data.get('password')
             
