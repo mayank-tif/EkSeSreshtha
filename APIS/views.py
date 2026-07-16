@@ -1946,7 +1946,7 @@ class SchoolSaveschoolPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST

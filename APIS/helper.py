@@ -846,209 +846,209 @@ def save_center(center_data, request):
     try:
         center_id = int(center_data.get('Id', 0))
         current_user_id = get_user_id_from_token(request)
-        
-        if center_id > 0:
-            # Update existing center - preserve Status and ClassStatus (matches .NET)
-            try:
-                center = Center.objects.get(id=center_id, status=True)
-                
-                # Get old teacher and regional admin for cleanup if needed
-                old_teacher_id = center.assigned_teachers_id
-                old_regional_admin_id = center.assigned_regional_admin_id
-                
-                # Update fields
-                if 'CenterName' in center_data and center_data['CenterName'] is not None:
-                    center.center_name = center_data['CenterName']
-                if 'AssignedTeachers' in center_data and center_data['AssignedTeachers'] is not None:
-                    center.assigned_teachers_id = center_data['AssignedTeachers']
-                if 'AssignedRegionalAdmin' in center_data and center_data['AssignedRegionalAdmin'] is not None:
-                    center.assigned_regional_admin_id = center_data['AssignedRegionalAdmin']
-                if 'StartedDate' in center_data and center_data['StartedDate'] is not None:
-                    center.started_date = center_data['StartedDate']
-                if 'VidhanSabhaId' in center_data and center_data['VidhanSabhaId'] is not None:
-                    center.vidhan_sabha_id = center_data['VidhanSabhaId']
-                if 'DistrictId' in center_data and center_data['DistrictId'] is not None:
-                    center.district_id = center_data['DistrictId']
-                if 'PanchayatId' in center_data and center_data['PanchayatId'] is not None:
-                    center.panchayat_id = center_data['PanchayatId']
-                if 'VillageId' in center_data and center_data['VillageId'] is not None:
-                    center.village_id = center_data['VillageId']
-                
-                # Preserve status and class_status (matches .NET)
-                # Status and ClassStatus are preserved
-                
-                center.updated_on = datetime.now()
-                center.updated_by = current_user_id
+        with transaction.atomic():
+            if center_id > 0:
+                # Update existing center - preserve Status and ClassStatus (matches .NET)
+                try:
+                    center = Center.objects.get(id=center_id, status=True)
+
+                    # Get old teacher and regional admin for cleanup if needed
+                    old_teacher_id = center.assigned_teachers
+                    old_regional_admin_id = center.assigned_regional_admin
+
+                    # Update fields
+                    if 'CenterName' in center_data and center_data['CenterName'] is not None:
+                        center.center_name = center_data['CenterName']
+                    if 'AssignedTeachers' in center_data and center_data['AssignedTeachers'] is not None:
+                        center.assigned_teachers = center_data['AssignedTeachers']
+                    if 'AssignedRegionalAdmin' in center_data and center_data['AssignedRegionalAdmin'] is not None:
+                        center.assigned_regional_admin = center_data['AssignedRegionalAdmin']
+                    if 'StartedDate' in center_data and center_data['StartedDate'] is not None:
+                        center.started_date = center_data['StartedDate']
+                    if 'VidhanSabhaId' in center_data and center_data['VidhanSabhaId'] is not None:
+                        center.vidhan_sabha_id = center_data['VidhanSabhaId']
+                    if 'DistrictId' in center_data and center_data['DistrictId'] is not None:
+                        center.district_id = center_data['DistrictId']
+                    if 'PanchayatId' in center_data and center_data['PanchayatId'] is not None:
+                        center.panchayat_id = center_data['PanchayatId']
+                    if 'VillageId' in center_data and center_data['VillageId'] is not None:
+                        center.village_id = center_data['VillageId']
+
+                    # Preserve status and class_status (matches .NET)
+                    # Status and ClassStatus are preserved
+
+                    center.updated_on = datetime.now()
+                    center.updated_by = current_user_id
+                    center.save()
+
+                    # If teacher changed, update statuses
+                    if old_teacher_id != center.assigned_teachers:
+                        # Remove old teacher assignment
+                        if old_teacher_id:
+                            try:
+                                old_teacher = Teacher.objects.filter(user_id=old_teacher_id, status=True).first()
+                                if old_teacher:
+                                    # Check if teacher is assigned to any other center
+                                    other_center = Center.objects.filter(
+                                        assigned_teachers=old_teacher_id,
+                                        status=True
+                                    ).exclude(id=center_id).first()
+                                    if not other_center:
+                                        old_teacher.assigned_teacher_status = False
+                                        old_teacher.assigned_regional_admin_status = False
+                                        old_teacher.updated_on = datetime.now()
+                                        old_teacher.updated_by = current_user_id
+                                        old_teacher.save()
+                            except Exception as e:
+                                logger.error(f"Error updating old teacher status: {str(e)}")
+
+                        # Update new teacher assignment
+                        if center.assigned_teachers:
+                            try:
+                                new_teacher = Teacher.objects.filter(user_id=center.assigned_teachers, status=True).first()
+                                if new_teacher:
+                                    new_teacher.assigned_teacher_status = True
+                                    new_teacher.assigned_regional_admin_status = True
+                                    new_teacher.updated_on = datetime.now()
+                                    new_teacher.updated_by = current_user_id
+                                    new_teacher.save()
+
+                                    # Save history for new teacher
+                                    if new_teacher.user:
+                                        CenterAssignUser.objects.create(
+                                            center_id=center.id,
+                                            user_id=new_teacher.user.id,
+                                            date=datetime.now(),
+                                            status=True,
+                                            created_by=current_user_id,
+                                            created_on=datetime.now()
+                                        )
+                            except Exception as e:
+                                logger.error(f"Error updating new teacher status: {str(e)}")
+
+                    # If regional admin changed, update statuses
+                    if old_regional_admin_id != center.assigned_regional_admin:
+                        # Remove old regional admin assignment
+                        if old_regional_admin_id:
+                            try:
+                                old_regional_admin = RegionalAdmin.objects.filter(user_id=old_regional_admin_id, status=True).first()
+                                if old_regional_admin:
+                                    # Check if regional admin is assigned to any other center
+                                    other_center = Center.objects.filter(
+                                        assigned_regional_admin=old_regional_admin_id,
+                                        status=True
+                                    ).exclude(id=center_id).first()
+                                    if not other_center:
+                                        old_regional_admin.assigned_teacher_status = False
+                                        old_regional_admin.assigned_regional_admin_status = False
+                                        old_regional_admin.updated_on = datetime.now()
+                                        old_regional_admin.updated_by = current_user_id
+                                        old_regional_admin.save()
+                            except Exception as e:
+                                logger.error(f"Error updating old regional admin status: {str(e)}")
+
+                        # Update new regional admin assignment
+                        if center.assigned_regional_admin:
+                            try:
+                                new_regional_admin = RegionalAdmin.objects.filter(user_id=center.assigned_regional_admin, status=True).first()
+                                if new_regional_admin:
+                                    new_regional_admin.assigned_teacher_status = True
+                                    new_regional_admin.assigned_regional_admin_status = True
+                                    new_regional_admin.updated_on = datetime.now()
+                                    new_regional_admin.updated_by = current_user_id
+                                    new_regional_admin.save()
+
+                                    # Save history for new regional admin
+                                    if new_regional_admin.user:
+                                        CenterAssignUser.objects.create(
+                                            center_id=center.id,
+                                            user_id=new_regional_admin.user.id,
+                                            date=datetime.now(),
+                                            status=True,
+                                            created_by=current_user_id,
+                                            created_on=datetime.now()
+                                        )
+                            except Exception as e:
+                                logger.error(f"Error updating new regional admin status: {str(e)}")
+
+                except Center.DoesNotExist:
+                    logger.error(f"Center not found with ID: {center_id}")
+                    return None
+            else:
+                # Insert new center
+                center_guid = str(uuid.uuid4())
+                created_date = datetime.now()
+
+                # Get teacher and regional admin user IDs
+                teacher_user_id = center_data.get('AssignedTeachers')
+                regional_admin_user_id = center_data.get('AssignedRegionalAdmin')
+
+                center = Center(
+                    center_guid_id=center_guid,
+                    center_name=center_data.get('CenterName'),
+                    assigned_teachers=teacher_user_id,
+                    assigned_regional_admin=regional_admin_user_id,
+                    started_date=center_data.get('StartedDate'),
+                    vidhan_sabha_id=center_data.get('VidhanSabhaId'),
+                    district_id=center_data.get('DistrictId'),
+                    panchayat_id=center_data.get('PanchayatId'),
+                    village_id=center_data.get('VillageId'),
+                    status=True,
+                    class_status=False,
+                    created_date=created_date,
+                    created_on=datetime.now(),
+                    created_by=current_user_id
+                )
                 center.save()
-                
-                # If teacher changed, update statuses
-                if old_teacher_id != center.assigned_teachers_id:
-                    # Remove old teacher assignment
-                    if old_teacher_id:
-                        try:
-                            old_teacher = Teacher.objects.filter(user_id=old_teacher_id, status=True).first()
-                            if old_teacher:
-                                # Check if teacher is assigned to any other center
-                                other_center = Center.objects.filter(
-                                    assigned_teachers_id=old_teacher_id,
-                                    status=True
-                                ).exclude(id=center_id).first()
-                                if not other_center:
-                                    old_teacher.assigned_teacher_status = False
-                                    old_teacher.assigned_regional_admin_status = False
-                                    old_teacher.updated_on = datetime.now()
-                                    old_teacher.updated_by = current_user_id
-                                    old_teacher.save()
-                        except Exception as e:
-                            logger.error(f"Error updating old teacher status: {str(e)}")
-                    
-                    # Update new teacher assignment
-                    if center.assigned_teachers_id:
-                        try:
-                            new_teacher = Teacher.objects.filter(user_id=center.assigned_teachers_id, status=True).first()
-                            if new_teacher:
-                                new_teacher.assigned_teacher_status = True
-                                new_teacher.assigned_regional_admin_status = True
-                                new_teacher.updated_on = datetime.now()
-                                new_teacher.updated_by = current_user_id
-                                new_teacher.save()
-                                
-                                # Save history for new teacher
-                                if new_teacher.user:
-                                    CenterAssignUser.objects.create(
-                                        center_id=center.id,
-                                        user_id=new_teacher.user.id,
-                                        date=datetime.now(),
-                                        status=True,
-                                        created_by=current_user_id,
-                                        created_on=datetime.now()
-                                    )
-                        except Exception as e:
-                            logger.error(f"Error updating new teacher status: {str(e)}")
-                
-                # If regional admin changed, update statuses
-                if old_regional_admin_id != center.assigned_regional_admin_id:
-                    # Remove old regional admin assignment
-                    if old_regional_admin_id:
-                        try:
-                            old_regional_admin = RegionalAdmin.objects.filter(user_id=old_regional_admin_id, status=True).first()
-                            if old_regional_admin:
-                                # Check if regional admin is assigned to any other center
-                                other_center = Center.objects.filter(
-                                    assigned_regional_admin_id=old_regional_admin_id,
-                                    status=True
-                                ).exclude(id=center_id).first()
-                                if not other_center:
-                                    old_regional_admin.assigned_teacher_status = False
-                                    old_regional_admin.assigned_regional_admin_status = False
-                                    old_regional_admin.updated_on = datetime.now()
-                                    old_regional_admin.updated_by = current_user_id
-                                    old_regional_admin.save()
-                        except Exception as e:
-                            logger.error(f"Error updating old regional admin status: {str(e)}")
-                    
-                    # Update new regional admin assignment
-                    if center.assigned_regional_admin_id:
-                        try:
-                            new_regional_admin = RegionalAdmin.objects.filter(user_id=center.assigned_regional_admin_id, status=True).first()
-                            if new_regional_admin:
-                                new_regional_admin.assigned_teacher_status = True
-                                new_regional_admin.assigned_regional_admin_status = True
-                                new_regional_admin.updated_on = datetime.now()
-                                new_regional_admin.updated_by = current_user_id
-                                new_regional_admin.save()
-                                
-                                # Save history for new regional admin
-                                if new_regional_admin.user:
-                                    CenterAssignUser.objects.create(
-                                        center_id=center.id,
-                                        user_id=new_regional_admin.user.id,
-                                        date=datetime.now(),
-                                        status=True,
-                                        created_by=current_user_id,
-                                        created_on=datetime.now()
-                                    )
-                        except Exception as e:
-                            logger.error(f"Error updating new regional admin status: {str(e)}")
-                
-            except Center.DoesNotExist:
-                logger.error(f"Center not found with ID: {center_id}")
-                return None
-        else:
-            # Insert new center
-            center_guid = str(uuid.uuid4())
-            created_date = datetime.now()
-            
-            # Get teacher and regional admin user IDs
-            teacher_user_id = center_data.get('AssignedTeachers')
-            regional_admin_user_id = center_data.get('AssignedRegionalAdmin')
-            
-            center = Center(
-                center_guid_id=center_guid,
-                center_name=center_data.get('CenterName'),
-                assigned_teachers_id=teacher_user_id,
-                assigned_regional_admin_id=regional_admin_user_id,
-                started_date=center_data.get('StartedDate'),
-                vidhan_sabha_id=center_data.get('VidhanSabhaId'),
-                district_id=center_data.get('DistrictId'),
-                panchayat_id=center_data.get('PanchayatId'),
-                village_id=center_data.get('VillageId'),
-                status=True,
-                class_status=False,
-                created_date=created_date,
-                created_on=datetime.now(),
-                created_by=current_user_id
-            )
-            center.save()
-            center_id = center.id
-            
-            # Update assigned teacher status (matches .NET)
-            if teacher_user_id:
-                try:
-                    teacher = Teacher.objects.filter(user_id=teacher_user_id, status=True).first()
-                    if teacher:
-                        teacher.assigned_teacher_status = True
-                        teacher.assigned_regional_admin_status = True
-                        teacher.updated_on = datetime.now()
-                        teacher.updated_by = current_user_id
-                        teacher.save()
-                        
-                        # Save history of user assign (matches .NET)
-                        if teacher.user:
-                            CenterAssignUser.objects.create(
-                                center_id=center.id,
-                                user_id=teacher.user.id,
-                                date=datetime.now(),
-                                status=True,
-                                created_by=current_user_id,
-                                created_on=datetime.now()
-                            )
-                except Exception as e:
-                    logger.error(f"Error updating teacher status: {str(e)}")
-            
-            # Update assigned regional admin status (matches .NET)
-            if regional_admin_user_id:
-                try:
-                    regional_admin = RegionalAdmin.objects.filter(user_id=regional_admin_user_id, status=True).first()
-                    if regional_admin:
-                        regional_admin.assigned_teacher_status = True
-                        regional_admin.assigned_regional_admin_status = True
-                        regional_admin.updated_on = datetime.now()
-                        regional_admin.updated_by = current_user_id
-                        regional_admin.save()
-                        
-                        # Save history of user assign (matches .NET)
-                        if regional_admin.user:
-                            CenterAssignUser.objects.create(
-                                center_id=center.id,
-                                user_id=regional_admin.user.id,
-                                date=datetime.now(),
-                                status=True,
-                                created_by=current_user_id,
-                                created_on=datetime.now()
-                            )
-                except Exception as e:
-                    logger.error(f"Error updating regional admin status: {str(e)}")
+                center_id = center.id
+
+                # Update assigned teacher status (matches .NET)
+                if teacher_user_id:
+                    try:
+                        teacher = Teacher.objects.filter(user_id=teacher_user_id, status=True).first()
+                        if teacher:
+                            teacher.assigned_teacher_status = True
+                            teacher.assigned_regional_admin_status = True
+                            teacher.updated_on = datetime.now()
+                            teacher.updated_by = current_user_id
+                            teacher.save()
+
+                            # Save history of user assign (matches .NET)
+                            if teacher.user:
+                                CenterAssignUser.objects.create(
+                                    center_id=center.id,
+                                    user_id=teacher.user.id,
+                                    date=datetime.now(),
+                                    status=True,
+                                    created_by=current_user_id,
+                                    created_on=datetime.now()
+                                )
+                    except Exception as e:
+                        logger.error(f"Error updating teacher status: {str(e)}")
+
+                # Update assigned regional admin status (matches .NET)
+                if regional_admin_user_id:
+                    try:
+                        regional_admin = RegionalAdmin.objects.filter(user_id=regional_admin_user_id, status=True).first()
+                        if regional_admin:
+                            regional_admin.assigned_teacher_status = True
+                            regional_admin.assigned_regional_admin_status = True
+                            regional_admin.updated_on = datetime.now()
+                            regional_admin.updated_by = current_user_id
+                            regional_admin.save()
+
+                            # Save history of user assign (matches .NET)
+                            if regional_admin.user:
+                                CenterAssignUser.objects.create(
+                                    center_id=center.id,
+                                    user_id=regional_admin.user.id,
+                                    date=datetime.now(),
+                                    status=True,
+                                    created_by=current_user_id,
+                                    created_on=datetime.now()
+                                )
+                    except Exception as e:
+                        logger.error(f"Error updating regional admin status: {str(e)}")
         
         return get_center_by_id(center_id)
         
@@ -1292,8 +1292,8 @@ def login_user(mobile_number, password):
                             'id': center.id,
                             'centerGuidId': center.center_guid_id,
                             'centerName': center.center_name,
-                            'assignedTeachers': center.assigned_teachers_id,
-                            'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                            'assignedTeachers': center.assigned_teachers,
+                            'assignedRegionalAdmin': center.assigned_regional_admin,
                             'startedDate': format_dotnet_datetime(center.started_date) if center.started_date else None,
                             'vidhanSabhaId': center.vidhan_sabha_id or 0,
                             'districtId': center.district_id or 0,
@@ -1338,8 +1338,8 @@ def login_user(mobile_number, password):
                             'status': center.status,
                             'createdDate': format_dotnet_datetime(center.created_date) if center.created_date else None,
                             'startedDate': format_dotnet_datetime(center.started_date) if center.started_date else None,
-                            'assignedTeachers': center.assigned_teachers_id,
-                            'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                            'assignedTeachers': center.assigned_teachers,
+                            'assignedRegionalAdmin': center.assigned_regional_admin,
                             'vidhanSabhaId': center.vidhan_sabha_id or 0,
                             'districtId': center.district_id or 0,
                             'panchayatId': center.panchayat_id or 0,
@@ -1772,8 +1772,8 @@ def get_user_by_id(user_id):
                         'id': center.id,
                         'centerGuidId': center.center_guid_id,
                         'centerName': center.center_name,
-                        'assignedTeachers': center.assigned_teachers_id,
-                        'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                        'assignedTeachers': center.assigned_teachers,
+                        'assignedRegionalAdmin': center.assigned_regional_admin,
                         'startedDate': center.started_date,
                         'vidhanSabhaId': center.vidhan_sabha_id or 0,
                         'districtId': center.district_id or 0,
@@ -1822,8 +1822,8 @@ def get_user_by_id(user_id):
                         'status': center.status,
                         'createdDate': center.created_date,
                         'startedDate': center.started_date,
-                        'assignedTeachers': center.assigned_teachers_id,
-                        'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                        'assignedTeachers': center.assigned_teachers,
+                        'assignedRegionalAdmin': center.assigned_regional_admin,
                         'vidhanSabhaId': center.vidhan_sabha_id or 0,
                         'districtId': center.district_id or 0,
                         'panchayatId': center.panchayat_id or 0,
@@ -4164,7 +4164,7 @@ def get_total_student_present(scan_date, user_id):
         # Get user type
         try:
             user = User.objects.get(id=user_id)
-            user_type = user.type
+            user_type = user.role_id
         except User.DoesNotExist:
             logger.error(f"User not found with ID: {user_id}")
             return {
