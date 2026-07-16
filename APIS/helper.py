@@ -25,7 +25,7 @@ def get_user_type(user_id):
     """Get user type by user ID"""
     try:
         user = User.objects.get(id=user_id)
-        return user.type
+        return user.role_id  
     except User.DoesNotExist:
         logger.error(f"User not found with ID: {user_id}")
         return None
@@ -163,8 +163,14 @@ def get_centers_for_regional_admin(status_param, user_id, today):
     """Get centers for regional admin"""
     all_centers = []
     
+    # Get RegionalAdmin.id from User.id
+    try:
+        regional_admin = RegionalAdmin.objects.filter(user_id=user_id).first()
+        regional_admin_id = regional_admin.id if regional_admin else 0
+    except:
+        regional_admin_id = 0
+    
     if status_param == CLASS_STATUS_ACTIVE or status_param == CLASS_STATUS_COMPLETED:
-        # Active or Completed classes
         classes = ClassModel.objects.filter(
             started_date__date=today,
             status=status_param
@@ -174,13 +180,12 @@ def get_centers_for_regional_admin(status_param, user_id, today):
         
         centers = Center.objects.filter(
             id__in=center_ids,
-            assigned_regional_admin=user_id
+            assigned_regional_admin=regional_admin_id
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
         
         for item in centers:
             center_data = build_center_data(item)
             
-            # Get class data for this center
             class_obj = classes.filter(center_id=item.id).first()
             if class_obj:
                 center_data['class_start_date'] = class_obj.started_date.strftime('%Y-%m-%d %H:%M:%S') if class_obj.started_date else None
@@ -192,7 +197,6 @@ def get_centers_for_regional_admin(status_param, user_id, today):
             all_centers.append(center_data)
             
     elif status_param == CLASS_STATUS_CANCEL:
-        # Cancel classes for regional admin
         canceled_classes = ClassCancelByTeacher.objects.filter(
             starting_date__date__lte=today,
             ending_date__date__gte=today
@@ -202,7 +206,7 @@ def get_centers_for_regional_admin(status_param, user_id, today):
         
         centers = Center.objects.filter(
             id__in=center_ids,
-            assigned_regional_admin=user_id
+            assigned_regional_admin=regional_admin_id
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
         
         for item in centers:
@@ -210,7 +214,6 @@ def get_centers_for_regional_admin(status_param, user_id, today):
             all_centers.append(center_data)
             
     else:
-        # Upcoming classes for regional admin
         classes = ClassModel.objects.filter(
             started_date__date=today
         ).select_related('center')
@@ -220,7 +223,7 @@ def get_centers_for_regional_admin(status_param, user_id, today):
         centers = Center.objects.exclude(
             id__in=center_ids
         ).filter(
-            assigned_regional_admin=user_id
+            assigned_regional_admin=regional_admin_id
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
         
         for item in centers:
@@ -299,6 +302,13 @@ def get_all_centers(userId, type):
                     center_dict = dict(zip(columns, row))
                     centers.append(center_dict)
         else:
+            # For regional admin filtering, convert User.id to RegionalAdmin.id
+            try:
+                regional_admin = RegionalAdmin.objects.filter(user_id=userId).first()
+                regional_admin_id = regional_admin.id if regional_admin else 0
+            except:
+                regional_admin_id = 0
+            
             sql = """
                 SELECT 
                     c.Id,
@@ -332,7 +342,7 @@ def get_all_centers(userId, type):
                 ORDER BY c.Id DESC
             """
             with connection.cursor() as cursor:
-                cursor.execute(sql, [userId])
+                cursor.execute(sql, [regional_admin_id])
                 rows = cursor.fetchall()
                 columns = [col[0] for col in cursor.description]
                 for row in rows:
@@ -627,21 +637,29 @@ def get_all_center_attendance(user_id, date, offset, limit):
         else:
             date_obj = date
         
-        # Get user type
+        # Get user role_id
         try:
             user = User.objects.get(id=user_id)
-            user_type = user.type
+            user_role_id = user.role_id
         except User.DoesNotExist:
             logger.error(f"User not found with ID: {user_id}")
             return []
         
-        # Get centers based on user type - order by id descending
-        if user_type == 1:
+        # Get centers based on user role
+        if user_role_id == 1:  # SuperAdmin - no conversion needed
             centers = Center.objects.all().order_by('-id')
         else:
-            centers = Center.objects.filter(
-                assigned_regional_admin=user_id
-            ).order_by('-id')
+            # Regional Admin - convert User.id to RegionalAdmin.id
+            try:
+                regional_admin = RegionalAdmin.objects.filter(user_id=user_id).first()
+                if regional_admin:
+                    centers = Center.objects.filter(
+                        assigned_regional_admin=regional_admin.id
+                    ).order_by('-id')
+                else:
+                    centers = []
+            except:
+                centers = []
         
         # Apply pagination
         if limit > 0:
@@ -656,7 +674,7 @@ def get_all_center_attendance(user_id, date, offset, limit):
                 started_date__date=date_obj
             ).first()
             
-            # Get teacher name
+            # Get teacher name from Users table (assigned_teachers stores User.id)
             teacher_name = None
             if center.assigned_teachers:
                 try:
@@ -665,13 +683,14 @@ def get_all_center_attendance(user_id, date, offset, limit):
                 except User.DoesNotExist:
                     pass
             
-            # Get regional admin name
+            # Get regional admin name via RegionalAdmin table
             regional_admin_name = None
             if center.assigned_regional_admin:
                 try:
-                    regional_admin = User.objects.get(id=center.assigned_regional_admin)
-                    regional_admin_name = regional_admin.name
-                except User.DoesNotExist:
+                    regional_admin = RegionalAdmin.objects.get(id=center.assigned_regional_admin)
+                    if regional_admin.user:
+                        regional_admin_name = regional_admin.user.name
+                except:
                     pass
             
             center_type = 1 if class_obj else 2
@@ -739,10 +758,10 @@ def get_total_attendance_count_of_center(user_id, date):
         else:
             date_obj = date
         
-        # Get user type
+        # Get user role_id
         try:
             user = User.objects.get(id=user_id)
-            user_type = user.type
+            user_role_id = user.role_id
         except User.DoesNotExist:
             logger.error(f"User not found with ID: {user_id}")
             return {
@@ -753,11 +772,19 @@ def get_total_attendance_count_of_center(user_id, date):
                 "NoAttendance": 0,
             }
         
-        # Get centers based on user type
-        if user_type == 1:  # SuperAdmin
+        # Get centers based on user role
+        if user_role_id == 1:  # SuperAdmin
             centers = Center.objects.all()
-        else:  # Regional Admin (Type 2)
-            centers = Center.objects.filter(assigned_regional_admin=user_id)
+        else:
+            # Regional Admin - convert User.id to RegionalAdmin.id
+            try:
+                regional_admin = RegionalAdmin.objects.filter(user_id=user_id).first()
+                if regional_admin:
+                    centers = Center.objects.filter(assigned_regional_admin=regional_admin.id)
+                else:
+                    centers = []
+            except:
+                centers = []
         
         # Initialize counters
         not_started = 0
@@ -767,28 +794,21 @@ def get_total_attendance_count_of_center(user_id, date):
         no_attendance = 0
         
         for center in centers:
-            # Check if class exists for this center on the given date
             class_obj = ClassModel.objects.filter(
                 center_id=center.id,
                 started_date__date=date_obj
             ).first()
             
             if class_obj is None:
-                # No class exists for this center on this date
                 not_started += 1
             else:
-                # Class exists, check its status
                 if class_obj.avilable_students == 0 and class_obj.end_date is None:
-                    # Class has started but no attendance and not ended
                     end_date_with_no_attendance += 1
                 elif class_obj.avilable_students > 0 and class_obj.end_date is None:
-                    # Class has started with attendance and not ended
                     end_date_with_attendance += 1
                 elif class_obj.avilable_students > 0 and class_obj.end_date is not None:
-                    # Class completed with attendance
                     completed += 1
                 elif class_obj.avilable_students == 0 and class_obj.end_date is not None:
-                    # Class completed with no attendance
                     no_attendance += 1
         
         result = {
@@ -905,7 +925,7 @@ def save_center(center_data, request):
                 center_guid_id=center_guid,
                 center_name=center_data.get('CenterName'),
                 assigned_teachers=teacher,
-                assigned_regional_admin=regional_admin.id,
+                assigned_regional_admin=regional_admin,
                 started_date=center_data.get('StartedDate'),
                 vidhan_sabha_id=center_data.get('VidhanSabhaId'),
                 district_id=center_data.get('DistrictId'),
@@ -4047,10 +4067,10 @@ def get_total_student_present(scan_date, user_id):
     logger.info(f"StudentHelper : GetTotalStudentPresent : Started")
     
     try:
-        # Get user type
+        # Get user role_id
         try:
             user = User.objects.get(id=user_id)
-            user_type = user.type
+            user_role_id = user.role_id
         except User.DoesNotExist:
             logger.error(f"User not found with ID: {user_id}")
             return {
@@ -4064,13 +4084,21 @@ def get_total_student_present(scan_date, user_id):
                 'time': None
             }
         
-        # Get center IDs based on user type
-        if user_type == 1:  # SuperAdmin
+        # Get center IDs based on user role
+        if user_role_id == 1:  # SuperAdmin
             center_ids = list(Center.objects.values_list('id', flat=True))
-        else:  # Regional Admin (Type 2)
-            center_ids = list(Center.objects.filter(
-                assigned_regional_admin=user_id
-            ).values_list('id', flat=True))
+        else:
+            # Regional Admin - convert User.id to RegionalAdmin.id
+            try:
+                regional_admin = RegionalAdmin.objects.filter(user_id=user_id).first()
+                if regional_admin:
+                    center_ids = list(Center.objects.filter(
+                        assigned_regional_admin=regional_admin.id
+                    ).values_list('id', flat=True))
+                else:
+                    center_ids = []
+            except:
+                center_ids = []
         
         if not center_ids:
             return {
@@ -4084,43 +4112,36 @@ def get_total_student_present(scan_date, user_id):
                 'time': None
             }
         
-        # 1. Get Total Students and Present Students
-        # Total active students
         total_students = Student.objects.filter(
             center_id__in=center_ids,
             status=True
         ).count()
         
-        # Present students (attendance on scan_date)
         scan_date_obj = scan_date.date() if hasattr(scan_date, 'date') else scan_date
         present_students = StudentAttendance.objects.filter(
             center_id__in=center_ids,
             scan_date__date=scan_date_obj
         ).values('student_id').distinct().count()
         
-        # 2. Get Total Classes and Active Classes
         total_classes = Center.objects.filter(
             id__in=center_ids
         ).count()
         
         active_classes = ClassModel.objects.filter(
             center_id__in=center_ids,
-            status=1,  # Active status
+            status=1,
             started_date__date=scan_date_obj
         ).count()
         
-        # 3. Get Completed and Upcoming Classes
-        # Classes that started on scan_date
         classes_on_date = ClassModel.objects.filter(
             center_id__in=center_ids,
             started_date__date=scan_date_obj
         )
         
         completed_class_count = classes_on_date.filter(
-            status=2  # Completed status
+            status=2
         ).count()
         
-        # Centers that don't have a class on scan_date (upcoming)
         center_ids_with_class = classes_on_date.values_list('center_id', flat=True)
         upcoming_class_count = Center.objects.filter(
             id__in=center_ids
@@ -4128,7 +4149,6 @@ def get_total_student_present(scan_date, user_id):
             id__in=center_ids_with_class
         ).count()
         
-        # 4. Get Cancel Class Count
         today = datetime.now().date()
         cancel_class_count = ClassCancelByTeacher.objects.filter(
             center_id__in=center_ids,
