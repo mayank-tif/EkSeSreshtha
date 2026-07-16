@@ -905,7 +905,7 @@ def save_center(center_data, request):
                 center_guid_id=center_guid,
                 center_name=center_data.get('CenterName'),
                 assigned_teachers=teacher,
-                assigned_regional_admin=regional_admin,
+                assigned_regional_admin=regional_admin.id,
                 started_date=center_data.get('StartedDate'),
                 vidhan_sabha_id=center_data.get('VidhanSabhaId'),
                 district_id=center_data.get('DistrictId'),
@@ -985,7 +985,7 @@ def get_all_teachers(userId):
             # First get regional admin's centers
             regional_admin = RegionalAdmin.objects.filter(user_id=userId).first()
             if regional_admin:
-                centers = Center.objects.filter(assigned_regional_admin=regional_admin)
+                centers = Center.objects.filter(assigned_regional_admin=regional_admin.id)
                 teacher_ids = centers.values_list('assigned_teachers_id', flat=True).distinct()
                 teacher_queryset = teacher_queryset.filter(id__in=teacher_ids).order_by('user__name')
             else:
@@ -1164,7 +1164,7 @@ def login_user(mobile_number, password):
                     
                     # Get list of centers
                     list_of_centers = []
-                    centers = Center.objects.filter(assigned_regional_admin=regional_admin)
+                    centers = Center.objects.filter(assigned_regional_admin=regional_admin.id)
                     for center in centers:
                         list_of_centers.append({
                             'id': center.id,
@@ -1644,7 +1644,7 @@ def get_user_by_id(user_id):
                 
                 # Get list of centers
                 list_of_centers = []
-                centers = Center.objects.filter(assigned_regional_admin=regional_admin)
+                centers = Center.objects.filter(assigned_regional_admin=regional_admin.id)
                 for center in centers:
                     list_of_centers.append({
                         'id': center.id,
