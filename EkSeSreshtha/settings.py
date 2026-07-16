@@ -79,7 +79,7 @@ WSGI_APPLICATION = 'EkSeSreshtha.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'eksesreshtha',
+        'NAME': 'eksesreshtha_new',
         'USER': 'mayank', 
         'PASSWORD': 'TagNpaydbMA@2o25',
         'HOST': '10.0.23.33', 

@@ -32,23 +32,26 @@ def get_user_type(user_id):
 
 def build_center_data(center):
     """Build center data dictionary"""
-    # Get teacher name
+    # Get teacher name from Teacher model
     teacher_name = None
     if center.assigned_teachers:
         try:
-            teacher = User.objects.get(id=center.assigned_teachers)
-            teacher_name = teacher.name
-        except User.DoesNotExist:
+            teacher = Teacher.objects.get(id=center.assigned_teachers_id)
+            if teacher.user:
+                teacher_name = teacher.user.name
+        except Teacher.DoesNotExist:
             teacher_name = None
     
-    # Get regional admin name
+    # Get regional admin name from RegionalAdmin model
     regional_admin_name = None
     if center.assigned_regional_admin:
         try:
-            regional_admin = User.objects.get(id=center.assigned_regional_admin)
-            regional_admin_name = regional_admin.name
-        except User.DoesNotExist:
+            regional_admin = RegionalAdmin.objects.get(id=center.assigned_regional_admin_id)
+            if regional_admin.user:
+                regional_admin_name = regional_admin.user.name
+        except RegionalAdmin.DoesNotExist:
             regional_admin_name = None
+    
     
     # Get village name
     village_name = None
@@ -225,6 +228,41 @@ def get_centers_for_regional_admin(status_param, user_id, today):
             all_centers.append(center_data)
     
     return all_centers
+
+
+
+# helper.py
+
+# ========== ROLE HELPERS ==========
+def get_role_by_code(role_code):
+    """Get role by code"""
+    try:
+        return Role.objects.get(role_code=role_code, status=True)
+    except Role.DoesNotExist:
+        return None
+
+
+def get_role_by_id(role_id):
+    """Get role by ID"""
+    try:
+        return Role.objects.get(id=role_id, status=True)
+    except Role.DoesNotExist:
+        return None
+# helper.py - Complete Updated Version
+
+# ========== USER SECTION (Updated for new models) ==========
+
+
+
+
+
+
+
+
+
+
+
+# ========== CENTER HELPERS (Updated for new models) ==========
 
 
 
@@ -824,7 +862,7 @@ def update_center_active_or_deactive(center_log_data):
         raise e
     
 def save_center(center_data, request):
-    """Save or update center"""
+    """Save or update center - matches .NET logic"""
     logger.info(f"CenterHelper : SaveCenter : Started")
     
     try:
@@ -832,16 +870,21 @@ def save_center(center_data, request):
         current_user_id = get_user_id_from_token(request)
         
         if center_id > 0:
-            # Update existing center
+            # Update existing center - preserve Status and ClassStatus (matches .NET)
             try:
                 center = Center.objects.get(id=center_id)
                 
+                # Update fields
                 if 'CenterName' in center_data and center_data['CenterName'] is not None:
                     center.center_name = center_data['CenterName']
                 if 'AssignedTeachers' in center_data and center_data['AssignedTeachers'] is not None:
-                    center.assigned_teachers = center_data['AssignedTeachers']
+                    teacher = Teacher.objects.filter(id=center_data['AssignedTeachers']).first()
+                    if teacher:
+                        center.assigned_teachers = teacher
                 if 'AssignedRegionalAdmin' in center_data and center_data['AssignedRegionalAdmin'] is not None:
-                    center.assigned_regional_admin = center_data['AssignedRegionalAdmin']
+                    regional_admin = RegionalAdmin.objects.filter(id=center_data['AssignedRegionalAdmin']).first()
+                    if regional_admin:
+                        center.assigned_regional_admin = regional_admin
                 if 'StartedDate' in center_data and center_data['StartedDate'] is not None:
                     center.started_date = center_data['StartedDate']
                 if 'VidhanSabhaId' in center_data and center_data['VidhanSabhaId'] is not None:
@@ -853,6 +896,9 @@ def save_center(center_data, request):
                 if 'VillageId' in center_data and center_data['VillageId'] is not None:
                     center.village_id = center_data['VillageId']
                 
+                # Preserve status and class_status (matches .NET)
+                # Status and ClassStatus are preserved
+                
                 center.updated_on = datetime.now()
                 center.updated_by = current_user_id
                 center.save()
@@ -861,13 +907,24 @@ def save_center(center_data, request):
                 logger.error(f"Center not found with ID: {center_id}")
                 return None
         else:
+            # Insert new center
             center_guid = str(uuid.uuid4())
+            created_date = datetime.now()
+            
+            # Get teacher and regional admin objects
+            teacher = None
+            if center_data.get('AssignedTeachers'):
+                teacher = Teacher.objects.filter(id=center_data['AssignedTeachers']).first()
+            
+            regional_admin = None
+            if center_data.get('AssignedRegionalAdmin'):
+                regional_admin = RegionalAdmin.objects.filter(id=center_data['AssignedRegionalAdmin']).first()
             
             center = Center(
                 center_guid_id=center_guid,
                 center_name=center_data.get('CenterName'),
-                assigned_teachers=center_data.get('AssignedTeachers'),
-                assigned_regional_admin=center_data.get('AssignedRegionalAdmin'),
+                assigned_teachers=teacher,
+                assigned_regional_admin=regional_admin,
                 started_date=center_data.get('StartedDate'),
                 vidhan_sabha_id=center_data.get('VidhanSabhaId'),
                 district_id=center_data.get('DistrictId'),
@@ -875,41 +932,48 @@ def save_center(center_data, request):
                 village_id=center_data.get('VillageId'),
                 status=True,
                 class_status=False,
-                created_date=datetime.now(),
+                created_date=created_date,
+                created_on=datetime.now(),
                 created_by=current_user_id
             )
             center.save()
             center_id = center.id
             
-            # Update assigned teacher status
-            if center.assigned_teachers:
-                User.objects.filter(id=center.assigned_teachers).update(
-                    assigned_teacher_status=True,
-                    assigned_regional_admin_status=True
-                )
+            # Update assigned teacher status (matches .NET)
+            if teacher:
+                teacher.assigned_teacher_status = True
+                teacher.assigned_regional_admin_status = True
+                teacher.updated_on = datetime.now()
+                teacher.updated_by = current_user_id
+                teacher.save()
             
-            # Update assigned regional admin status
-            if center.assigned_regional_admin:
-                User.objects.filter(id=center.assigned_regional_admin).update(
-                    assigned_teacher_status=True,
-                    assigned_regional_admin_status=True
-                )
+            # Update assigned regional admin status (matches .NET)
+            if regional_admin:
+                regional_admin.assigned_teacher_status = True
+                regional_admin.assigned_regional_admin_status = True
+                regional_admin.updated_on = datetime.now()
+                regional_admin.updated_by = current_user_id
+                regional_admin.save()
             
-            # Save history of user assign
-            if center.assigned_teachers:
+            # Save history of user assign (matches .NET)
+            if teacher and teacher.user:
                 CenterAssignUser.objects.create(
                     center_id=center.id,
-                    users_id=center.assigned_teachers,
+                    user_id=teacher.user.id,
                     date=datetime.now(),
-                    status=True
+                    status=True,
+                    created_by=current_user_id,
+                    created_on=datetime.now()
                 )
             
-            if center.assigned_regional_admin:
+            if regional_admin and regional_admin.user:
                 CenterAssignUser.objects.create(
                     center_id=center.id,
-                    users_id=center.assigned_regional_admin,
+                    user_id=regional_admin.user.id,
                     date=datetime.now(),
-                    status=True
+                    status=True,
+                    created_by=current_user_id,
+                    created_on=datetime.now()
                 )
         
         return get_center_by_id(center_id)
@@ -921,108 +985,67 @@ def save_center(center_data, request):
 
 # TECHERS SECTION ----------------------------------------------------------
 def get_all_teachers(userId):
-    """Get all teachers with optional filtering by userId"""
+    """Get all teachers with optional filtering by userId - matches .NET logic"""
     logger.info(f"UserHelper : GetRegisteredTeachers : Started")
     
     try:
-        users = []
+        teachers = []
+        
+        # Get all active teachers
+        teacher_queryset = Teacher.objects.filter(
+            status=True
+        ).select_related('user')
         
         if userId == 0:
-            # Get all teachers (Type == 3 and Status == True)
-            sql = """
-                SELECT 
-                    u.Id,
-                    u.Name,
-                    u.AssignedTeacherStatus,
-                    u.PhoneNumber,
-                    u.Picture
-                FROM Users u
-                WHERE u.Type = 3 AND u.Status = 1
-                ORDER BY u.Name
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql)
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                for row in rows:
-                    users.append(dict(zip(columns, row)))
+            # Get all teachers
+            teacher_queryset = teacher_queryset.order_by('user__name')
         else:
             # Get teachers assigned to centers under this regional admin
-            sql = """
-                SELECT 
-                    u.Id,
-                    u.Name,
-                    u.AssignedTeacherStatus,
-                    u.PhoneNumber,
-                    u.Picture
-                FROM Users u
-                WHERE u.Type = 3 
-                    AND u.Status = 1
-                    AND u.Id IN (
-                        SELECT DISTINCT c.AssignedTeachers 
-                        FROM Center c 
-                        WHERE c.AssignedRegionalAdmin = %s
-                    )
-                ORDER BY u.Name
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [userId])
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                for row in rows:
-                    users.append(dict(zip(columns, row)))
+            # First get regional admin's centers
+            regional_admin = RegionalAdmin.objects.filter(user_id=userId).first()
+            if regional_admin:
+                centers = Center.objects.filter(assigned_regional_admin=regional_admin)
+                teacher_ids = centers.values_list('assigned_teachers_id', flat=True).distinct()
+                teacher_queryset = teacher_queryset.filter(id__in=teacher_ids).order_by('user__name')
+            else:
+                return []
         
-        # Convert to TeacherDto format
-        result = []
-        for user in users:
-            teacher_dto = {
-                'id': user.get('Id'),
-                'name': user.get('Name'),
-                'profile': user.get('Picture'),
-                'phoneNumber': user.get('PhoneNumber'),
-                'assigned': user.get('AssignedTeacherStatus') if user.get('AssignedTeacherStatus') is not None else False
-            }
-            result.append(teacher_dto)
+        for teacher in teacher_queryset:
+            teachers.append({
+                'id': teacher.user.id if teacher.user else None,
+                'name': teacher.user.name if teacher.user else None,
+                'profile': teacher.user.picture if teacher.user else None,
+                'phoneNumber': teacher.user.phone_number if teacher.user else None,
+                'assigned': teacher.assigned_teacher_status or False
+            })
         
         logger.info(f"UserHelper : GetRegisteredTeachers : End")
-        return result
+        return teachers
         
     except Exception as e:
         logger.error(f"UserHelper : GetRegisteredTeachers : {str(e)}")
         raise e
+
     
 
 
 #---------------------------------------------------------
 def get_all_regional_admins():
-    """Get all regional admins (Type == RegionalAdmin)"""
+    """Get all regional admins - matches .NET logic"""
     logger.info(f"UserHelper : GetAllRegionalAdmins : Started")
     
     try:
-        sql = """
-            SELECT 
-                u.Id,
-                u.Name,
-                u.Picture
-            FROM Users u
-            WHERE u.Type = 2
-            ORDER BY u.Id DESC
-        """
+        regional_admins = RegionalAdmin.objects.filter(
+            status=True
+        ).select_related('user').order_by('-id')
         
-        with connection.cursor() as cursor:
-            cursor.execute(sql)
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            
-            result = []
-            for row in rows:
-                user_dict = dict(zip(columns, row))
-                regional_admin_dto = {
-                    'id': user_dict.get('Id'),
-                    'name': user_dict.get('Name'),
-                    'profile': user_dict.get('Picture')
-                }
-                result.append(regional_admin_dto)
+        result = []
+        for ra in regional_admins:
+            result.append({
+                'id': ra.user.id if ra.user else None,
+                'name': ra.user.name if ra.user else None,
+                'profile': ra.user.picture if ra.user else None
+            })
         
         logger.info(f"UserHelper : GetAllRegionalAdmins : End")
         return result
@@ -1033,760 +1056,625 @@ def get_all_regional_admins():
 
 
 
+
 # USER SECTION---------------------------------------------------------
 def login_user(mobile_number, password):
-    """Authenticate user by mobile number and password"""
+    """Authenticate user by mobile number and password - matches .NET logic"""
     logger.info(f"UserHelper : LoginUser : Started")
     
     try:
         hashed_password = hash_password(password)
         
-        sql = """
-            SELECT 
-                u.Id,
-                u.EnrolmentRollId,
-                u.Password,
-                u.Name,
-                u.Token,
-                u.DeviceId,
-                u.Type,
-                u.Age,
-                u.Gender,
-                u.Contact,
-                u.Status,
-                u.DateOfBirth,
-                u.Email,
-                u.PhoneNumber,
-                u.Picture,
-                u.WhatsApp,
-                u.LastLoginTime,
-                u.FullAddress,
-                u.RoleId,
-                u.CreatedOn,
-                u.EnrollmentDate,
-                u.GuardianName,
-                u.GuardianNumber,
-                u.Education,
-                u.CreatedBy,
-                u.VidhanSabhaId,
-                u.DistrictId,
-                u.VillageId,
-                u.PanchayatId,
-                u.AssignedTeacherStatus,
-                u.AssignedRegionalAdminStatus
-            FROM Users u
-            WHERE u.PhoneNumber = %s AND u.Password = %s
-        """
+        # Get user with role
+        user = User.objects.filter(
+            phone_number=mobile_number,
+            password=hashed_password,
+            status=True
+        ).select_related('role').first()
         
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [mobile_number, hashed_password])
-            row = cursor.fetchone()
-            
-            if row:
-                columns = [col[0] for col in cursor.description]
-                user_dict = dict(zip(columns, row))
-                
-                # Update last login time
-                current_time = datetime.now().strftime('%m/%d/%Y %I:%M:%S %p')
-                update_sql = """
-                    UPDATE Users 
-                    SET LastLoginTime = %s 
-                    WHERE Id = %s
-                """
-                cursor.execute(update_sql, [current_time, user_dict.get('Id')])
-                
-                # Get updated user
-                cursor.execute(sql, [mobile_number, hashed_password])
-                row = cursor.fetchone()
-                if row:
-                    user_dict = dict(zip(columns, row))
-                
-                # Generate token
-                token = AccessToken()
-                token['user_id'] = user_dict.get('Id')
-                token['user_type'] = user_dict.get('Type')
-                token['mobile_number'] = mobile_number
-                token['name'] = user_dict.get('Name') or mobile_number
-                token.set_exp(lifetime=timedelta(days=30))
-                
-                # Convert Status from 1/0 to True/False
-                status_value = user_dict.get('Status')
-                if status_value is not None:
-                    status_value = bool(status_value)
-                
-                assigned_teacher_status = user_dict.get('AssignedTeacherStatus')
-                if assigned_teacher_status is not None:
-                    assigned_teacher_status = bool(assigned_teacher_status)
-                
-                assigned_regional_admin_status = user_dict.get('AssignedRegionalAdminStatus')
-                if assigned_regional_admin_status is not None:
-                    assigned_regional_admin_status = bool(assigned_regional_admin_status)
-                
-                # Build response matching .NET exactly
-                response_data = {
-                    "id": user_dict.get('Id'),
-                    "enrolmentRollId": user_dict.get('EnrolmentRollId'),
-                    "password": None,
-                    "name": user_dict.get('Name'),
-                    "token": str(token),
-                    "deviceId": user_dict.get('DeviceId'),
-                    "type": user_dict.get('Type'),
-                    "age": user_dict.get('Age'),
-                    "gender": user_dict.get('Gender'),
-                    "contact": user_dict.get('Contact'),
-                    "status": status_value,
-                    "dateOfBirth": user_dict.get('DateOfBirth'),
-                    "email": user_dict.get('Email'),
-                    "phoneNumber": user_dict.get('PhoneNumber'),
-                    "picture": user_dict.get('Picture'),
-                    "whatsApp": user_dict.get('WhatsApp'),
-                    "lastLoginTime": user_dict.get('LastLoginTime'),
-                    "fullAddress": user_dict.get('FullAddress'),
-                    "roleId": user_dict.get('RoleId'),
-                    "createdOn": user_dict.get('CreatedOn'),
-                    "enrollmentDate": user_dict.get('EnrollmentDate'),
-                    "guardianName": user_dict.get('GuardianName'),
-                    "guardianNumber": user_dict.get('GuardianNumber'),
-                    "education": user_dict.get('Education'),
-                    "createdBy": user_dict.get('CreatedBy'),
-                    "vidhanSabhaId": user_dict.get('VidhanSabhaId'),
-                    "districtId": user_dict.get('DistrictId'),
-                    "villageId": user_dict.get('VillageId'),
-                    "panchayatId": user_dict.get('PanchayatId'),
-                    "assignedTeacherStatus": assigned_teacher_status,
-                    "assignedRegionalAdminStatus": assigned_regional_admin_status,
-                    "listOfPanchayatId": None,
-                    "district": None,
-                    "vidhanSabha": None,
-                    "panchayat": None,
-                    "village": None,
-                    "regionalAdminPanchayat": None,
-                    "center": None,
-                    "centers": None,
-                    "centerAssignUser": None
-                }
-                
-                logger.info(f"UserHelper : LoginUser : End")
-                return response_data
+        if not user:
+            return None
         
-        return None
+        # Update last login time (matches .NET)
+        current_time = datetime.now().strftime('%m/%d/%Y %I:%M:%S %p')
+        user.last_login_time = current_time
+        user.save(update_fields=['last_login_time'])
+        
+        # Generate token
+        token = AccessToken()
+        token['user_id'] = user.id
+        token['user_type'] = user.role.role_code if user.role else None
+        token['mobile_number'] = mobile_number
+        token['name'] = user.name or mobile_number
+        token.set_exp(lifetime=timedelta(days=30))
+        
+        # Build response matching .NET exactly
+        response_data = {
+            "id": user.id,
+            "enrolmentRollId": user.enrolment_roll_id,
+            "password": None,
+            "name": user.name,
+            "token": str(token),
+            "deviceId": user.device_id,
+            "type": user.role.role_code if user.role else None,
+            "status": user.status,
+            "email": user.email,
+            "phoneNumber": user.phone_number,
+            "picture": user.picture,
+            "whatsApp": user.whats_app,
+            "lastLoginTime": user.last_login_time,
+            "createdOn": user.created_on,
+            "createdBy": user.created_by,
+            "roleId": user.role_id,
+        }
+        
+        # Add role-specific data
+        if user.role:
+            if user.role.role_code == 'SUPER_ADMIN':
+                # Super Admin - only base fields
+                pass
+            elif user.role.role_code == 'REGIONAL_ADMIN':
+                regional_admin = RegionalAdmin.objects.filter(user=user).first()
+                if regional_admin:
+                    response_data.update({
+                        "age": regional_admin.age,
+                        "gender": regional_admin.gender,
+                        "dateOfBirth": regional_admin.date_of_birth,
+                        "contact": regional_admin.contact,
+                        "fullAddress": regional_admin.full_address,
+                        "education": regional_admin.education,
+                        "guardianName": regional_admin.guardian_name,
+                        "guardianNumber": regional_admin.guardian_number,
+                        "assignedTeacherStatus": regional_admin.assigned_teacher_status,
+                        "assignedRegionalAdminStatus": regional_admin.assigned_regional_admin_status,
+                        "enrollmentDate": regional_admin.enrollment_date,
+                        "vidhanSabhaId": regional_admin.vidhan_sabha_id,
+                        "districtId": regional_admin.district_id,
+                        "villageId": regional_admin.village_id,
+                        "panchayatId": regional_admin.panchayat_id,
+                    })
+            elif user.role.role_code == 'TEACHER':
+                teacher = Teacher.objects.filter(user=user).first()
+                if teacher:
+                    response_data.update({
+                        "age": teacher.age,
+                        "gender": teacher.gender,
+                        "dateOfBirth": teacher.date_of_birth,
+                        "contact": teacher.contact,
+                        "fullAddress": teacher.full_address,
+                        "education": teacher.education,
+                        "guardianName": teacher.guardian_name,
+                        "guardianNumber": teacher.guardian_number,
+                        "count": teacher.count,
+                        "assignedTeacherStatus": teacher.assigned_teacher_status,
+                        "assignedRegionalAdminStatus": teacher.assigned_regional_admin_status,
+                        "enrollmentDate": teacher.enrollment_date,
+                        "vidhanSabhaId": teacher.vidhan_sabha_id,
+                        "districtId": teacher.district_id,
+                        "villageId": teacher.village_id,
+                        "panchayatId": teacher.panchayat_id,
+                        "centerId": teacher.center_id,
+                    })
+        
+        logger.info(f"UserHelper : LoginUser : End")
+        return response_data
         
     except Exception as e:
         logger.error(f"UserHelper : LoginUser : {str(e)}")
         raise e
+
     
     
 def save_user(user_data):
-    """Save or update user"""
+    """Save or update user - matches .NET SaveLogin logic exactly"""
     logger.info(f"UserHelper : SaveLogin : Started")
     
     try:
         user_id = int(user_data.get('Id', 0))
         print(f"Saving user with ID: {user_id}")
         
-        with connection.cursor() as cursor:
-            if user_id > 0:
-                print("if")
-                # Get existing user to preserve values
-                select_sql = """
-                    SELECT 
-                        Id, EnrolmentRollId, Password, Type, Status, 
-                        CreatedOn, AssignedTeacherStatus, AssignedRegionalAdminStatus
-                    FROM Users 
-                    WHERE Id = %s
-                """
-                cursor.execute(select_sql, [user_id])
-                existing = cursor.fetchone()
+        if user_id > 0:
+            # Update existing user
+            user = User.objects.get(id=user_id)
+            
+            # Preserve values (matches .NET logic)
+            existing_status = user.status
+            existing_created_on = user.created_on
+            existing_password = user.password
+            
+            # Update fields based on user type
+            user_type = user_data.get('Type')
+            
+            if user_type == 1:  # SuperAdmin - can change anything
+                # Update all fields
+                if 'Name' in user_data and user_data['Name'] is not None:
+                    user.name = user_data['Name']
+                if 'Email' in user_data and user_data['Email'] is not None:
+                    user.email = user_data['Email']
+                if 'PhoneNumber' in user_data and user_data['PhoneNumber'] is not None:
+                    user.phone_number = user_data['PhoneNumber']
+                if 'WhatsApp' in user_data and user_data['WhatsApp'] is not None:
+                    user.whats_app = user_data['WhatsApp']
+                if 'Status' in user_data and user_data['Status'] is not None:
+                    user.status = user_data['Status']
+                if 'Picture' in user_data and user_data['Picture'] is not None:
+                    user.picture = user_data['Picture']
+                if 'DeviceId' in user_data and user_data['DeviceId'] is not None:
+                    user.device_id = user_data['DeviceId']
+                if 'Token' in user_data and user_data['Token'] is not None:
+                    user.token = user_data['Token']
+                if 'RoleId' in user_data and user_data['RoleId'] is not None:
+                    user.role_id = user_data['RoleId']
+                if 'EnrolmentRollId' in user_data and user_data['EnrolmentRollId'] is not None:
+                    user.enrolment_roll_id = user_data['EnrolmentRollId']
+                if 'Password' in user_data and user_data['Password'] != existing_password:
+                    user.password = user_data['Password']
+            else:
+                # Non-superadmin: only update specific fields (matches .NET ConvertUpdateUsertoToUser)
+                if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
+                    # Update in role-specific table
+                    pass
+                if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
+                    # Update in role-specific table
+                    pass
+                if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
+                    # Update in role-specific table
+                    pass
+                if 'Email' in user_data and user_data['Email'] is not None:
+                    user.email = user_data['Email']
+                if 'PhoneNumber' in user_data and user_data['PhoneNumber'] is not None:
+                    user.phone_number = user_data['PhoneNumber']
+                if 'Name' in user_data and user_data['Name'] is not None:
+                    user.name = user_data['Name']
                 
-                if existing:
-                    enrolment_roll_id = existing[1]
-                    existing_password = existing[2]
-                    user_type = existing[3]
-                    existing_status = existing[4]
-                    existing_created_on = existing[5]
-                    
-                    update_fields = []
-                    update_values = []
-                    
-                    # Always add UpdatedOn and UpdatedBy for any update
-                    update_fields.append("UpdatedOn = %s")
-                    update_values.append(datetime.now())
-                    
-                    # Use CreatedBy from request as UpdatedBy
-                    created_by = user_data.get('CreatedBy')
-                    if created_by:
-                        update_fields.append("UpdatedBy = %s")
-                        update_values.append(created_by)
-                    
-                    # If Type == 1 (SuperAdmin) - can change anything
-                    if user_type == 1:
-                        # SuperAdmin can change password
-                        if user_data.get('Password') and user_data['Password'] != existing_password:
-                            update_fields.append("Password = %s")
-                            update_values.append(user_data['Password'])
-                        
-                        # SuperAdmin can change all fields
-                        field_mapping = {
-                            'Name': 'Name',
-                            'Token': 'Token',
-                            'Email': 'Email',
-                            'Age': 'Age',
-                            'Gender': 'Gender',
-                            'Contact': 'Contact',
-                            'DateOfBirth': 'DateOfBirth',
-                            'PhoneNumber': 'PhoneNumber',
-                            'Picture': 'Picture',
-                            'WhatsApp': 'WhatsApp',
-                            'LastLoginTime': 'LastLoginTime',
-                            'FullAddress': 'FullAddress',
-                            'RoleId': 'RoleId',
-                            'DeviceId': 'DeviceId',
-                            'Education': 'Education',
-                            'VidhanSabhaId': 'VidhanSabhaId',
-                            'DistrictId': 'DistrictId',
-                            'VillageId': 'VillageId',
-                            'PanchayatId': 'PanchayatId',
-                            'GuardianName': 'GuardianName',
-                            'GuardianNumber': 'GuardianNumber',
-                            'AssignedTeacherStatus': 'AssignedTeacherStatus',
-                            'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus',
-                            'CreatedBy': 'CreatedBy',
-                        }
-                        
-                        for key, column in field_mapping.items():
-                            if key in user_data and user_data[key] is not None:
-                                update_fields.append(f"{column} = %s")
-                                update_values.append(user_data[key])
-                    else:
-                        # Non-superadmin: preserve EnrolmentRollId, Password, Status, CreatedOn
-                        # Only update specific fields from ConvertUpdateUsertoToUser
-                        if user_data.get('DateOfBirth'):
-                            update_fields.append("DateOfBirth = %s")
-                            update_values.append(user_data['DateOfBirth'])
-                        
-                        if user_data.get('GuardianName'):
-                            update_fields.append("GuardianName = %s")
-                            update_values.append(user_data['GuardianName'])
-                        
-                        if user_data.get('GuardianNumber'):
-                            update_fields.append("GuardianNumber = %s")
-                            update_values.append(user_data['GuardianNumber'])
-                        
-                        if user_data.get('Email'):
-                            update_fields.append("Email = %s")
-                            update_values.append(user_data['Email'])
-                        
-                        if user_data.get('PhoneNumber'):
-                            update_fields.append("PhoneNumber = %s")
-                            update_values.append(user_data['PhoneNumber'])
-                        
-                        if user_data.get('Name'):
-                            update_fields.append("Name = %s")
-                            update_values.append(user_data['Name'])
-                        
-                        # Preserve existing values for these fields
-                        update_fields.append("EnrolmentRollId = %s")
-                        update_values.append(enrolment_roll_id)
-                        
-                        update_fields.append("Password = %s")
-                        update_values.append(existing_password)
-                        
-                        update_fields.append("Status = %s")
-                        update_values.append(existing_status)
-                        
-                        update_fields.append("CreatedOn = %s")
-                        update_values.append(existing_created_on)
-                        
-                        # Update PanchayatId for teachers (Type == 3)
-                        print("user_type", user_type)
-                        list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                        if user_type == 3 and list_of_panchayat_ids:
-                            if isinstance(list_of_panchayat_ids, str):
-                                panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
-                            else:
-                                panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
-                                
-                            print("panchayat_list", panchayat_list)
-
-                            if len(panchayat_list) == 1:
-                                update_fields.append("PanchayatId = %s")
-                                update_values.append(panchayat_list[0])
-
-                        # Update DistrictId for teachers if provided
-                        if user_type == 3 and user_data.get('DistrictId') is not None:
-                            update_fields.append("DistrictId = %s")
-                            update_values.append(user_data['DistrictId'])
-
-                        # Update VidhanSabhaId for teachers if provided
-                        if user_type == 3 and user_data.get('VidhanSabhaId') is not None:
-                            update_fields.append("VidhanSabhaId = %s")
-                            update_values.append(user_data['VidhanSabhaId'])
-
-                        # Update VillageId for teachers if provided
-                        if user_type == 3 and user_data.get('VillageId') is not None:
-                            update_fields.append("VillageId = %s")
-                            update_values.append(user_data['VillageId'])
+                # Preserve these fields (matches .NET)
+                user.enrolment_roll_id = user_data.get('EnrolmentRollId') or user.enrolment_roll_id
+                user.status = existing_status
+                user.created_on = existing_created_on
+                user.password = user_data.get('Password') or existing_password
+            
+            user.updated_on = datetime.now()
+            user.updated_by = user_data.get('CreatedBy') or user_id
+            user.save()
+            
+            # Update role-specific table based on type
+            if user_type == 2:  # RegionalAdmin
+                regional_admin = RegionalAdmin.objects.filter(user=user).first()
+                if regional_admin:
+                    if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
+                        regional_admin.date_of_birth = user_data['DateOfBirth']
+                    if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
+                        regional_admin.guardian_name = user_data['GuardianName']
+                    if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
+                        regional_admin.guardian_number = user_data['GuardianNumber']
+                    if 'Age' in user_data and user_data['Age'] is not None:
+                        regional_admin.age = user_data['Age']
+                    if 'Gender' in user_data and user_data['Gender'] is not None:
+                        regional_admin.gender = user_data['Gender']
+                    if 'Contact' in user_data and user_data['Contact'] is not None:
+                        regional_admin.contact = user_data['Contact']
+                    if 'FullAddress' in user_data and user_data['FullAddress'] is not None:
+                        regional_admin.full_address = user_data['FullAddress']
+                    if 'Education' in user_data and user_data['Education'] is not None:
+                        regional_admin.education = user_data['Education']
+                    if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
+                        regional_admin.district_id = user_data['DistrictId']
+                    if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
+                        regional_admin.vidhan_sabha_id = user_data['VidhanSabhaId']
+                    if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
+                        regional_admin.panchayat_id = user_data['PanchayatId']
+                    if 'VillageId' in user_data and user_data['VillageId'] is not None:
+                        regional_admin.village_id = user_data['VillageId']
+                    regional_admin.updated_on = datetime.now()
+                    regional_admin.updated_by = user_data.get('CreatedBy') or user_id
+                    regional_admin.save()
                     
                     # Handle ListOfPanchayatIds for RegionalAdmin
-                    if user_type == 2:  # RegionalAdmin
-                        list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                        if list_of_panchayat_ids:
-                            if isinstance(list_of_panchayat_ids, str):
-                                panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
-                            else:
-                                panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
-                            
-                            if panchayat_list:
-                                # Delete existing RegionalAdminPanchayat records
-                                cursor.execute("DELETE FROM RegionalAdminPanchayat WHERE UsersId = %s", [user_id])
-                                
-                                # Insert new records
-                                for panchayat_id in panchayat_list:
-                                    cursor.execute("SELECT Name FROM Panchayat WHERE Id = %s", [panchayat_id])
-                                    panchayat_row = cursor.fetchone()
-                                    panchayat_name = panchayat_row[0] if panchayat_row else None
-                                    
-                                    if panchayat_name:
-                                        insert_sql = """
-                                            INSERT INTO RegionalAdminPanchayat (UsersId, PanchayatId, PanchayatName)
-                                            VALUES (%s, %s, %s)
-                                        """
-                                        cursor.execute(insert_sql, [user_id, panchayat_id, panchayat_name])
-                    
-                    if update_fields:
-                        update_values.append(user_id)
-                        sql = f"UPDATE Users SET {', '.join(update_fields)} WHERE Id = %s"
-                        cursor.execute(sql, update_values)
-            else:
-                print("else")
-                # Insert new user
-                name = user_data.get('Name', '')
-                date_of_birth = user_data.get('DateOfBirth', '')
-                gender = user_data.get('Gender', '')
-                
-                enrolment_roll_id = f"{name[:2]}-{date_of_birth}-"
-                if gender and gender.lower() == 'male':
-                    enrolment_roll_id += 'M'
-                else:
-                    enrolment_roll_id += 'F'
-                
-                created_on = datetime.now()
-                
-                # Start with required columns and values
-                columns = ['EnrolmentRollId', 'Status', 'CreatedOn']
-                values = [enrolment_roll_id, 1, created_on]
-                
-                # Map fields to column names
-                field_mapping = {
-                    'Name': 'Name',
-                    'Password': 'Password',
-                    'Token': 'Token',
-                    'Email': 'Email',
-                    'Type': 'Type',
-                    'Age': 'Age',
-                    'Gender': 'Gender',
-                    'Contact': 'Contact',
-                    'DateOfBirth': 'DateOfBirth',
-                    'PhoneNumber': 'PhoneNumber',
-                    'Picture': 'Picture',
-                    'WhatsApp': 'WhatsApp',
-                    'LastLoginTime': 'LastLoginTime',
-                    'FullAddress': 'FullAddress',
-                    'RoleId': 'RoleId',
-                    'DeviceId': 'DeviceId',
-                    'Education': 'Education',
-                    'VidhanSabhaId': 'VidhanSabhaId',
-                    'DistrictId': 'DistrictId',
-                    'VillageId': 'VillageId',
-                    'PanchayatId': 'PanchayatId',
-                    'GuardianName': 'GuardianName',
-                    'GuardianNumber': 'GuardianNumber',
-                    'AssignedTeacherStatus': 'AssignedTeacherStatus',
-                    'AssignedRegionalAdminStatus': 'AssignedRegionalAdminStatus',
-                    'CreatedBy': 'CreatedBy',
-                }
-                
-                for key, column in field_mapping.items():
-                    if key in user_data and user_data[key] is not None:
-                        columns.append(column)
-                        values.append(user_data[key])
-                
-                user_type = user_data.get('Type')
-                
-                # Handle ListOfPanchayatIds for Teacher
-                if user_type == 3:  # Teacher
                     list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                    print("list_of_panchayat_ids", list_of_panchayat_ids)
                     if list_of_panchayat_ids:
+                        if isinstance(list_of_panchayat_ids, str):
+                            panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                        else:
+                            panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                        
+                        if panchayat_list:
+                            # Soft delete existing records
+                            RegionalAdminPanchayat.objects.filter(
+                                regional_admin=regional_admin
+                            ).update(
+                                status=False,
+                                updated_on=datetime.now(),
+                                updated_by=user_data.get('CreatedBy') or user_id
+                            )
+                            
+                            # Insert new records
+                            for panchayat_id in panchayat_list:
+                                panchayat = Panchayat.objects.filter(id=panchayat_id).first()
+                                if panchayat:
+                                    RegionalAdminPanchayat.objects.create(
+                                        regional_admin=regional_admin,
+                                        panchayat_id=panchayat_id,
+                                        panchayat_name=panchayat.name,
+                                        status=True,
+                                        created_on=datetime.now(),
+                                        created_by=user_data.get('CreatedBy') or user_id
+                                    )
+            
+            elif user_type == 3:  # Teacher
+                teacher = Teacher.objects.filter(user=user).first()
+                if teacher:
+                    if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
+                        teacher.date_of_birth = user_data['DateOfBirth']
+                    if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
+                        teacher.guardian_name = user_data['GuardianName']
+                    if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
+                        teacher.guardian_number = user_data['GuardianNumber']
+                    if 'Age' in user_data and user_data['Age'] is not None:
+                        teacher.age = user_data['Age']
+                    if 'Gender' in user_data and user_data['Gender'] is not None:
+                        teacher.gender = user_data['Gender']
+                    if 'Contact' in user_data and user_data['Contact'] is not None:
+                        teacher.contact = user_data['Contact']
+                    if 'FullAddress' in user_data and user_data['FullAddress'] is not None:
+                        teacher.full_address = user_data['FullAddress']
+                    if 'Education' in user_data and user_data['Education'] is not None:
+                        teacher.education = user_data['Education']
+                    if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
+                        teacher.district_id = user_data['DistrictId']
+                    if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
+                        teacher.vidhan_sabha_id = user_data['VidhanSabhaId']
+                    if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
+                        teacher.panchayat_id = user_data['PanchayatId']
+                    if 'VillageId' in user_data and user_data['VillageId'] is not None:
+                        teacher.village_id = user_data['VillageId']
+                    if 'Count' in user_data and user_data['Count'] is not None:
+                        teacher.count = user_data['Count']
+                    
+                    # Handle ListOfPanchayatIds for Teacher
+                    list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                    if list_of_panchayat_ids and teacher:
                         if isinstance(list_of_panchayat_ids, str):
                             panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
                         else:
                             panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
                         
                         if len(panchayat_list) == 1:
-                            columns.append('PanchayatId')
-                            values.append(panchayat_list[0])
-                
-                placeholders = ', '.join(['%s'] * len(columns))
-                sql = f"INSERT INTO Users ({', '.join(columns)}) VALUES ({placeholders})"
-                cursor.execute(sql, values)
-                print("sql", sql, values)
-                
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                user_id = cursor.fetchone()[0]
-                
-                # Handle RegionalAdminPanchayat for RegionalAdmin
-                if user_type == 2:  # RegionalAdmin
-                    list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                    if list_of_panchayat_ids:
-                        if isinstance(list_of_panchayat_ids, str):
-                            panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
-                        else:
-                            panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
-                        
-                        for panchayat_id in panchayat_list:
-                            cursor.execute("SELECT Name FROM Panchayat WHERE Id = %s", [panchayat_id])
-                            panchayat_row = cursor.fetchone()
-                            panchayat_name = panchayat_row[0] if panchayat_row else None
-                            
-                            if panchayat_name:
-                                insert_sql = """
-                                    INSERT INTO RegionalAdminPanchayat (UsersId, PanchayatId, PanchayatName)
-                                    VALUES (%s, %s, %s)
-                                """
-                                cursor.execute(insert_sql, [user_id, panchayat_id, panchayat_name])
+                            teacher.panchayat_id = panchayat_list[0]
+                    
+                    teacher.updated_on = datetime.now()
+                    teacher.updated_by = user_data.get('CreatedBy') or user_id
+                    teacher.save()
         
+        else:
+            # Insert new user (matches .NET logic)
+            name = user_data.get('Name', '')
+            date_of_birth = user_data.get('DateOfBirth', '')
+            gender = user_data.get('Gender', '')
+            
+            enrolment_roll_id = f"{name[:2]}-{date_of_birth}-"
+            if gender and gender.lower() == 'male':
+                enrolment_roll_id += 'M'
+            else:
+                enrolment_roll_id += 'F'
+            
+            # Get role
+            role = None
+            user_type = user_data.get('Type')
+            if user_type == 1:
+                role = Role.objects.filter(role_code='SUPER_ADMIN').first()
+            elif user_type == 2:
+                role = Role.objects.filter(role_code='REGIONAL_ADMIN').first()
+            elif user_type == 3:
+                role = Role.objects.filter(role_code='TEACHER').first()
+            
+            # Create user
+            user = User(
+                enrolment_roll_id=enrolment_roll_id,
+                name=name,
+                email=user_data.get('Email'),
+                password=user_data.get('Password'),
+                phone_number=user_data.get('PhoneNumber'),
+                whats_app=user_data.get('WhatsApp'),
+                status=True,
+                picture=user_data.get('Picture'),
+                device_id=user_data.get('DeviceId'),
+                token=user_data.get('Token'),
+                role=role,
+                created_on=datetime.now(),
+                created_by=user_data.get('CreatedBy') or 1
+            )
+            user.save()
+            user_id = user.id
+            
+            # Create role-specific record
+            if user_type == 1:  # SuperAdmin
+                SuperAdmin.objects.create(
+                    super_admin_guid_id=str(uuid.uuid4()),
+                    user=user,
+                    status=True,
+                    created_on=datetime.now(),
+                    created_by=user_data.get('CreatedBy') or 1
+                )
+            
+            elif user_type == 2:  # RegionalAdmin
+                regional_admin = RegionalAdmin(
+                    regional_admin_guid_id=str(uuid.uuid4()),
+                    user=user,
+                    age=user_data.get('Age'),
+                    gender=user_data.get('Gender'),
+                    date_of_birth=user_data.get('DateOfBirth'),
+                    contact=user_data.get('Contact'),
+                    full_address=user_data.get('FullAddress'),
+                    education=user_data.get('Education'),
+                    guardian_name=user_data.get('GuardianName'),
+                    guardian_number=user_data.get('GuardianNumber'),
+                    assigned_teacher_status=False,
+                    assigned_regional_admin_status=False,
+                    enrollment_date=user_data.get('EnrollmentDate'),
+                    district_id=user_data.get('DistrictId'),
+                    vidhan_sabha_id=user_data.get('VidhanSabhaId'),
+                    panchayat_id=user_data.get('PanchayatId'),
+                    village_id=user_data.get('VillageId'),
+                    status=True,
+                    created_on=datetime.now(),
+                    created_by=user_data.get('CreatedBy') or 1
+                )
+                regional_admin.save()
+                
+                # Handle ListOfPanchayatIds for RegionalAdmin
+                list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
+                if list_of_panchayat_ids:
+                    if isinstance(list_of_panchayat_ids, str):
+                        panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
+                    else:
+                        panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
+                    
+                    for panchayat_id in panchayat_list:
+                        panchayat = Panchayat.objects.filter(id=panchayat_id).first()
+                        if panchayat:
+                            RegionalAdminPanchayat.objects.create(
+                                regional_admin=regional_admin,
+                                panchayat_id=panchayat_id,
+                                panchayat_name=panchayat.name,
+                                status=True,
+                                created_on=datetime.now(),
+                                created_by=user_data.get('CreatedBy') or 1
+                            )
+            
+            elif user_type == 3:  # Teacher
+                teacher = Teacher(
+                    teacher_guid_id=str(uuid.uuid4()),
+                    user=user,
+                    age=user_data.get('Age'),
+                    gender=user_data.get('Gender'),
+                    date_of_birth=user_data.get('DateOfBirth'),
+                    contact=user_data.get('Contact'),
+                    full_address=user_data.get('FullAddress'),
+                    education=user_data.get('Education'),
+                    guardian_name=user_data.get('GuardianName'),
+                    guardian_number=user_data.get('GuardianNumber'),
+                    count=user_data.get('Count') or 0,
+                    assigned_teacher_status=False,
+                    assigned_regional_admin_status=False,
+                    enrollment_date=user_data.get('EnrollmentDate'),
+                    district_id=user_data.get('DistrictId'),
+                    vidhan_sabha_id=user_data.get('VidhanSabhaId'),
+                    panchayat_id=user_data.get('PanchayatId'),
+                    village_id=user_data.get('VillageId'),
+                    center_id=user_data.get('CenterId'),
+                    status=True,
+                    created_on=datetime.now(),
+                    created_by=user_data.get('CreatedBy') or 1
+                )
+                teacher.save()
+        
+        # Get the saved user
         return get_user_by_id(user_id)
         
-    except Exception as e:
-        logger.error(f"UserHelper : SaveLogin : {str(e)}")
-        raise e
-        
+    except User.DoesNotExist:
+        logger.error(f"User not found with ID: {user_id}")
+        return None
     except Exception as e:
         logger.error(f"UserHelper : SaveLogin : {str(e)}")
         raise e
 
 def get_user_by_id(user_id):
-    """Get user by ID matching .NET response structure exactly"""
+    """Get user by ID with role-specific data"""
     logger.info(f"UserHelper : GetUserById : Started")
     
     try:
-        sql = """
-            SELECT 
-                u.Id,
-                u.EnrolmentRollId,
-                u.Name,
-                u.Email,
-                u.Type,
-                u.Age,
-                u.Gender,
-                u.Contact,
-                u.Status,
-                u.DateOfBirth,
-                u.PhoneNumber,
-                u.Picture,
-                u.WhatsApp,
-                u.LastLoginTime,
-                u.FullAddress,
-                u.Education,
-                u.CreatedOn,
-                u.EnrollmentDate,
-                u.CreatedBy,
-                u.VidhanSabhaId,
-                u.DistrictId,
-                u.VillageId,
-                u.PanchayatId,
-                u.AssignedTeacherStatus,
-                u.AssignedRegionalAdminStatus,
-                u.GuardianName,
-                u.GuardianNumber,
-                d.Name as DistrictName,
-                v.Name as VidhanSabhaName,
-                vi.Name as VillageName,
-                p.Name as PanchayatName
-            FROM Users u
-            LEFT JOIN District d ON u.DistrictId = d.Id
-            LEFT JOIN VidhanSabha v ON u.VidhanSabhaId = v.Id
-            LEFT JOIN Panchayat p ON u.PanchayatId = p.Id
-            LEFT JOIN Village vi ON u.VillageId = vi.Id
-            WHERE u.Id = %s
-        """
+        user = User.objects.select_related('role').get(id=user_id)
         
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [user_id])
-            row = cursor.fetchone()
-            
-            if row:
-                columns = [col[0] for col in cursor.description]
-                user_dict = dict(zip(columns, row))
-                
-                user_type = user_dict.get('Type')
-                
-                # Super Admin (Type 1) - only basic fields
-                if user_type == 1:
-                    response = {
-                        'id': user_dict.get('Id'),
-                        'enrolmentRollId': user_dict.get('EnrolmentRollId'),
-                        'name': user_dict.get('Name'),
-                        'email': user_dict.get('Email'),
-                        'type': user_dict.get('Type'),
-                        'age': user_dict.get('Age'),
-                        'gender': user_dict.get('Gender'),
-                        'contact': user_dict.get('Contact'),
-                        'status': bool(user_dict.get('Status')) if user_dict.get('Status') is not None else None,
-                        'dateOfBirth': user_dict.get('DateOfBirth'),
-                        'phoneNumber': user_dict.get('PhoneNumber'),
-                        'picture': user_dict.get('Picture'),
-                        'whatsApp': user_dict.get('WhatsApp'),
-                        'lastLoginTime': user_dict.get('LastLoginTime'),
-                        'fullAddress': user_dict.get('FullAddress'),
-                        'createdOn': user_dict.get('CreatedOn').strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user_dict.get('CreatedOn') else None,
-                        'enrollmentDate': user_dict.get('EnrollmentDate').strftime('%Y-%m-%dT%H:%M:%S') if user_dict.get('EnrollmentDate') else None,
-                        'createdBy': user_dict.get('CreatedBy')
-                    }
-                    return response
-                
-                # Regional Admin (Type 2)
-                elif user_type == 2:
-                    # Get list of panchayats
-                    panchayat_sql = """
-                        SELECT 
-                            rp.PanchayatId as Id,
-                            p.PanchayatGuidId,
-                            p.Name,
-                            p.Status,
-                            p.CreatedOn,
-                            p.CreatedBy,
-                            p.DistrictId,
-                            p.VidhanSabhaId
-                        FROM RegionalAdminPanchayat rp
-                        INNER JOIN Panchayat p ON rp.PanchayatId = p.Id
-                        WHERE rp.UsersId = %s
-                    """
-                    cursor.execute(panchayat_sql, [user_id])
-                    panchayat_rows = cursor.fetchall()
-                    
-                    list_of_panchayat = []
-                    if panchayat_rows:
-                        panchayat_columns = [col[0] for col in cursor.description]
-                        for row in panchayat_rows:
-                            panchayat_dict = dict(zip(panchayat_columns, row))
-                            list_of_panchayat.append({
-                                'id': panchayat_dict.get('Id'),
-                                'panchayatGuidId': panchayat_dict.get('PanchayatGuidId') or '00000000-0000-0000-0000-000000000000',
-                                'name': panchayat_dict.get('Name'),
-                                'status': panchayat_dict.get('Status'),
-                                'createdOn': panchayat_dict.get('CreatedOn'),
-                                'createdBy': panchayat_dict.get('CreatedBy'),
-                                'districtId': panchayat_dict.get('DistrictId') or 0,
-                                'vidhanSabhaId': panchayat_dict.get('VidhanSabhaId') or 0
-                            })
-                    
-                    # Get list of centers
-                    centers_sql = """
-                        SELECT 
-                            c.Id,
-                            c.CenterGuidId,
-                            c.CenterName,
-                            c.AssignedTeachers,
-                            c.AssignedRegionalAdmin,
-                            c.StartedDate,
-                            c.VidhanSabhaId,
-                            c.DistrictId,
-                            c.PanchayatId,
-                            c.VillageId
-                        FROM Center c
-                        WHERE c.AssignedRegionalAdmin = %s
-                    """
-                    cursor.execute(centers_sql, [user_id])
-                    centers_rows = cursor.fetchall()
-                    
-                    list_of_centers = []
-                    if centers_rows:
-                        centers_columns = [col[0] for col in cursor.description]
-                        for row in centers_rows:
-                            center_dict = dict(zip(centers_columns, row))
-                            list_of_centers.append({
-                                'id': center_dict.get('Id'),
-                                'centerGuidId': center_dict.get('CenterGuidId'),
-                                'centerName': center_dict.get('CenterName'),
-                                'assignedTeachers': center_dict.get('AssignedTeachers'),
-                                'assignedRegionalAdmin': center_dict.get('AssignedRegionalAdmin'),
-                                'startedDate': center_dict.get('StartedDate'),
-                                'vidhanSabhaId': center_dict.get('VidhanSabhaId') or 0,
-                                'districtId': center_dict.get('DistrictId') or 0,
-                                'panchayatId': center_dict.get('PanchayatId') or 0,
-                                'villageId': center_dict.get('VillageId')
-                            })
-                    
-                    response = {
-                        'id': user_dict.get('Id'),
-                        'enrolmentRollId': user_dict.get('EnrolmentRollId'),
-                        'name': user_dict.get('Name'),
-                        'email': user_dict.get('Email'),
-                        'type': user_dict.get('Type'),
-                        'age': user_dict.get('Age'),
-                        'gender': user_dict.get('Gender'),
-                        'contact': user_dict.get('Contact'),
-                        'status': bool(user_dict.get('Status')) if user_dict.get('Status') is not None else None,
-                        'dateOfBirth': user_dict.get('DateOfBirth'),
-                        'phoneNumber': user_dict.get('PhoneNumber'),
-                        'picture': user_dict.get('Picture'),
-                        'whatsApp': user_dict.get('WhatsApp'),
-                        'lastLoginTime': user_dict.get('LastLoginTime'),
-                        'fullAddress': user_dict.get('FullAddress'),
-                        'education': user_dict.get('Education'),
-                        'createdOn': user_dict.get('CreatedOn').strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user_dict.get('CreatedOn') else None,
-                        'enrollmentDate': user_dict.get('EnrollmentDate').strftime('%Y-%m-%dT%H:%M:%S') if user_dict.get('EnrollmentDate') else None,
-                        'createdBy': user_dict.get('CreatedBy'),
-                        'vidhanSabhaId': user_dict.get('VidhanSabhaId'),
-                        'districtId': user_dict.get('DistrictId'),
-                        'villageId': user_dict.get('VillageId'),
-                        'assignedTeacherStatus': user_dict.get('AssignedTeacherStatus'),
-                        'assignedRegionalAdminStatus': user_dict.get('AssignedRegionalAdminStatus'),
-                        'guardianName': user_dict.get('GuardianName'),
-                        'guardianNumber': user_dict.get('GuardianNumber'),
-                        'districtName': user_dict.get('DistrictName'),
-                        'vidhanSabhaName': user_dict.get('VidhanSabhaName'),
-                        'villageName': user_dict.get('VillageName') or '',
-                        'listOfPanchayat': list_of_panchayat,
-                        'listOfCenters': list_of_centers,
-                        'assignedDate': None
-                    }
-                    return response
-                
-                # Teacher (Type 3)
-                elif user_type == 3:
-                    # Get center details
-                    center_sql = """
-                        SELECT 
-                            c.Id,
-                            c.CenterGuidId,
-                            c.CenterName,
-                            c.ClassStatus,
-                            c.Status,
-                            c.CreatedDate,
-                            c.StartedDate,
-                            c.AssignedTeachers,
-                            c.AssignedRegionalAdmin,
-                            c.VidhanSabhaId,
-                            c.DistrictId,
-                            c.PanchayatId,
-                            c.VillageId
-                        FROM Center c
-                        WHERE c.AssignedTeachers = %s
-                    """
-                    cursor.execute(center_sql, [user_id])
-                    center_row = cursor.fetchone()
-                    
-                    center_data = None
-                    if center_row:
-                        center_columns = [col[0] for col in cursor.description]
-                        center_dict = dict(zip(center_columns, center_row))
-                        center_data = {
-                            'id': center_dict.get('Id'),
-                            'centerGuidId': center_dict.get('CenterGuidId'),
-                            'centerName': center_dict.get('CenterName'),
-                            'classStatus': bool(center_dict.get('ClassStatus')) if center_dict.get('ClassStatus') is not None else None,
-                            'status': bool(center_dict.get('Status')) if center_dict.get('Status') is not None else None,
-                            'createdDate': center_dict.get('CreatedDate'),
-                            'startedDate': center_dict.get('StartedDate'),
-                            'assignedTeachers': center_dict.get('AssignedTeachers'),
-                            'assignedRegionalAdmin': center_dict.get('AssignedRegionalAdmin'),
-                            'vidhanSabhaId': center_dict.get('VidhanSabhaId') or 0,
-                            'districtId': center_dict.get('DistrictId') or 0,
-                            'panchayatId': center_dict.get('PanchayatId') or 0,
-                            'villageId': center_dict.get('VillageId'),
-                            'totalCenterCount': 0,
-                            'regionalAdminName': None,
-                            'districtName': None,
-                            'vidhanSabhaName': None,
-                            'villageName': None,
-                            'panchayatName': None,
-                            'centerAssignUser': None,
-                            'district': None,
-                            'vidhanSabha': None,
-                            'panchayat': None,
-                            'village': None,
-                            'totalStudents': None,
-                            'teacherName': None,
-                            'regionalAdminId': None,
-                            'totalActiveStudents': None,
-                            'totalPresentStudents': None,
-                            'totalAvialableStudents': None,
-                            'classStartDate': None,
-                            'classEndDate': None,
-                            'user': None,
-                            'type': 0,
-                            'startDate': None,
-                            'endDate': None,
-                            'reason': None,
-                            'noAttendance': None,
-                            'endDateWithAttendance': None,
-                            'endDateWithNoAttendance': None,
-                            'completed': None,
-                            'notStarted': None,
-                            'classCancelTeacher': None
-                        }
-                    
-                    response = {
-                        'id': user_dict.get('Id'),
-                        'enrolmentRollId': user_dict.get('EnrolmentRollId'),
-                        'name': user_dict.get('Name'),
-                        'email': user_dict.get('Email'),
-                        'type': user_dict.get('Type'),
-                        'age': user_dict.get('Age'),
-                        'gender': user_dict.get('Gender'),
-                        'contact': user_dict.get('Contact'),
-                        'status': bool(user_dict.get('Status')) if user_dict.get('Status') is not None else None,
-                        'dateOfBirth': user_dict.get('DateOfBirth'),
-                        'phoneNumber': user_dict.get('PhoneNumber'),
-                        'picture': user_dict.get('Picture'),
-                        'whatsApp': user_dict.get('WhatsApp'),
-                        'lastLoginTime': user_dict.get('LastLoginTime'),
-                        'fullAddress': user_dict.get('FullAddress'),
-                        'education': user_dict.get('Education'),
-                        'createdOn': user_dict.get('CreatedOn').strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user_dict.get('CreatedOn') else None,
-                        'enrollmentDate': user_dict.get('EnrollmentDate').strftime('%Y-%m-%dT%H:%M:%S') if user_dict.get('EnrollmentDate') else None,
-                        'createdBy': user_dict.get('CreatedBy'),
-                        'vidhanSabhaId': user_dict.get('VidhanSabhaId'),
-                        'districtId': user_dict.get('DistrictId'),
-                        'villageId': user_dict.get('VillageId'),
-                        'panchayatId': user_dict.get('PanchayatId'),
-                        'assignedTeacherStatus': user_dict.get('AssignedTeacherStatus'),
-                        'assignedRegionalAdminStatus': user_dict.get('AssignedRegionalAdminStatus'),
-                        'guardianName': user_dict.get('GuardianName'),
-                        'guardianNumber': user_dict.get('GuardianNumber'),
-                        'districtName': user_dict.get('DistrictName'),
-                        'vidhanSabhaName': user_dict.get('VidhanSabhaName'),
-                        'villageName': user_dict.get('VillageName'),
-                        'panchayatName': user_dict.get('PanchayatName'),
-                        'center': center_data,
-                        'centerEnrollmentDate': None,
-                        'assignedDate': None
-                    }
-                    return response
+        # Base response
+        response = {
+            'id': user.id,
+            'enrolmentRollId': user.enrolment_roll_id,
+            'name': user.name,
+            'email': user.email,
+            'type': user.role.role_code if user.role else None,
+            'status': user.status,
+            'phoneNumber': user.phone_number,
+            'picture': user.picture,
+            'whatsApp': user.whats_app,
+            'lastLoginTime': user.last_login_time,
+            'createdOn': user.created_on.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user.created_on else None,
+            'createdBy': user.created_by,
+            'roleId': user.role_id,
+        }
         
+        # Super Admin
+        if user.role and user.role.role_code == 'SUPER_ADMIN':
+            return response
+        
+        # Regional Admin
+        elif user.role and user.role.role_code == 'REGIONAL_ADMIN':
+            regional_admin = RegionalAdmin.objects.filter(user=user).first()
+            if regional_admin:
+                # Get list of panchayats
+                list_of_panchayat = []
+                regional_admin_panchayats = RegionalAdminPanchayat.objects.filter(
+                    regional_admin=regional_admin,
+                    status=True
+                ).select_related('panchayat')
+                
+                for rap in regional_admin_panchayats:
+                    if rap.panchayat:
+                        list_of_panchayat.append({
+                            'id': rap.panchayat.id,
+                            'panchayatGuidId': rap.panchayat.panchayat_guid_id or '00000000-0000-0000-0000-000000000000',
+                            'name': rap.panchayat.name,
+                            'status': rap.panchayat.status,
+                            'createdOn': rap.panchayat.created_on,
+                            'createdBy': rap.panchayat.created_by,
+                            'districtId': rap.panchayat.district_id or 0,
+                            'vidhanSabhaId': rap.panchayat.vidhan_sabha_id or 0
+                        })
+                
+                # Get list of centers
+                list_of_centers = []
+                centers = Center.objects.filter(assigned_regional_admin=regional_admin)
+                for center in centers:
+                    list_of_centers.append({
+                        'id': center.id,
+                        'centerGuidId': center.center_guid_id,
+                        'centerName': center.center_name,
+                        'assignedTeachers': center.assigned_teachers_id,
+                        'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                        'startedDate': center.started_date,
+                        'vidhanSabhaId': center.vidhan_sabha_id or 0,
+                        'districtId': center.district_id or 0,
+                        'panchayatId': center.panchayat_id or 0,
+                        'villageId': center.village_id
+                    })
+                
+                response.update({
+                    'age': regional_admin.age,
+                    'gender': regional_admin.gender,
+                    'dateOfBirth': regional_admin.date_of_birth,
+                    'contact': regional_admin.contact,
+                    'fullAddress': regional_admin.full_address,
+                    'education': regional_admin.education,
+                    'guardianName': regional_admin.guardian_name,
+                    'guardianNumber': regional_admin.guardian_number,
+                    'assignedTeacherStatus': regional_admin.assigned_teacher_status,
+                    'assignedRegionalAdminStatus': regional_admin.assigned_regional_admin_status,
+                    'enrollmentDate': regional_admin.enrollment_date,
+                    'districtId': regional_admin.district_id,
+                    'vidhanSabhaId': regional_admin.vidhan_sabha_id,
+                    'villageId': regional_admin.village_id,
+                    'panchayatId': regional_admin.panchayat_id,
+                    'districtName': regional_admin.district.name if regional_admin.district else None,
+                    'vidhanSabhaName': regional_admin.vidhan_sabha.name if regional_admin.vidhan_sabha else None,
+                    'villageName': regional_admin.village.name if regional_admin.village else '',
+                    'panchayatName': regional_admin.panchayat.name if regional_admin.panchayat else None,
+                    'listOfPanchayat': list_of_panchayat,
+                    'listOfCenters': list_of_centers,
+                    'assignedDate': None
+                })
+            return response
+        
+        # Teacher
+        elif user.role and user.role.role_code == 'TEACHER':
+            teacher = Teacher.objects.filter(user=user).first()
+            if teacher:
+                center_data = None
+                if teacher.center:
+                    center = teacher.center
+                    center_data = {
+                        'id': center.id,
+                        'centerGuidId': center.center_guid_id,
+                        'centerName': center.center_name,
+                        'classStatus': center.class_status,
+                        'status': center.status,
+                        'createdDate': center.created_date,
+                        'startedDate': center.started_date,
+                        'assignedTeachers': center.assigned_teachers_id,
+                        'assignedRegionalAdmin': center.assigned_regional_admin_id,
+                        'vidhanSabhaId': center.vidhan_sabha_id or 0,
+                        'districtId': center.district_id or 0,
+                        'panchayatId': center.panchayat_id or 0,
+                        'villageId': center.village_id,
+                        'totalCenterCount': 0,
+                        'regionalAdminName': None,
+                        'districtName': None,
+                        'vidhanSabhaName': None,
+                        'villageName': None,
+                        'panchayatName': None,
+                        'centerAssignUser': None,
+                        'district': None,
+                        'vidhanSabha': None,
+                        'panchayat': None,
+                        'village': None,
+                        'totalStudents': None,
+                        'teacherName': None,
+                        'regionalAdminId': None,
+                        'totalActiveStudents': None,
+                        'totalPresentStudents': None,
+                        'totalAvialableStudents': None,
+                        'classStartDate': None,
+                        'classEndDate': None,
+                        'user': None,
+                        'type': 0,
+                        'startDate': None,
+                        'endDate': None,
+                        'reason': None,
+                        'noAttendance': None,
+                        'endDateWithAttendance': None,
+                        'endDateWithNoAttendance': None,
+                        'completed': None,
+                        'notStarted': None,
+                        'classCancelTeacher': None
+                    }
+                
+                response.update({
+                    'age': teacher.age,
+                    'gender': teacher.gender,
+                    'dateOfBirth': teacher.date_of_birth,
+                    'contact': teacher.contact,
+                    'fullAddress': teacher.full_address,
+                    'education': teacher.education,
+                    'guardianName': teacher.guardian_name,
+                    'guardianNumber': teacher.guardian_number,
+                    'count': teacher.count,
+                    'assignedTeacherStatus': teacher.assigned_teacher_status,
+                    'assignedRegionalAdminStatus': teacher.assigned_regional_admin_status,
+                    'enrollmentDate': teacher.enrollment_date,
+                    'districtId': teacher.district_id,
+                    'vidhanSabhaId': teacher.vidhan_sabha_id,
+                    'villageId': teacher.village_id,
+                    'panchayatId': teacher.panchayat_id,
+                    'centerId': teacher.center_id,
+                    'districtName': teacher.district.name if teacher.district else None,
+                    'vidhanSabhaName': teacher.vidhan_sabha.name if teacher.vidhan_sabha else None,
+                    'villageName': teacher.village.name if teacher.village else None,
+                    'panchayatName': teacher.panchayat.name if teacher.panchayat else None,
+                    'centerName': teacher.center.center_name if teacher.center else None,
+                    'center': center_data,
+                    'centerEnrollmentDate': None,
+                    'assignedDate': None
+                })
+            return response
+        
+        return response
+        
+    except User.DoesNotExist:
         return None
-        
     except Exception as e:
         logger.error(f"UserHelper : GetUserById : {str(e)}")
         raise e
+
 
 def update_user_device_id(user_id, device_id):
     """Update user device ID"""
     logger.info(f"UserHelper : UpdateDeviceId : Started")
     
     try:
-        sql = """
-            UPDATE Users 
-            SET DeviceId = %s 
-            WHERE Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [device_id, user_id])
-        
-        return get_user_by_id(user_id)
+        user = User.objects.filter(id=user_id).first()
+        if user:
+            user.device_id = device_id
+            user.save(update_fields=['device_id'])
+            return get_user_by_id(user_id)
+        return None
         
     except Exception as e:
         logger.error(f"UserHelper : UpdateDeviceId : {str(e)}")
@@ -1798,15 +1686,12 @@ def update_user_password(user_id, new_password):
     
     try:
         hashed_password = hash_password(new_password)
-        sql = """
-            UPDATE Users 
-            SET Password = %s 
-            WHERE Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [hashed_password, user_id])
-        
-        return get_user_by_id(user_id)
+        user = User.objects.filter(id=user_id).first()
+        if user:
+            user.password = hashed_password
+            user.save(update_fields=['password'])
+            return get_user_by_id(user_id)
+        return None
         
     except Exception as e:
         logger.error(f"UserHelper : UpdatePassword : {str(e)}")
@@ -1817,25 +1702,16 @@ def get_user_detail_by_phone(phone_number):
     logger.info(f"UserHelper : GetUserDetailByPhoneNumber : Started")
     
     try:
-        sql = """
-            SELECT 
-                Id,
-                Name,
-                PhoneNumber,
-                Email,
-                Type,
-                Status
-            FROM Users
-            WHERE PhoneNumber = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [phone_number])
-            row = cursor.fetchone()
-            
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
-        
+        user = User.objects.filter(phone_number=phone_number).first()
+        if user:
+            return {
+                "Id": user.id,
+                "Name": user.name,
+                "PhoneNumber": user.phone_number,
+                "Email": user.email,
+                "Type": user.role.role_code if user.role else None,
+                "Status": user.status
+            }
         return None
         
     except Exception as e:
@@ -1850,32 +1726,22 @@ def search_data(search_type, query_string):
         results = []
         
         search_map = {
-            'Users': ('Users', 'Name'),
-            'Student': ('Student', 'FullName'),
-            'District': ('District', 'Name'),
-            'Panchayat': ('Panchayat', 'Name'),
-            'VidhanSabha': ('VidhanSabha', 'Name'),
-            'Village': ('Village', 'Name'),
-            'Center': ('Center', 'CenterName'),
-            'School': ('School', 'SchoolName'),
-            'Class': ('Class', 'Name'),
-            'Teacher': ('Teacher', 'FullName')
+            'Users': (User, 'name'),
+            'Student': (Student, 'full_name'),
+            'District': (District, 'name'),
+            'Panchayat': (Panchayat, 'name'),
+            'VidhanSabha': (VidhanSabha, 'name'),
+            'Village': (Village, 'name'),
+            'Center': (Center, 'center_name'),
+            'School': (School, 'school_name'),
+            'Class': (ClassModel, 'name'),
+            'Teacher': (Teacher, 'full_name')
         }
         
         if search_type in search_map:
-            table, field = search_map[search_type]
-            sql = f"""
-                SELECT * 
-                FROM {table}
-                WHERE {field} LIKE %s
-                LIMIT 25
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [f'%{query_string}%'])
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                for row in rows:
-                    results.append(dict(zip(columns, row)))
+            model, field = search_map[search_type]
+            queryset = model.objects.filter(**{f"{field}__icontains": query_string})[:25]
+            results = list(queryset.values())
         
         logger.info(f"UserHelper : SearchData : End")
         return results
@@ -1885,7 +1751,7 @@ def search_data(search_type, query_string):
         raise e
 
 def update_super_admin_user(user_data):
-    """Update super admin user - matches .NET logic exactly"""
+    """Update super admin user - matches .NET UpdateSuperAdminUser logic exactly"""
     logger.info(f"UserHelper : UpdateSuperAdminUser : Started")
     
     try:
@@ -1896,17 +1762,24 @@ def update_super_admin_user(user_data):
         
         # Get existing user
         try:
-            existing_user = User.objects.get(id=user_id)
+            user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             logger.error(f"User not found with ID: {user_id}")
             return None
         
         # Preserve these fields from existing user (matches .NET logic)
-        user_data['Type'] = existing_user.type
-        user_data['EnrolmentRollId'] = existing_user.enrolment_roll_id
-        user_data['Password'] = existing_user.password
-        user_data['CreatedOn'] = existing_user.created_on
-        user_data['Status'] = existing_user.status
+        user_data['Type'] = user.role.role_code if user.role else None
+        if user.role and user.role.role_code == 'SUPER_ADMIN':
+            user_data['Type'] = 1
+        elif user.role and user.role.role_code == 'REGIONAL_ADMIN':
+            user_data['Type'] = 2
+        elif user.role and user.role.role_code == 'TEACHER':
+            user_data['Type'] = 3
+        
+        user_data['EnrolmentRollId'] = user.enrolment_roll_id
+        user_data['Password'] = user.password
+        user_data['CreatedOn'] = user.created_on
+        user_data['Status'] = user.status
         
         # Save the user using the existing save_user function
         saved_user = save_user(user_data)
@@ -1914,13 +1787,12 @@ def update_super_admin_user(user_data):
         if saved_user:
             logger.info(f"UserHelper : UpdateSuperAdminUser : End")
             return saved_user
-        else:
-            return None
+        
+        return None
         
     except Exception as e:
         logger.error(f"UserHelper : UpdateSuperAdminUser : {str(e)}")
         raise e
-
 #---------------------------------------------------------
 # Class APIs Helper Functions
 #---------------------------------------------------------

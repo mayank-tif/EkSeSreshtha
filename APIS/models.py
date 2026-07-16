@@ -237,72 +237,50 @@ class Center(models.Model):
 
     def __str__(self):
         return self.center_name or str(self.id)
+    
+    
+class Role(models.Model):
+    id = models.AutoField(db_column="Id", primary_key=True)
+    role_name = models.CharField(db_column="RoleName", max_length=50, unique=True)
+    role_code = models.CharField(db_column="RoleCode", max_length=20, unique=True)  # SUPER_ADMIN, REGIONAL_ADMIN, TEACHER
+    description = models.CharField(db_column="Description", max_length=100, null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+
+    class Meta:
+        db_table = "Role"
 
 
 class User(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     enrolment_roll_id = models.CharField(db_column="EnrolmentRollId", max_length=50, null=True, blank=True, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    token = models.TextField(db_column="Token", null=True, blank=True)
-    type = models.IntegerField(db_column="Type", null=True, blank=True)
     email = models.EmailField(db_column="Email", max_length=50, null=True, blank=True, unique=True)
     password = models.TextField(db_column="Password", null=True, blank=True)
-    age = models.IntegerField(db_column="Age", null=True, blank=True)
-    gender = models.CharField(db_column="Gender", max_length=50, null=True, blank=True)
-    date_of_birth = models.CharField(db_column="DateOfBirth", max_length=50, null=True, blank=True)
     phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
     whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    role_id = models.IntegerField(db_column="RoleId", null=True, blank=True)
     picture = models.TextField(db_column="Picture", null=True, blank=True)
     last_login_time = models.CharField(db_column="LastLoginTime", max_length=50, null=True, blank=True)
-    contact = models.CharField(db_column="Contact", max_length=50, null=True, blank=True)
-    full_address = models.CharField(db_column="FullAddress", max_length=50, null=True, blank=True)
-    assigned_teacher_status = models.BooleanField(db_column="AssignedTeacherStatus", null=True, blank=True)
-    assigned_regional_admin_status = models.BooleanField(db_column="AssignedRegionalAdminStatus", null=True, blank=True)
-    enrollment_date = models.DateTimeField(db_column="EnrollmentDate", null=True, blank=True)
-    guardian_name = models.CharField(db_column="GuardianName", max_length=50, null=True, blank=True)
-    guardian_number = models.CharField(db_column="GuardianNumber", max_length=50, null=True, blank=True)
-    education = models.CharField(db_column="Education", max_length=50, null=True, blank=True)
     device_id = models.TextField(db_column="DeviceId", null=True, blank=True)
+    token = models.TextField(db_column="Token", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
     
     # Foreign Keys
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
+    role = models.ForeignKey(
+        Role,
+        db_column="RoleId",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='users'
     )
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='users'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='users'
-    )
-    village = models.ForeignKey(
-        Village,
-        db_column="VillageId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='users'
-    )
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
 
     class Meta:
         db_table = "Users"
@@ -312,18 +290,38 @@ class User(models.Model):
             models.UniqueConstraint(fields=['enrolment_roll_id'], name='uc_user_enrolment'),
         ]
         indexes = [
-            models.Index(fields=['district'], name='idx_user_district'),
-            models.Index(fields=['panchayat'], name='idx_user_panchayat'),
-            models.Index(fields=['vidhan_sabha'], name='idx_user_vidhansabha'),
-            models.Index(fields=['village'], name='idx_user_village'),
             models.Index(fields=['status'], name='idx_user_status'),
-            models.Index(fields=['type'], name='idx_user_type'),
-            models.Index(fields=['role_id'], name='idx_user_role'),
+            models.Index(fields=['role'], name='idx_user_role'),
         ]
 
     def __str__(self):
         return self.name or str(self.id)
 
+
+class SuperAdmin(models.Model):
+    id = models.AutoField(db_column="Id", primary_key=True)
+    super_admin_guid_id = models.CharField(db_column="SuperAdminGuidId", max_length=36, unique=True)
+    
+    user = models.OneToOneField(
+        User,
+        db_column="UserId",
+        on_delete=models.CASCADE,
+        related_name='super_admin'
+    )
+    
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+
+    class Meta:
+        db_table = "SuperAdmin"
+
+    def __str__(self):
+        return f"SuperAdmin: {self.user.name if self.user else ''}"
+        
+        
 
 class ClassModel(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
@@ -435,35 +433,27 @@ class ClassDetail(models.Model):
 class RegionalAdmin(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     regional_admin_guid_id = models.CharField(db_column="RegionalAdminGuidId", max_length=36, unique=True)
-    full_name = models.CharField(db_column="FullName", max_length=50, null=True, blank=True)
     age = models.IntegerField(db_column="Age", null=True, blank=True)
     gender = models.CharField(db_column="Gender", max_length=50, null=True, blank=True)
     date_of_birth = models.CharField(db_column="DateOfBirth", max_length=50, null=True, blank=True)
-    phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
-    whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
-    email = models.EmailField(db_column="Email", max_length=50, null=True, blank=True, unique=True)
     contact = models.CharField(db_column="Contact", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    role_id = models.IntegerField(db_column="RoleId", null=True, blank=True)
-    picture = models.CharField(db_column="Picture", max_length=50, null=True, blank=True)
-    last_login_time = models.CharField(db_column="LastLoginTime", max_length=50, null=True, blank=True)
-    password = models.CharField(db_column="Password", max_length=255, null=True, blank=True)
     full_address = models.CharField(db_column="FullAddress", max_length=50, null=True, blank=True)
-    type = models.IntegerField(db_column="Type", null=True, blank=True)
-    token = models.TextField(db_column="Token", null=True, blank=True)
+    education = models.CharField(db_column="Education", max_length=50, null=True, blank=True)
+    guardian_name = models.CharField(db_column="GuardianName", max_length=50, null=True, blank=True)
+    guardian_number = models.CharField(db_column="GuardianNumber", max_length=50, null=True, blank=True)
+    assigned_teacher_status = models.BooleanField(db_column="AssignedTeacherStatus", null=True, blank=True)
+    assigned_regional_admin_status = models.BooleanField(db_column="AssignedRegionalAdminStatus", null=True, blank=True)
+    enrollment_date = models.DateTimeField(db_column="EnrollmentDate", null=True, blank=True)
     
-    # Foreign Keys
+    user = models.OneToOneField(
+        User,
+        db_column="UserId",
+        on_delete=models.CASCADE,
+        related_name='regional_admin'
+    )
     district = models.ForeignKey(
         District,
         db_column="DistrictId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='regional_admins'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -477,6 +467,14 @@ class RegionalAdmin(models.Model):
         blank=True,
         related_name='regional_admins'
     )
+    panchayat = models.ForeignKey(
+        Panchayat,
+        db_column="PanchayatId",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='regional_admins'
+    )
     village = models.ForeignKey(
         Village,
         db_column="VillageId",
@@ -485,70 +483,58 @@ class RegionalAdmin(models.Model):
         blank=True,
         related_name='regional_admins'
     )
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='regional_admins'
-    )
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
     updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
 
     class Meta:
         db_table = "RegionalAdmin"
-        constraints = [
-            models.UniqueConstraint(fields=['regional_admin_guid_id'], name='uc_regionaladmin_guid'),
-            models.UniqueConstraint(fields=['email'], name='uc_regionaladmin_email'),
-            models.UniqueConstraint(fields=['phone_number'], name='uc_regionaladmin_phone'),
-        ]
         indexes = [
+            models.Index(fields=['user'], name='idx_regionaladmin_user'),
             models.Index(fields=['district'], name='idx_regionaladmin_district'),
-            models.Index(fields=['panchayat'], name='idx_regionaladmin_panchayat'),
-            models.Index(fields=['vidhan_sabha'], name='idx_regionaladmin_vidhansabha'),
-            models.Index(fields=['village'], name='idx_regionaladmin_village'),
-            models.Index(fields=['center'], name='idx_regionaladmin_center'),
             models.Index(fields=['status'], name='idx_regionaladmin_status'),
         ]
 
     def __str__(self):
-        return self.full_name or str(self.id)
+        return f"RegionalAdmin: {self.user.name if self.user else ''}"
 
 
 class Teacher(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     teacher_guid_id = models.CharField(db_column="TeacherGuidId", max_length=36, unique=True)
-    full_name = models.CharField(db_column="FullName", max_length=50, null=True, blank=True)
     age = models.IntegerField(db_column="Age", null=True, blank=True)
     gender = models.CharField(db_column="Gender", max_length=50, null=True, blank=True)
     date_of_birth = models.CharField(db_column="DateOfBirth", max_length=50, null=True, blank=True)
-    phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
-    whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
-    email = models.EmailField(db_column="Email", max_length=50, null=True, blank=True, unique=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    count = models.IntegerField(db_column="Count", null=True, blank=True)
-    picture = models.CharField(db_column="Picture", max_length=50, null=True, blank=True)
-    last_login_time = models.CharField(db_column="LastLoginTime", max_length=50, null=True, blank=True)
-    password = models.CharField(db_column="Password", max_length=255, null=True, blank=True)
+    contact = models.CharField(db_column="Contact", max_length=50, null=True, blank=True)
     full_address = models.CharField(db_column="FullAddress", max_length=50, null=True, blank=True)
     education = models.CharField(db_column="Education", max_length=50, null=True, blank=True)
-    token = models.TextField(db_column="Token", null=True, blank=True)
+    guardian_name = models.CharField(db_column="GuardianName", max_length=50, null=True, blank=True)
+    guardian_number = models.CharField(db_column="GuardianNumber", max_length=50, null=True, blank=True)
+    count = models.IntegerField(db_column="Count", null=True, blank=True)
+    assigned_teacher_status = models.BooleanField(db_column="AssignedTeacherStatus", null=True, blank=True)
+    assigned_regional_admin_status = models.BooleanField(db_column="AssignedRegionalAdminStatus", null=True, blank=True)
+    enrollment_date = models.DateTimeField(db_column="EnrollmentDate", null=True, blank=True)
     
-    # Foreign Keys
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
+    user = models.OneToOneField(
+        User,
+        db_column="UserId",
+        on_delete=models.CASCADE,
+        related_name='teacher'
+    )
+    district = models.ForeignKey(
+        District,
+        db_column="DistrictId",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='teachers'
     )
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
+    vidhan_sabha = models.ForeignKey(
+        VidhanSabha,
+        db_column="VidhanSabhaId",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -562,14 +548,6 @@ class Teacher(models.Model):
         blank=True,
         related_name='teachers'
     )
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='teachers'
-    )
     village = models.ForeignKey(
         Village,
         db_column="VillageId",
@@ -578,29 +556,32 @@ class Teacher(models.Model):
         blank=True,
         related_name='teachers'
     )
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    center = models.ForeignKey(
+        Center,
+        db_column="CenterId",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='teachers'
+    )
+    
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
     updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
 
     class Meta:
         db_table = "Teacher"
-        constraints = [
-            models.UniqueConstraint(fields=['teacher_guid_id'], name='uc_teacher_guid'),
-            models.UniqueConstraint(fields=['email'], name='uc_teacher_email'),
-            models.UniqueConstraint(fields=['phone_number'], name='uc_teacher_phone'),
-        ]
         indexes = [
-            models.Index(fields=['district'], name='idx_teacher_district'),
-            models.Index(fields=['panchayat'], name='idx_teacher_panchayat'),
-            models.Index(fields=['vidhan_sabha'], name='idx_teacher_vidhansabha'),
-            models.Index(fields=['village'], name='idx_teacher_village'),
+            models.Index(fields=['user'], name='idx_teacher_user'),
             models.Index(fields=['center'], name='idx_teacher_center'),
             models.Index(fields=['status'], name='idx_teacher_status'),
         ]
 
     def __str__(self):
-        return self.full_name or str(self.id)
+        return f"Teacher: {self.user.name if self.user else ''}"
+
 
 
 class Student(models.Model):
