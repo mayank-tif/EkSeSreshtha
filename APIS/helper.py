@@ -1254,6 +1254,8 @@ def login_user(mobile_number, password):
         raise e
     
         
+# helper.py - Updated save_user function with RoleId fix
+
 def save_user(user_data):
     """Save or update user - matches .NET SaveLogin logic exactly"""
     logger.info(f"UserHelper : SaveLogin : Started")
@@ -1270,9 +1272,10 @@ def save_user(user_data):
             existing_status = user.status
             existing_created_on = user.created_on
             existing_password = user.password
+            existing_role_id = user.role_id
             
             # Update fields based on user type
-            user_type = user_data.get('Type')
+            user_type = int(user_data.get('Type'))
             
             if user_type == 1:  # SuperAdmin - can change anything
                 # Update all fields
@@ -1292,23 +1295,12 @@ def save_user(user_data):
                     user.device_id = user_data['DeviceId']
                 if 'Token' in user_data and user_data['Token'] is not None:
                     user.token = user_data['Token']
-                if 'RoleId' in user_data and user_data['RoleId'] is not None:
-                    user.role_id = user_data['RoleId']
                 if 'EnrolmentRollId' in user_data and user_data['EnrolmentRollId'] is not None:
                     user.enrolment_roll_id = user_data['EnrolmentRollId']
                 if 'Password' in user_data and user_data['Password'] != existing_password:
                     user.password = user_data['Password']
             else:
                 # Non-superadmin: only update specific fields (matches .NET ConvertUpdateUsertoToUser)
-                if 'DateOfBirth' in user_data and user_data['DateOfBirth'] is not None:
-                    # Update in role-specific table
-                    pass
-                if 'GuardianName' in user_data and user_data['GuardianName'] is not None:
-                    # Update in role-specific table
-                    pass
-                if 'GuardianNumber' in user_data and user_data['GuardianNumber'] is not None:
-                    # Update in role-specific table
-                    pass
                 if 'Email' in user_data and user_data['Email'] is not None:
                     user.email = user_data['Email']
                 if 'PhoneNumber' in user_data and user_data['PhoneNumber'] is not None:
@@ -1446,17 +1438,17 @@ def save_user(user_data):
             else:
                 enrolment_roll_id += 'F'
             
-            # Get role
+            # Get role - this is the key fix
             role = None
-            user_type = user_data.get('Type')
-            if user_type == 1:
-                role = Role.objects.filter(role_code='SUPER_ADMIN').first()
-            elif user_type == 2:
-                role = Role.objects.filter(role_code='REGIONAL_ADMIN').first()
-            elif user_type == 3:
-                role = Role.objects.filter(role_code='TEACHER').first()
+            user_type = int(user_data.get('Type'))
             
-            # Create user
+            # Try to get role by RoleId first (from .NET request)
+            if user_type:
+                role = Role.objects.filter(id=user_type).first()
+            
+            print(f"Creating new user with enrolment_roll_id: {enrolment_roll_id}, role: {role.role_code if role else 'None'}, role_id: {role.id if role else 'None'}")
+            
+            # Create user with role
             user = User(
                 enrolment_roll_id=enrolment_roll_id,
                 name=name,
@@ -1468,7 +1460,7 @@ def save_user(user_data):
                 picture=user_data.get('Picture'),
                 device_id=user_data.get('DeviceId'),
                 token=user_data.get('Token'),
-                role=role,
+                role=role, 
                 created_on=datetime.now(),
                 created_by=user_data.get('CreatedBy') or 1
             )
@@ -1580,7 +1572,7 @@ def get_user_by_id(user_id):
             'enrolmentRollId': user.enrolment_roll_id,
             'name': user.name,
             'email': user.email,
-            'type': user.role.role_code if user.role else None,
+            'type': user.role_id,  # role_id as type
             'status': user.status,
             'phoneNumber': user.phone_number,
             'picture': user.picture,
@@ -1589,6 +1581,34 @@ def get_user_by_id(user_id):
             'createdOn': user.created_on.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user.created_on else None,
             'createdBy': user.created_by,
             'roleId': user.role_id,
+            # Default values for role-specific fields
+            'age': None,
+            'gender': None,
+            'contact': None,
+            'dateOfBirth': None,
+            'fullAddress': None,
+            'education': None,
+            'guardianName': None,
+            'guardianNumber': None,
+            'count': None,
+            'assignedTeacherStatus': None,
+            'assignedRegionalAdminStatus': None,
+            'enrollmentDate': None,
+            'districtId': None,
+            'vidhanSabhaId': None,
+            'villageId': None,
+            'panchayatId': None,
+            'centerId': None,
+            'districtName': None,
+            'vidhanSabhaName': None,
+            'villageName': None,
+            'panchayatName': None,
+            'centerName': None,
+            'listOfPanchayat': None,
+            'listOfCenters': None,
+            'center': None,
+            'assignedDate': None,
+            'centerEnrollmentDate': None
         }
         
         # Super Admin
