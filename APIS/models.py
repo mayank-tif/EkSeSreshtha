@@ -906,11 +906,18 @@ class Concern(models.Model):
 
 class RegionalAdminPanchayat(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
-    users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     panchayat_name = models.CharField(db_column="PanchayatName", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     
     # Foreign Keys
+    regional_admin = models.ForeignKey(
+        RegionalAdmin,
+        db_column="RegionalAdminId",  # Column name in database
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='regional_admin_panchayats'
+    )
     panchayat = models.ForeignKey(
         Panchayat,
         db_column="PanchayatId",
@@ -927,10 +934,9 @@ class RegionalAdminPanchayat(models.Model):
     class Meta:
         db_table = "RegionalAdminPanchayat"
         indexes = [
-            models.Index(fields=['users_id'], name='idx_regadminpanchayat_users'),
-            models.Index(fields=['panchayat'], name='idx_regadminpnhyt_panchayat'),
+            models.Index(fields=['regional_admin'], name='idx_regadmpnhyt_regaladm'),
+            models.Index(fields=['panchayat'], name='idx_regadmpnhyt_panchayat'),
         ]
-
 
 class StudentAttendance(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
