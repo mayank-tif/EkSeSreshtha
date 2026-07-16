@@ -4206,33 +4206,48 @@ def get_all_students(user_id, district_id=0, vidhan_sabha_id=0, panchayat_id=0, 
 #---------------------------------------------------------
 
 def save_school(school_data):
-    """Save or update school"""
+    """Save or update school - Matches .NET School/SaveSchool logic"""
     logger.info(f"SchoolHelper : SaveSchool : Started")
     
     try:
         school_id = school_data.get('Id', 0)
         
         if school_id > 0:
-            sql = "UPDATE School SET SchoolName = %s WHERE Id = %s"
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [school_data.get('SchoolName'), school_id])
+            # Update existing school
+            try:
+                school = School.objects.get(id=school_id)
+                
+                # Update fields
+                if 'SchoolName' in school_data and school_data['SchoolName'] is not None:
+                    school.school_name = school_data['SchoolName']
+                
+                school.updated_on = datetime.now()
+                school.updated_by = school_data.get('UpdatedBy') or school_data.get('CreatedBy')
+                school.save()
+                
+                # Get updated school
+                return get_school_by_id(school_id)
+                
+            except School.DoesNotExist:
+                logger.error(f"School not found with ID: {school_id}")
+                return None
         else:
-            created_on = datetime.now()
-            sql = """
-                INSERT INTO School (SchoolName, CreatedOn, CreatedBy)
-                VALUES (%s, %s, %s)
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [
-                    school_data.get('SchoolName'),
-                    created_on,
-                    school_data.get('CreatedBy')
-                ])
-                cursor.execute("SELECT LAST_INSERT_ID()")
-                school_id = cursor.fetchone()[0]
+            # Insert new school
+            school = School(
+                school_name=school_data.get('SchoolName'),
+                created_on=datetime.now(),
+                created_by=school_data.get('CreatedBy'),
+                status=True
+            )
+            school.save()
+            school_id = school.id
         
+        # Get the saved school with serializer format
         return get_school_by_id(school_id)
         
+    except IntegrityError as e:
+        logger.error(f"SchoolHelper : SaveSchool : IntegrityError - {str(e)}")
+        raise e
     except Exception as e:
         logger.error(f"SchoolHelper : SaveSchool : {str(e)}")
         raise e
@@ -5387,5 +5402,27 @@ def upload_announcement_images(image_files):
     except Exception as e:
         logger.error(f"AnnouncementView : UploadImages : {str(e)}")
         raise e
-    
-    
+            
+def get_user_id_from_token(request):
+    """
+    Extract user ID from JWT token in the request header.
+    Returns user_id if found, None otherwise.
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return None
+        
+        # Extract token from "Bearer <token>"
+        parts = auth_header.split(' ')
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return None
+        
+        token = parts[1]
+        access_token = AccessToken(token)
+        user_id = access_token.get('user_id')
+        return user_id
+        
+    except (TokenError, InvalidToken, Exception) as e:
+        logger.error(f"Error extracting user ID from token: {str(e)}")
+        return None   

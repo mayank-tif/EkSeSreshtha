@@ -1,4 +1,5 @@
 import hashlib
+import json
 import re
 import pandas as pd
 from .models import *
@@ -256,3 +257,65 @@ def login_response(account, account_type, mobile_number):
     data = model_payload(account)
     data["user_type"] = account_type
     return ok(data=data, message="Login successfully")
+
+
+# utils.py - Activity Log Functions
+
+def get_ip_address(request):
+    """Get client IP address from request"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+def log_activity(request, module, action, record_id=None, data=None):
+    """Log user activity with request object"""
+    try:
+        user_id = get_user_id_from_token(request)
+        ip_address = get_ip_address(request)
+        
+        # Convert data to JSON if it's a dict
+        if data and isinstance(data, dict):
+            import json
+            data = json.dumps(data)
+        
+        ActivityLog.objects.create(
+            user_id=user_id,
+            module=module,
+            action=action,
+            record_id=record_id or 0,
+            data=data,
+            ip_address=ip_address,
+            created_on=datetime.now()
+        )
+        logger.info(f"Activity logged: User {user_id} {action} {module} {record_id}")
+    except Exception as e:
+        logger.error(f"Failed to log activity: {str(e)}")
+
+def log_activity_before(request, module, action, **kwargs):
+    """Log activity at the start of a view"""
+    try:
+        user_id = get_user_id_from_token(request)
+        ip_address = get_ip_address(request)
+        
+        data = {
+            'url': request.path,
+            'method': request.method,
+            'params': dict(request.query_params),
+            **kwargs
+        }
+        
+        ActivityLog.objects.create(
+            user_id=user_id,
+            module=module,
+            action=f"{action}_STARTED",
+            record_id=0,
+            data=json.dumps(data),
+            ip_address=ip_address,
+            created_on=datetime.now()
+        )
+        logger.info(f"Activity started: User {user_id} {action} {module}")
+    except Exception as e:
+        logger.error(f"Failed to log activity start: {str(e)}")

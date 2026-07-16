@@ -1050,3 +1050,23 @@ class TestTable(models.Model):
 
     def __str__(self):
         return self.name or str(self.id)
+    
+    
+
+class ActivityLog(models.Model):
+    id = models.AutoField(db_column="Id", primary_key=True)
+    user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
+    action = models.CharField(db_column="Action", max_length=50, null=True, blank=True)  # CREATE, UPDATE, DELETE
+    module = models.CharField(db_column="Module", max_length=50, null=True, blank=True)  # User, Center, Student, etc.
+    record_id = models.IntegerField(db_column="RecordId", null=True, blank=True)
+    data = models.TextField(db_column="Data", null=True, blank=True)  # JSON data of changes
+    ip_address = models.CharField(db_column="IpAddress", max_length=50, null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    
+    class Meta:
+        db_table = "ActivityLog"
+        indexes = [
+            models.Index(fields=['user_id'], name='idx_activitylog_user'),
+            models.Index(fields=['module'], name='idx_activitylog_module'),
+            models.Index(fields=['created_on'], name='idx_activitylog_created_on'),
+        ]
