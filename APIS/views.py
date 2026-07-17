@@ -2976,7 +2976,7 @@ class StudentUpdatestudentactiveorinactivePostView(APIView):
             student_id = serializer.validated_data.get('Id')
             status_val = serializer.validated_data.get('Status')
             
-            student = update_student_active_or_inactive(student_id, status_val)
+            student = update_student_active_or_inactive(student_id, status_val, request)
             
             if student:
                 response_serializer = api_serializers.StudentDtoSerializer(student)

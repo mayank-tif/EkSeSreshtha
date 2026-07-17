@@ -1081,69 +1081,32 @@ def save_center(center_data, request):
 
 
 # TECHERS SECTION ----------------------------------------------------------
-def get_all_teachers(userId):
+def get_all_teachers(user_id):
     """Get all teachers with optional filtering by userId"""
     logger.info(f"UserHelper : GetRegisteredTeachers : Started")
     
     try:
-        users = []
-        
-        if userId == 0:
+        if user_id == 0:
             # Get all teachers (Type == 3 and Status == True)
-            sql = """
-                SELECT 
-                    u.Id,
-                    u.Name,
-                    u.AssignedTeacherStatus,
-                    u.PhoneNumber,
-                    u.Picture
-                FROM Users u
-                WHERE u.role_id = 3 AND u.Status = 1
-                ORDER BY u.Name
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql)
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                for row in rows:
-                    users.append(dict(zip(columns, row)))
+            teachers = Teacher.objects.filter(user__role_id=3, user__status=True).select_related('user').order_by('user__name')
         else:
             # Get teachers assigned to centers under this regional admin
-            sql = """
-                SELECT 
-                    u.Id,
-                    u.Name,
-                    u.AssignedTeacherStatus,
-                    u.PhoneNumber,
-                    u.Picture
-                FROM Users u
-                WHERE u.role_id = 3 
-                    AND u.Status = 1
-                    AND u.Id IN (
-                        SELECT DISTINCT c.AssignedTeachers 
-                        FROM Center c 
-                        WHERE c.AssignedRegionalAdmin = %s
-                    )
-                ORDER BY u.Name
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [userId])
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                for row in rows:
-                    users.append(dict(zip(columns, row)))
+            # Find center IDs where AssignedRegionalAdmin = user_id
+            center_ids = Center.objects.filter(assigned_regional_admin=user_id).values_list('assigned_teachers', flat=True)
+            teachers = Teacher.objects.filter(user__id__in=center_ids, user__role_id=3, user__status=True).select_related('user').order_by('user__name')
         
-        # Convert to TeacherDto format
         result = []
-        for user in users:
-            teacher_dto = {
-                'id': user.get('Id'),
-                'name': user.get('Name'),
-                'profile': user.get('Picture'),
-                'phoneNumber': user.get('PhoneNumber'),
-                'assigned': user.get('AssignedTeacherStatus') if user.get('AssignedTeacherStatus') is not None else False
-            }
-            result.append(teacher_dto)
+        for teacher in teachers:
+            user = teacher.user
+            if user:
+                teacher_dto = {
+                    'id': user.id,
+                    'name': user.name,
+                    'profile': user.picture.url if user.picture else None,
+                    'phoneNumber': user.phone_number,
+                    'assigned': teacher.assigned_teacher_status if teacher.assigned_teacher_status is not None else False
+                }
+                result.append(teacher_dto)
         
         logger.info(f"UserHelper : GetRegisteredTeachers : End")
         return result
@@ -4062,7 +4025,7 @@ def get_student_by_id(student_id):
         logger.error(f"StudentHelper : GetStudentById : {str(e)}")
         raise e
 
-def update_student_active_or_inactive(student_id, status,):
+def update_student_active_or_inactive(student_id, status,request):
     """Update student active or inactive status"""
     logger.info(f"StudentHelper : UpdateStudentActiveOrInactive : Started")
     current_user_id = get_user_id_from_token(request)
