@@ -810,7 +810,7 @@ class ClassSaveclassPostView(APIView):
                 'avilableStudents': data.get('AvilableStudents')
             }
             
-            saved_class = save_class(class_data)
+            saved_class = save_class(class_data, request)
             
             if saved_class:
                 return Response(
@@ -862,7 +862,7 @@ class ClassCancelclassPostView(APIView):
                 )
             
             class_data = serializer.validated_data
-            result = cancel_class(class_data)
+            result = cancel_class(class_data, request)
             
             if result:
                 return Response(
@@ -964,7 +964,7 @@ class ClassUpdateclasssubstatusPostView(APIView):
                 )
             
             class_id = serializer.validated_data.get('Id')
-            result = update_class_sub_status(class_id)
+            result = update_class_sub_status(class_id, request)
             
             if result:
                 return Response(
@@ -1066,7 +1066,7 @@ class ClassDeleteclassbyteacheridPostView(APIView):
                 )
             
             class_id = serializer.validated_data.get('classId')
-            result = delete_class_by_teacher_id(class_id)
+            result = delete_class_by_teacher_id(class_id, request)
             
             if result:
                 return Response(

@@ -2023,9 +2023,10 @@ def update_super_admin_user(user_data):
 # Class APIs Helper Functions
 #---------------------------------------------------------
 
-def save_class(class_data):
+def save_class(class_data, request):
     """Save a new class"""
     logger.info(f"ClassHelper : SaveClass : Started")
+    current_user_id = get_user_id_from_token(request)
     
     try:
         class_enrolment_id = class_data.get('classEnrolmentId')
@@ -2066,7 +2067,7 @@ def save_class(class_data):
                 1,  # Active status
                 0,   # SubStatus
                 datetime.now(),
-                class_data.get('userId')  # CreatedBy
+                current_user_id  # CreatedBy
             ])
             
             # Get the inserted ID
@@ -2074,8 +2075,11 @@ def save_class(class_data):
             class_id = cursor.fetchone()[0]
             
             # Update center class status
-            update_center_sql = "UPDATE Center SET ClassStatus = 1 WHERE Id = %s"
-            cursor.execute(update_center_sql, [center_id])
+            Center.objects.filter(id=center_id).update(
+                class_status=1,  # Active status
+                updated_on=datetime.now(),
+                updated_by=current_user_id
+            )
         
         # Get the saved class
         return get_class_by_id(class_id)
