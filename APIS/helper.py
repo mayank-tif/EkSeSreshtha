@@ -2566,7 +2566,13 @@ def check_district_name(name):
 #---------------------------------------------------------
 
 def get_class_count_by_month(center_id, start_date, end_date):
-    """Get class count by month for a center"""
+    """Get class count by month for a center
+    
+    Matches .NET DashboardRepository.GetClassCountByMonth:
+    - ClassCount: Classes where StartedDate >= startDate AND EndDate <= endDate
+    - HolidayCount: Holidays where StartDate >= startDate AND EndDate >= endDate  
+    - ClassCancelTeacherCount: Cancels where StartingDate >= startDate AND EndingDate >= endDate
+    """
     logger.info(f"DashboardHelper : GetClassCountByMonth : Started")
     
     try:
@@ -2577,21 +2583,21 @@ def get_class_count_by_month(center_id, start_date, end_date):
             center_id=center_id,
             started_date__date__gte=start,
             end_date__date__lte=end,
-            status=True
+            status=True  # Soft delete filter
         ).count()
             
         holiday_count = Holidays.objects.filter(
             center_id=center_id,
             start_date__date__gte=start,
-            end_date__date__gte=start,
-            status=True
+            end_date__date__gte=end,  # Matches .NET: EndDate >= endDate
+            status=True  # Soft delete filter
         ).count()
         
         cancel_count = ClassCancelByTeacher.objects.filter(
             center_id=center_id,
             starting_date__date__gte=start,
-            ending_date__date__gte=start,
-            status=True
+            ending_date__date__gte=end,  # Matches .NET: EndingDate >= endDate
+            status=True  # Soft delete filter
         ).count()
         
         result = {
@@ -2709,7 +2715,7 @@ def get_total_student_of_class(center_id, start_date, end_date):
             for row in rows:
                 grade = row[0]
                 grade_list.append(grade)
-                result["Gata"].append({
+                result["Data"].append({
                     "Grade": grade,
                     "FeMaleCount": row[2] or 0,
                     "MaleCount": row[3] or 0,
@@ -3843,8 +3849,6 @@ def save_student(student_data):
                 counter = student.counter
                 
                 # Update fields from request data
-                if student_data.get('EnrollmentId') is not None:
-                    student.enrollment_id = student_data['EnrollmentId']
                 if student_data.get('FullName') is not None:
                     student.full_name = student_data['FullName']
                 if student_data.get('MotherName') is not None:
@@ -4321,7 +4325,19 @@ def get_all_schools():
 #---------------------------------------------------------
 
 def save_student_attendance(attendance_data, is_automatic=False, is_manual=False):
-    """Save student attendance"""
+    """Save student attendance
+    
+    Args:
+        attendance_data: Dict with StudentIds[], ClassId, CenterId, UserId, ScanDate
+        is_automatic: True for QR scan auto-attendance
+        is_manual: True for teacher manual entry
+    
+    Return Codes (matches .NET):
+        1   = SUCCESS - Student attendance applied
+        0   = FAIL - Student inactive (Status=False) OR manual limit reached (>=360)
+        -1  = FAIL - Attendance already exists for this student/class/date
+        -2  = FAIL - Student not in this center (CenterId mismatch)
+    """
     logger.info(f"StudentAttendanceHelper : SaveStudentAttendance : Started")
     
     try:
@@ -4335,73 +4351,81 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
             return -1
         
         for student_id in student_ids:
-            # Check if student is active
+            # Check if student is active and belongs to center
             check_sql = "SELECT Status, CenterId, ManualAttendance FROM Student WHERE Id = %s"
             with connection.cursor() as cursor:
                 cursor.execute(check_sql, [student_id])
                 student_row = cursor.fetchone()
                 
                 if not student_row:
-                    continue
+                    continue  # Student not found, skip
+                
+                # student_row[0] = Status (bool: True=Active, False=Inactive)
+                # student_row[1] = CenterId (int)
+                # student_row[2] = ManualAttendance (int: count of manual entries)
                 
                 if not is_automatic and not is_manual:
-                    # SaveStudentAttendance
-                    if not student_row[0]:  # Status is False
+                    # Regular attendance (teacher marks via app)
+                    if not student_row[0]:  # Status=False → Inactive student
                         return 0
-                    if student_row[1] != center_id:
+                    if student_row[1] != center_id:  # Center mismatch
                         return -2
                 
                 if is_automatic:
-                    # SaveAutomaticStudentAttendance
-                    if not student_row[0]:
+                    # QR Code auto-scan attendance
+                    if not student_row[0]:  # Inactive
                         return 0
-                    if student_row[1] != center_id:
+                    if student_row[1] != center_id:  # Center mismatch
                         return -2
                 
                 if is_manual:
-                    # SaveManualStudentAttendance
+                    # Teacher manual entry
                     manual_attendance = student_row[2] or 0
+                    # .NET checks >= 360 (6 hours * 60 min?) - but seems high for daily limit
                     if manual_attendance >= 360:
                         return 0
                 
                 # Check if attendance already exists for today
                 today = datetime.now().date()
                 if is_automatic or is_manual:
+                    # Auto/Manual: check against TODAY
                     check_attendance_sql = """
                         SELECT Id FROM StudentAttendance 
                         WHERE StudentId = %s AND ClassId = %s AND DATE(ScanDate) = %s
                     """
                     cursor.execute(check_attendance_sql, [student_id, class_id, today])
                     if cursor.fetchone():
-                        return -1
+                        return -1  # Already marked today
                 else:
+                    # Regular: check against provided ScanDate
                     check_attendance_sql = """
                         SELECT Id FROM StudentAttendance 
                         WHERE StudentId = %s AND ClassId = %s AND DATE(ScanDate) = %s
                     """
                     cursor.execute(check_attendance_sql, [student_id, class_id, scan_date.date()])
                     if cursor.fetchone():
-                        return -1
+                        return -1  # Already marked for this date
                 
-                # Insert attendance
+                # Insert attendance record
                 insert_sql = """
                     INSERT INTO StudentAttendance (ClassId, StudentId, CenterId, UserId, ScanDate, Type)
                     VALUES (%s, %s, %s, %s, %s, %s)
                 """
+                # Type: False=Auto/QR scan, True=Manual entry
                 attendance_type = True if is_manual else False
                 scan_date_val = datetime.now() if (is_automatic or is_manual) else scan_date
                 cursor.execute(insert_sql, [class_id, student_id, center_id, user_id, scan_date_val, attendance_type])
                 
-                # Update student ActiveClassStatus
+                # Update student ActiveClassStatus = 1 (has active class)
                 update_student_sql = "UPDATE Student SET ActiveClassStatus = 1 WHERE Id = %s"
                 cursor.execute(update_student_sql, [student_id])
                 
-                # Update manual attendance count
+                # Update manual attendance counter
                 if is_manual:
                     update_manual_sql = "UPDATE Student SET ManualAttendance = ManualAttendance + 1 WHERE Id = %s"
                     cursor.execute(update_manual_sql, [student_id])
                 
-                # Update class avilable students
+                # Update class available students count
                 update_class_sql = "UPDATE Class SET AvilableStudents = AvilableStudents + 1 WHERE Id = %s"
                 cursor.execute(update_class_sql, [class_id])
         
@@ -4412,11 +4436,19 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
         raise e
 
 def get_all_student_with_avg_attendance(center_id):
-    """Get all students with average attendance """
+    """Get all students with average attendance percentage
+    
+    Logic (matches .NET):
+    - Count classes in center with Status IN (1=Active, 2=Completed)
+    - For each active student in center:
+      * attendance_count = StudentAttendance records for student
+      * avgAttendance = (attendance_count * 100) / class_count
+    - Returns list with: id, enrollmentId, fullName, attendanceStatus, averageAttendance, date
+    """
     logger.info(f"StudentAttendanceHelper : GetAllStudentWihAvgAttendance : Started")
     
     try:
-        # Get class count for this center (Active or Completed)
+        # Get class count for this center (Active=1 or Completed=2)
         class_count = ClassModel.objects.filter(
             center_id=center_id,
             status__in=[1, 2]  # Active (1) or Completed (2)
@@ -4424,10 +4456,10 @@ def get_all_student_with_avg_attendance(center_id):
         
         students = []
         
-        # Get all students in the center
+        # Get all active students in the center
         student_queryset = Student.objects.filter(
             center_id=center_id,
-            status=True  # Only active students
+            status=True  # Only active students (Status=True)
         ).values(
             'id', 'enrollment_id', 'full_name', 'joining_date', 'status'
         )
@@ -4435,21 +4467,19 @@ def get_all_student_with_avg_attendance(center_id):
         for student in student_queryset:
             student_id = student['id']
             
-            # Count attendance for this student
+            # Count attendance records for this student
             attendance_count = StudentAttendance.objects.filter(
                 student_id=student_id
             ).count()
             
-            # Calculate average attendance
-            # avgAttendance = (attendance_count * 100) / class_count
+            # Calculate average attendance percentage
+            # Formula: (attendance_count * 100) / total_classes_in_center
             if class_count > 0:
                 avg_attendance = (attendance_count * 100) / class_count
             else:
                 avg_attendance = 0
             
-            # Determine attendance status
-            # This would be based on the student's attendance for a specific date
-            # For now, we'll set it to None or you can calculate based on today's date
+            # attendanceStatus not calculated here (would need specific date)
             attendance_status = None
             
             students.append({
@@ -4458,7 +4488,7 @@ def get_all_student_with_avg_attendance(center_id):
                 'fullName': student['full_name'],
                 'attendanceStatus': attendance_status,
                 'averageAttendance': avg_attendance,
-                'date': student['joining_date']  # Or you can use today's date
+                'date': student['joining_date']  # Using joining date as reference
             })
         
         return students
@@ -4468,13 +4498,18 @@ def get_all_student_with_avg_attendance(center_id):
         raise e
 
 def get_all_absent_attendance(center_id):
-    """Get all absent students"""
+    """Get all absent students for today"""
     logger.info(f"StudentAttendanceHelper : GetAllAbsentAttendance : Started")
     
     try:
         today = datetime.now().date()
         
-        # Get all active students
+        # LOGIC (matches .NET StudentAttendanceRepository.GetAllAbsentAttendance):
+        # 1. Get all active students in center (Status = 1/True)
+        # 2. Get students who have attendance TODAY (ScanDate = today)
+        # 3. Return students NOT in present list = ABSENT
+        # 4. Include: id, name, enrollmentId, profileImage, manualAttendance count
+        
         all_students_sql = "SELECT Id, FullName, EnrollmentId, ProfileImage, ManualAttendance FROM Student WHERE CenterId = %s AND Status = 1"
         with connection.cursor() as cursor:
             cursor.execute(all_students_sql, [center_id])
@@ -4484,9 +4519,8 @@ def get_all_absent_attendance(center_id):
                 return []
             
             student_ids = [row[0] for row in all_students]
-            student_ids_str = ','.join(['%s'] * len(student_ids))
             
-            # Get students with attendance today
+            # Get students PRESENT today
             present_sql = f"""
                 SELECT DISTINCT StudentId 
                 FROM StudentAttendance 
@@ -4514,7 +4548,7 @@ def get_all_absent_attendance(center_id):
         raise e
 
 def get_all_student_attendance_status(center_id, scan_date):
-    """Get all student attendance status for a specific date """
+    """Get all student attendance status for a specific date"""
     logger.info(f"StudentAttendanceHelper : GetAllStudentAttendancStatus : Started")
     
     try:
@@ -4524,6 +4558,12 @@ def get_all_student_attendance_status(center_id, scan_date):
             scan_date = scan_date.date() if scan_date else datetime.now().date()
         elif hasattr(scan_date, 'date'):
             scan_date = scan_date.date()
+        
+        # LOGIC (matches .NET StudentAttendanceRepository.GetAllStudentAttendancStatus):
+        # 1. Get all active students in center (Status = True)
+        # 2. LEFT JOIN with StudentAttendance on StudentId for the given scan_date
+        # 3. For each student: Present if attendance record exists, Absent otherwise
+        # 4. Returns: id, enrollmentId, fullName, attendanceStatus ('Present'/'Absent'), date
         
         students = []
         
@@ -4565,8 +4605,17 @@ def get_all_student_attendance_by_month(center_id, student_id, month, year):
     
     try:
         import calendar
+        # Calculate start and end dates for the month
         start_date = datetime(year, month, 1)
-        end_date = start_date.replace(day=1, month=start_date.month + 1) - timedelta(days=1)
+        # Last day of month
+        last_day = calendar.monthrange(year, month)[1]
+        end_date = datetime(year, month, last_day)
+        
+        # LOGIC (matches .NET StudentAttendanceRepository.GetAllStudentAttendancByMonth):
+        # 1. Validate student exists, is active, and belongs to center
+        # 2. Get all attendance records for student within month range
+        # 3. For EACH day in month, check if attendance exists -> Present/Absent
+        # 4. Returns list of daily records: id, fullName, date, attendanceStatus
         
         # Get student details
         student_sql = "SELECT Id, FullName FROM Student WHERE Id = %s AND Status = 1 AND CenterId = %s"
@@ -4579,7 +4628,7 @@ def get_all_student_attendance_by_month(center_id, student_id, month, year):
             
             student_name = student_row[1]
             
-            # Get attendance records
+            # Get attendance records (distinct dates) for the month
             attendance_sql = """
                 SELECT DISTINCT DATE(ScanDate) as Date
                 FROM StudentAttendance
