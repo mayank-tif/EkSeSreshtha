@@ -913,7 +913,7 @@ class ClassUpdateendclasstimePostView(APIView):
                 )
             
             class_id = serializer.validated_data.get('Id')
-            result = update_end_class_time(class_id)
+            result = update_end_class_time(class_id, request)
             
             if result:
                 return Response(

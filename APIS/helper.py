@@ -2038,6 +2038,7 @@ def save_class(class_data):
             WHERE ClassEnrolmentId = %s 
             AND DATE(StartedDate) = %s 
             AND CenterId = %s
+            AND Status = 1
         """
         with connection.cursor() as cursor:
             cursor.execute(check_sql, [class_enrolment_id, today, center_id])
@@ -2046,13 +2047,13 @@ def save_class(class_data):
             if existing:
                 return None
             
-            # Insert new class
+            # Insert new class - FIX: Added missing Status parameter
             insert_sql = """
                 INSERT INTO Class (
                     ClassEnrolmentId, Name, CenterId, UsersId, 
                     TotalStudents, AvilableStudents, StartedDate, 
                     Status, SubStatus, CreatedOn, CreatedBy
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(insert_sql, [
                 class_enrolment_id,
@@ -2065,7 +2066,7 @@ def save_class(class_data):
                 1,  # Active status
                 0,   # SubStatus
                 datetime.now(),
-                class_data.get('userId')
+                class_data.get('userId')  # CreatedBy
             ])
             
             # Get the inserted ID
@@ -2084,7 +2085,7 @@ def save_class(class_data):
         raise e
 
 def get_class_by_id(class_id):
-    """Get class by ID"""
+    """Get class by ID with soft delete support"""
     try:
         sql = """
             SELECT 
@@ -2092,7 +2093,7 @@ def get_class_by_id(class_id):
                 TotalStudents, AvilableStudents, StartedDate,
                 EndDate, Status, SubStatus, Reason, CancelBy, CancelDate
             FROM Class
-            WHERE Id = %s
+            WHERE Id = %s AND Status = 1
         """
         with connection.cursor() as cursor:
             cursor.execute(sql, [class_id])
@@ -2105,7 +2106,7 @@ def get_class_by_id(class_id):
         logger.error(f"ClassHelper : get_class_by_id : {str(e)}")
         raise e
 
-def cancel_class(class_data):
+def cancel_class(class_data, request=None):
     """Cancel a class"""
     logger.info(f"ClassHelper : CancelClass : Started")
     
@@ -2114,16 +2115,30 @@ def cancel_class(class_data):
         reason = class_data.get('reason')
         cancel_by = class_data.get('cancelBy')
         
-        class_obj = ClassModel.objects.filter(id=class_id).first()
+        # Get current user ID from token
+        current_user_id = None
+        if request:
+            current_user_id = get_user_id_from_token(request)
+        
+        class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
         if not class_obj:
             return None
         
+        current_time = datetime.now()
         class_obj.reason = reason
         class_obj.cancel_by = cancel_by
-        class_obj.cancel_date = datetime.now()
+        class_obj.cancel_date = current_time
         class_obj.status = 3  # Cancel status
-        class_obj.updated_on = datetime.now()
+        class_obj.updated_on = current_time
+        class_obj.updated_by = current_user_id or cancel_by
         class_obj.save()
+        
+        # Update center class status
+        Center.objects.filter(id=class_obj.center_id).update(
+            class_status=3,  # Cancel status
+            updated_on=current_time,
+            updated_by=current_user_id or cancel_by
+        )
         
         return get_class_by_id(class_id)
         
@@ -2131,34 +2146,47 @@ def cancel_class(class_data):
         logger.error(f"ClassHelper : CancelClass : {str(e)}")
         raise e
 
-def update_end_class_time(class_id):
+def update_end_class_time(class_id, request=None):
     """Update end class time"""
     logger.info(f"ClassHelper : UpdateEndClassTime : Started")
     
     try:
+        # Get current user ID from token
+        current_user_id = None
+        if request:
+            current_user_id = get_user_id_from_token(request)
+        
+        # First check if class exists
+        class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
+        if not class_obj:
+            logger.error(f"Class not found with ID: {class_id}")
+            return None
+        
         with connection.cursor() as cursor:
             # Get class data
-            class_sql = "SELECT CenterId FROM Class WHERE Id = %s"
+            class_sql = "SELECT CenterId FROM Class WHERE Id = %s AND Status = 1"
             cursor.execute(class_sql, [class_id])
             row = cursor.fetchone()
             
             if not row:
+                logger.error(f"Class not found or not active with ID: {class_id}")
                 return None
             
             center_id = row[0]
+            current_time = datetime.now()
             
-            # Update class
+            # Update class - set end date and status to completed with updated_by
             update_sql = """
                 UPDATE Class 
-                SET EndDate = %s, Status = 2
-                WHERE Id = %s
+                SET EndDate = %s, Status = 2, UpdatedOn = %s, UpdatedBy = %s
+                WHERE Id = %s AND Status = 1
             """
-            cursor.execute(update_sql, [datetime.now(), class_id])
+            cursor.execute(update_sql, [current_time, current_time, current_user_id, class_id])
             
             # Update student active class status
             student_sql = """
                 UPDATE Student s
-                SET s.ActiveClassStatus = 0
+                SET s.ActiveClassStatus = 0, s.UpdatedOn = %s, s.UpdatedBy = %s
                 WHERE s.CenterId = %s 
                 AND s.Id IN (
                     SELECT DISTINCT sa.StudentId 
@@ -2166,22 +2194,49 @@ def update_end_class_time(class_id):
                     WHERE sa.CenterId = %s
                 )
             """
-            cursor.execute(student_sql, [center_id, center_id])
+            cursor.execute(student_sql, [current_time, current_user_id, center_id, center_id])
+            
+            # Update center class status to completed
+            update_center_sql = """
+                UPDATE Center 
+                SET ClassStatus = 2, UpdatedOn = %s, UpdatedBy = %s 
+                WHERE Id = %s
+            """
+            cursor.execute(update_center_sql, [current_time, current_user_id, center_id])
         
+        # Get the updated class
         return get_class_by_id(class_id)
         
     except Exception as e:
         logger.error(f"ClassHelper : UpdateEndClassTime : {str(e)}")
         raise e
+        
+    except Exception as e:
+        logger.error(f"ClassHelper : UpdateEndClassTime : {str(e)}")
+        raise e
 
-def update_class_sub_status(class_id):
+def update_class_sub_status(class_id, request=None):
     """Update class sub status"""
     logger.info(f"ClassHelper : UpdateClassSubStatus : Started")
     
     try:
-        sql = "UPDATE Class SET SubStatus = 1 WHERE Id = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [class_id])
+        current_user_id = None
+        if request:
+            current_user_id = get_user_id_from_token(request)
+        
+        current_time = datetime.now()
+        
+        # Check if class exists
+        class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
+        if not class_obj:
+            logger.error(f"Class not found with ID: {class_id}")
+            return None
+        
+        # Update using Django ORM
+        class_obj.sub_status = 1
+        class_obj.updated_on = current_time
+        class_obj.updated_by = current_user_id
+        class_obj.save()
         
         return get_class_by_id(class_id)
         
@@ -2214,7 +2269,8 @@ def cancel_class_by_teacher(class_cancel_data, request):
             started_date__date=datetime.now().date()
         ).update(
             status=3,  # Cancel status
-            updated_on=datetime.now()
+            updated_on=datetime.now(),
+            updated_by=current_user_id
         )
         
         return {'id': cancel.id}
@@ -2223,13 +2279,19 @@ def cancel_class_by_teacher(class_cancel_data, request):
         logger.error(f"ClassHelper : CancelClassByTeacher : {str(e)}")
         raise e
 
-def delete_class_by_teacher_id(class_id):
+def delete_class_by_teacher_id(class_id, request=None):
     """Soft delete class by teacher ID - set active_status to False"""
     logger.info(f"ClassHelper : DeleteClassByTeacherId : Started")
     
     try:
+        current_user_id = None
+        if request:
+            current_user_id = get_user_id_from_token(request)
+        
+        current_time = datetime.now()
+        
         # Get class
-        class_obj = ClassModel.objects.filter(id=class_id).first()
+        class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
         if not class_obj:
             logger.error(f"Class not found with ID: {class_id}")
             return None
@@ -2239,19 +2301,22 @@ def delete_class_by_teacher_id(class_id):
         
         # Soft delete - set active_status to False
         class_obj.active_status = False
-        class_obj.updated_on = datetime.now()
+        class_obj.updated_on = current_time
+        class_obj.updated_by = current_user_id
         class_obj.save()
         
         # Soft delete class cancel by teacher
-        ClassCancelByTeacher.objects.filter(user_id=users_id).update(
+        ClassCancelByTeacher.objects.filter(user_id=users_id, status=True).update(
             status=False,
-            updated_on=datetime.now()
+            updated_on=current_time,
+            updated_by=current_user_id
         )
         
         # Soft delete student attendance
-        StudentAttendance.objects.filter(class_obj_id=class_id).update(
+        StudentAttendance.objects.filter(class_obj_id=class_id, status=True).update(
             status=False,
-            updated_on=datetime.now()
+            updated_on=current_time,
+            updated_by=current_user_id
         )
         
         logger.info(f"ClassHelper : DeleteClassByTeacherId : End")
