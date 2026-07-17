@@ -21,6 +21,28 @@ CLASS_STATUS_ACTIVE = 1
 CLASS_STATUS_COMPLETED = 2
 CLASS_STATUS_CANCEL = 3
 
+
+def save_profile_image(image_file, user_id):
+    """Save profile image and return the relative path for ImageField"""
+    if not image_file:
+        return None
+    
+    try:
+        # Generate unique filename
+        ext = os.path.splitext(image_file.name)[1]
+        filename = f"profile_{user_id}_{uuid.uuid4()}{ext}"
+        filepath = f"profile_pic/{filename}"
+        
+        # Save file
+        saved_path = default_storage.save(filepath, ContentFile(image_file.read()))
+        
+        # Return the relative path (not URL) for ImageField
+        return saved_path
+    except Exception as e:
+        logger.error(f"Error saving profile image: {str(e)}")
+        return None
+
+
 def get_user_type(user_id):
     """Get user type by user ID"""
     try:
@@ -280,12 +302,13 @@ def get_all_centers(userId, type):
                     u2.Name as RegionalAdminName,
                     (SELECT COUNT(*) FROM Student s WHERE s.CenterId = c.Id AND s.Status = 1) as TotalStudents
                 FROM Center c
-                LEFT JOIN Users u1 ON c.AssignedTeachers = u1.Id
-                LEFT JOIN District d ON c.DistrictId = d.Id
-                LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id
-                LEFT JOIN Panchayat p ON c.PanchayatId = p.Id
-                LEFT JOIN Village vi ON c.VillageId = vi.Id
-                LEFT JOIN Users u2 ON c.AssignedRegionalAdmin = u2.Id
+                LEFT JOIN Users u1 ON c.AssignedTeachers = u1.Id AND u1.Status = 1
+                LEFT JOIN District d ON c.DistrictId = d.Id AND d.Status = 1
+                LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id AND v.Status = 1
+                LEFT JOIN Panchayat p ON c.PanchayatId = p.Id AND p.Status = 1
+                LEFT JOIN Village vi ON c.VillageId = vi.Id AND vi.Status = 1
+                LEFT JOIN Users u2 ON c.AssignedRegionalAdmin = u2.Id AND u2.Status = 1
+                WHERE c.Status = 1
                 ORDER BY c.Id DESC
             """
             with connection.cursor() as cursor:
@@ -319,13 +342,13 @@ def get_all_centers(userId, type):
                     u2.Name as RegionalAdminName,
                     (SELECT COUNT(*) FROM Student s WHERE s.CenterId = c.Id AND s.Status = 1) as TotalStudents
                 FROM Center c
-                INNER JOIN Users u1 ON c.AssignedTeachers = u1.Id
-                INNER JOIN District d ON c.DistrictId = d.Id
-                INNER JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id
-                INNER JOIN Panchayat p ON c.PanchayatId = p.Id
-                LEFT JOIN Village vi ON c.VillageId = vi.Id
-                LEFT JOIN Users u2 ON c.AssignedRegionalAdmin = u2.Id
-                WHERE c.AssignedRegionalAdmin = %s
+                INNER JOIN Users u1 ON c.AssignedTeachers = u1.Id AND u1.Status = 1
+                INNER JOIN District d ON c.DistrictId = d.Id AND d.Status = 1
+                INNER JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id AND v.Status = 1
+                INNER JOIN Panchayat p ON c.PanchayatId = p.Id AND p.Status = 1
+                LEFT JOIN Village vi ON c.VillageId = vi.Id AND vi.Status = 1
+                LEFT JOIN Users u2 ON c.AssignedRegionalAdmin = u2.Id AND u2.Status = 1
+                WHERE c.AssignedRegionalAdmin = %s AND c.Status = 1
                 ORDER BY c.Id DESC
             """
             with connection.cursor() as cursor:
@@ -491,15 +514,15 @@ def get_center_by_id(center_id):
                 p.Name as PanchayatName,
                 c.AssignedRegionalAdmin as RegionalAdminId,
                 u.Name as RegionalAdminName,
-                (SELECT COUNT(*) FROM Student s WHERE s.CenterId = c.Id) as TotalStudents,
+                (SELECT COUNT(*) FROM Student s WHERE s.CenterId = c.Id AND s.Status = 1) as TotalStudents,
                 c.AssignedTeachers as TeacherId
             FROM Center c
-            LEFT JOIN District d ON c.DistrictId = d.Id
-            LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id
-            LEFT JOIN Panchayat p ON c.PanchayatId = p.Id
-            LEFT JOIN Village vi ON c.VillageId = vi.Id
-            LEFT JOIN Users u ON c.AssignedRegionalAdmin = u.Id
-            WHERE c.Id = %s
+            LEFT JOIN District d ON c.DistrictId = d.Id AND d.Status = 1
+            LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id AND v.Status = 1
+            LEFT JOIN Panchayat p ON c.PanchayatId = p.Id AND p.Status = 1
+            LEFT JOIN Village vi ON c.VillageId = vi.Id AND vi.Status = 1
+            LEFT JOIN Users u ON c.AssignedRegionalAdmin = u.Id AND u.Status = 1
+            WHERE c.Id = %s AND c.Status = 1
         """
         
         with connection.cursor() as cursor:
@@ -515,7 +538,7 @@ def get_center_by_id(center_id):
                     teacher_sql = """
                         SELECT Id, Name, PhoneNumber, Picture
                         FROM Users
-                        WHERE Id = %s
+                        WHERE Id = %s AND Status = 1
                     """
                     cursor.execute(teacher_sql, [center_dict.get('TeacherId')])
                     teacher_row = cursor.fetchone()
@@ -566,12 +589,12 @@ def get_center_by_user_id(user_id):
                 (SELECT COUNT(*) FROM Student s WHERE s.CenterId = c.Id AND s.Status = 1) as TotalStudents,
                 c.AssignedTeachers as TeacherId
             FROM Center c
-            LEFT JOIN District d ON c.DistrictId = d.Id
-            LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id
-            LEFT JOIN Panchayat p ON c.PanchayatId = p.Id
-            LEFT JOIN Village vi ON c.VillageId = vi.Id
-            LEFT JOIN Users u ON c.AssignedRegionalAdmin = u.Id
-            WHERE c.AssignedTeachers = %s
+            LEFT JOIN District d ON c.DistrictId = d.Id AND d.Status = 1
+            LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id AND v.Status = 1
+            LEFT JOIN Panchayat p ON c.PanchayatId = p.Id AND p.Status = 1
+            LEFT JOIN Village vi ON c.VillageId = vi.Id AND vi.Status = 1
+            LEFT JOIN Users u ON c.AssignedRegionalAdmin = u.Id AND u.Status = 1
+            WHERE c.AssignedTeachers = %s AND c.Status = 1
         """
         
         with connection.cursor() as cursor:
@@ -587,7 +610,7 @@ def get_center_by_user_id(user_id):
                     teacher_sql = """
                         SELECT Id, Name, PhoneNumber, Picture
                         FROM Users
-                        WHERE Id = %s
+                        WHERE Id = %s AND Status = 1
                     """
                     cursor.execute(teacher_sql, [center_dict.get('TeacherId')])
                     teacher_row = cursor.fetchone()
@@ -1075,7 +1098,7 @@ def get_all_teachers(userId):
                     u.PhoneNumber,
                     u.Picture
                 FROM Users u
-                WHERE u.Type = 3 AND u.Status = 1
+                WHERE u.role_id = 3 AND u.Status = 1
                 ORDER BY u.Name
             """
             with connection.cursor() as cursor:
@@ -1094,7 +1117,7 @@ def get_all_teachers(userId):
                     u.PhoneNumber,
                     u.Picture
                 FROM Users u
-                WHERE u.Type = 3 
+                WHERE u.role_id = 3 
                     AND u.Status = 1
                     AND u.Id IN (
                         SELECT DISTINCT c.AssignedTeachers 
@@ -1129,33 +1152,8 @@ def get_all_teachers(userId):
         logger.error(f"UserHelper : GetRegisteredTeachers : {str(e)}")
         raise e
 
-#---------------------------------------------------------
-def get_all_regional_admins():
-    """Get all regional admins - matches .NET logic"""
-    logger.info(f"UserHelper : GetAllRegionalAdmins : Started")
-    
-    try:
-        regional_admins = RegionalAdmin.objects.filter(
-            status=True
-        ).select_related('user').order_by('-id')
-        
-        result = []
-        for ra in regional_admins:
-            result.append({
-                'id': ra.user.id if ra.user else None,
-                'name': ra.user.name if ra.user else None,
-                'profile': ra.user.picture if ra.user else None
-            })
-        
-        logger.info(f"UserHelper : GetAllRegionalAdmins : End")
-        return result
-        
-    except Exception as e:
-        logger.error(f"UserHelper : GetAllRegionalAdmins : {str(e)}")
-        raise e
 
 # USER SECTION---------------------------------------------------------
-# utils.py - Updated login_user function
 
 def login_user(mobile_number, password):
     """Authenticate user - EXACT match to .NET LoginUser"""
@@ -1208,7 +1206,7 @@ def login_user(mobile_number, password):
             "status": user.status,
             "email": user.email,
             "phoneNumber": user.phone_number,
-            "picture": user.picture,
+            "picture": user.picture.url if user.picture else None,
             "whatsApp": user.whats_app,
             "lastLoginTime": last_login_formatted,
             "roleId": user.role_id,
@@ -1414,7 +1412,15 @@ def save_user(user_data):
                     if 'Status' in user_data and user_data['Status'] is not None:
                         user.status = user_data['Status']
                     if 'Picture' in user_data and user_data['Picture'] is not None:
-                        user.picture = user_data['Picture']
+                        picture_data = user_data['Picture']
+                        # Handle file upload - if it's a file object, save it
+                        if hasattr(picture_data, 'read'):  # It's a file object
+                            picture_url = save_profile_image(picture_data, user_id)
+                            if picture_url:
+                                user.picture = picture_url
+                        else:
+                            # It's a URL string
+                            user.picture = picture_data
                     if 'DeviceId' in user_data and user_data['DeviceId'] is not None:
                         user.device_id = user_data['DeviceId']
                     if 'Token' in user_data and user_data['Token'] is not None:
@@ -1431,6 +1437,17 @@ def save_user(user_data):
                         user.phone_number = user_data['PhoneNumber']
                     if 'Name' in user_data and user_data['Name'] is not None:
                         user.name = user_data['Name']
+                    # Allow Picture update for RegionalAdmin and Teacher (fixes bug where picture wasn't saving)
+                    if 'Picture' in user_data and user_data['Picture'] is not None:
+                        picture_data = user_data['Picture']
+                        # Handle file upload - if it's a file object, save it
+                        if hasattr(picture_data, 'read'):  # It's a file object
+                            picture_url = save_profile_image(picture_data, user_id)
+                            if picture_url:
+                                user.picture = picture_url
+                        else:
+                            # It's a URL string
+                            user.picture = picture_data
                     
                     # Preserve these fields (matches .NET)
                     user.enrolment_roll_id = user_data.get('EnrolmentRollId') or user.enrolment_roll_id
@@ -1574,6 +1591,12 @@ def save_user(user_data):
                     role = Role.objects.filter(id=user_type).first()
                     
                 # Create user with role
+                picture_data = user_data.get('Picture')
+                picture_url = None
+                if picture_data and hasattr(picture_data, 'read'):  # It's a file object
+                    # We need to save user first to get user_id, then update picture
+                    pass  # Will handle after user.save()
+                
                 user = User(
                     enrolment_roll_id=enrolment_roll_id,
                     name=name,
@@ -1582,7 +1605,7 @@ def save_user(user_data):
                     phone_number=user_data.get('PhoneNumber'),
                     whats_app=user_data.get('WhatsApp'),
                     status=True,
-                    picture=user_data.get('Picture'),
+                    picture=None,  # Will set after saving if file upload
                     device_id=user_data.get('DeviceId'),
                     token=user_data.get('Token'),
                     role=role,
@@ -1591,6 +1614,17 @@ def save_user(user_data):
                 )
                 user.save()
                 user_id = user.id
+                
+                # Handle picture upload for new user
+                if picture_data and hasattr(picture_data, 'read'):  # It's a file object
+                    picture_url = save_profile_image(picture_data, user_id)
+                    if picture_url:
+                        user.picture = picture_url
+                        user.save(update_fields=['picture'])
+                elif picture_data:
+                    # It's a URL string
+                    user.picture = picture_data
+                    user.save(update_fields=['picture'])
                 
                 # Create role-specific record
                 if user_type == 1:  # SuperAdmin
@@ -1700,7 +1734,7 @@ def get_user_by_id(user_id):
             'type': user.role_id,  # role_id as type
             'status': user.status,
             'phoneNumber': user.phone_number,
-            'picture': user.picture,
+            'picture': user.picture.url if user.picture else None,
             'whatsApp': user.whats_app,
             'lastLoginTime': user.last_login_time,
             'createdOn': user.created_on.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] if user.created_on else None,
@@ -2091,20 +2125,24 @@ def save_class(class_data, request):
 def get_class_by_id(class_id):
     """Get class by ID with soft delete support"""
     try:
-        sql = """
-            SELECT 
-                Id, ClassEnrolmentId, Name, CenterId, UsersId,
-                TotalStudents, AvilableStudents, StartedDate,
-                EndDate, Status, SubStatus, Reason, CancelBy, CancelDate
-            FROM Class
-            WHERE Id = %s AND Status = 1
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [class_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        class_obj = ClassModel.objects.filter(id=class_id, status=True).first()
+        if class_obj:
+            return {
+                'Id': class_obj.id,
+                'ClassEnrolmentId': class_obj.class_enrolment_id,
+                'Name': class_obj.name,
+                'CenterId': class_obj.center_id,
+                'UsersId': class_obj.users_id,
+                'TotalStudents': class_obj.total_students,
+                'AvilableStudents': class_obj.avilable_students,
+                'StartedDate': class_obj.started_date,
+                'EndDate': class_obj.end_date,
+                'Status': class_obj.status,
+                'SubStatus': class_obj.sub_status,
+                'Reason': class_obj.reason,
+                'CancelBy': class_obj.cancel_by,
+                'CancelDate': class_obj.cancel_date
+            }
         return None
     except Exception as e:
         logger.error(f"ClassHelper : get_class_by_id : {str(e)}")
@@ -2338,85 +2376,70 @@ def get_class_current_status(center_id, teacher_id):
         today = datetime.now().date()
         result = {'data': [], 'status': True}
         
-        with connection.cursor() as cursor:
-            # Check holidays
-            holiday_sql = """
-                SELECT Name, StartDate, EndDate
-                FROM Holidays
-                WHERE CenterId = %s 
-                AND DATE(StartDate) <= %s 
-                AND DATE(EndDate) >= %s
-            """
-            cursor.execute(holiday_sql, [center_id, today, today])
-            holiday_rows = cursor.fetchall()
-            
-            for row in holiday_rows:
-                result['data'].append({
-                    'name': row[0],
-                    'type': 1,
-                    'startedDate': row[1],
-                    'endDate': row[2]
-                })
-            
-            # Check class cancel by teacher
-            cancel_sql = """
-                SELECT Reason, StartingDate, EndingDate
-                FROM ClassCancelByTeacher
-                WHERE UserId = %s 
-                AND DATE(StartingDate) <= %s 
-                AND DATE(EndingDate) >= %s
-            """
-            cursor.execute(cancel_sql, [teacher_id, today, today])
-            cancel_rows = cursor.fetchall()
-            
-            for row in cancel_rows:
-                result['data'].append({
-                    'name': row[0],
-                    'type': 2,
-                    'startedDate': row[1],
-                    'endDate': row[2]
-                })
-            
-            # Check active class
-            active_sql = """
-                SELECT Id, Name, SubStatus, StartedDate, EndDate
-                FROM Class
-                WHERE DATE(StartedDate) = %s 
-                AND CenterId = %s 
-                AND Status = 1
-            """
-            cursor.execute(active_sql, [today, center_id])
-            active_row = cursor.fetchone()
-            
-            if active_row:
-                result['data'].append({
-                    'name': 'Class is going on',
-                    'type': 3,
-                    'subStatus': active_row[2],
-                    'id': active_row[0],
-                    'startedDate': active_row[3],
-                    'endDate': active_row[4]
-                })
-            
-            # Check completed class
-            completed_sql = """
-                SELECT Id, StartedDate, EndDate
-                FROM Class
-                WHERE DATE(StartedDate) = %s 
-                AND CenterId = %s 
-                AND Status = 2
-            """
-            cursor.execute(completed_sql, [today, center_id])
-            completed_row = cursor.fetchone()
-            
-            if completed_row:
-                result['data'].append({
-                    'name': 'Class Ended',
-                    'type': 4,
-                    'id': completed_row[0],
-                    'startedDate': completed_row[1],
-                    'endDate': completed_row[2]
-                })
+        # Check holidays
+        holidays = Holidays.objects.filter(
+            center_id=center_id,
+            start_date__date__lte=today,
+            end_date__date__gte=today,
+            status=True
+        )
+        
+        for h in holidays:
+            result['data'].append({
+                'name': h.name,
+                'type': 1,
+                'startedDate': h.start_date,
+                'endDate': h.end_date
+            })
+        
+        # Check class cancel by teacher
+        cancels = ClassCancelByTeacher.objects.filter(
+            user_id=teacher_id,
+            starting_date__date__lte=today,
+            ending_date__date__gte=today,
+            status=True
+        )
+        
+        for c in cancels:
+            result['data'].append({
+                'name': c.reason,
+                'type': 2,
+                'startedDate': c.starting_date,
+                'endDate': c.ending_date
+            })
+        
+        # Check active class
+        active_class = ClassModel.objects.filter(
+            started_date__date=today,
+            center_id=center_id,
+            status=True
+        ).first()
+        
+        if active_class:
+            result['data'].append({
+                'name': 'Class is going on',
+                'type': 3,
+                'subStatus': active_class.sub_status,
+                'id': active_class.id,
+                'startedDate': active_class.started_date,
+                'endDate': active_class.end_date
+            })
+        
+        # Check completed class
+        completed_class = ClassModel.objects.filter(
+            started_date__date=today,
+            center_id=center_id,
+            status=2
+        ).first()
+        
+        if completed_class:
+            result['data'].append({
+                'name': 'Class Ended',
+                'type': 4,
+                'id': completed_class.id,
+                'startedDate': completed_class.started_date,
+                'endDate': completed_class.end_date
+            })
         
         return result
         
@@ -2472,47 +2495,22 @@ def get_all_districts(offset, limit):
     logger.info(f"DistrictHelper : GetAllDistrict : Started")
     
     try:
-        if offset == 0 and limit == 0:
-            sql = """
-                SELECT 
-                    Id,
-                    DistrictGuidId,
-                    Name,
-                    Status,
-                    CreatedOn,
-                    CreatedBy
-                FROM District
-                ORDER BY Id
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql)
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                result = []
-                for row in rows:
-                    result.append(dict(zip(columns, row)))
-                return result
-        else:
-            sql = """
-                SELECT 
-                    Id,
-                    DistrictGuidId,
-                    Name,
-                    Status,
-                    CreatedOn,
-                    CreatedBy
-                FROM District
-                ORDER BY Id
-                LIMIT %s OFFSET %s
-            """
-            with connection.cursor() as cursor:
-                cursor.execute(sql, [limit, offset])
-                rows = cursor.fetchall()
-                columns = [col[0] for col in cursor.description]
-                result = []
-                for row in rows:
-                    result.append(dict(zip(columns, row)))
-                return result
+        queryset = District.objects.filter(status=True).order_by('id')
+        
+        if offset > 0 or limit > 0:
+            queryset = queryset[offset:offset + limit]
+        
+        result = []
+        for d in queryset:
+            result.append({
+                'Id': d.id,
+                'DistrictGuidId': d.district_guid_id,
+                'Name': d.name,
+                'Status': d.status,
+                'CreatedOn': d.created_on,
+                'CreatedBy': d.created_by
+            })
+        return result
                 
     except Exception as e:
         logger.error(f"DistrictHelper : GetAllDistrict : {str(e)}")
@@ -2573,23 +2571,16 @@ def save_district(district_data):
 def get_district_by_id(district_id):
     """Get district by ID"""
     try:
-        sql = """
-            SELECT 
-                Id,
-                DistrictGuidId,
-                Name,
-                Status,
-                CreatedOn,
-                CreatedBy
-            FROM District
-            WHERE Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [district_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        district = District.objects.filter(id=district_id, status=True).first()
+        if district:
+            return {
+                'Id': district.id,
+                'DistrictGuidId': district.district_guid_id,
+                'Name': district.name,
+                'Status': district.status,
+                'CreatedOn': district.created_on,
+                'CreatedBy': district.created_by
+            }
         return None
     except Exception as e:
         logger.error(f"DistrictHelper : get_district_by_id : {str(e)}")
@@ -2600,11 +2591,7 @@ def check_district_name(name):
     logger.info(f"DistrictHelper : CheckDistrictName : Started")
     
     try:
-        sql = "SELECT Name FROM District WHERE Name = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [name])
-            row = cursor.fetchone()
-            return row[0] if row else None
+        return District.objects.filter(name=name).values_list('name', flat=True).first()
     except Exception as e:
         logger.error(f"DistrictHelper : CheckDistrictName : {str(e)}")
         raise e
@@ -2620,53 +2607,43 @@ def get_class_count_by_month(center_id, start_date, end_date):
     logger.info(f"DashboardHelper : GetClassCountByMonth : Started")
     
     try:
-        with connection.cursor() as cursor:
-            # Get class count
-            class_sql = """
-                SELECT COUNT(*) 
-                FROM Class 
-                WHERE CenterId = %s 
-                AND DATE(StartedDate) >= %s 
-                AND DATE(EndDate) <= %s
-            """
-            cursor.execute(class_sql, [center_id, start_date.date(), end_date.date()])
-            class_count = cursor.fetchone()[0] or 0
+        start = start_date.date()
+        end = end_date.date()
+        
+        class_count = ClassModel.objects.filter(
+            center_id=center_id,
+            started_date__date__gte=start,
+            end_date__date__lte=end,
+            status=True
+        ).count()
             
-            # Get holiday count
-            holiday_sql = """
-                SELECT COUNT(*) 
-                FROM Holidays 
-                WHERE CenterId = %s 
-                AND DATE(StartDate) >= %s 
-                AND DATE(EndDate) >= %s
-            """
-            cursor.execute(holiday_sql, [center_id, start_date.date(), end_date.date()])
-            holiday_count = cursor.fetchone()[0] or 0
-            
-            # Get class cancel by teacher count
-            cancel_sql = """
-                SELECT COUNT(*) 
-                FROM ClassCancelByTeacher 
-                WHERE CenterId = %s 
-                AND DATE(StartingDate) >= %s 
-                AND DATE(EndingDate) >= %s
-            """
-            cursor.execute(cancel_sql, [center_id, start_date.date(), end_date.date()])
-            cancel_count = cursor.fetchone()[0] or 0
-            
-            result = {
-                "status": True,
-                "data": [
-                    {
-                        "holidayCount": holiday_count,
-                        "classCount": class_count,
-                        "classCancelTeacherCount": cancel_count
-                    }
-                ]
-            }
-            
-            return json.dumps(result)
-            
+        holiday_count = Holidays.objects.filter(
+            center_id=center_id,
+            start_date__date__gte=start,
+            end_date__date__gte=start,
+            status=True
+        ).count()
+        
+        cancel_count = ClassCancelByTeacher.objects.filter(
+            center_id=center_id,
+            starting_date__date__gte=start,
+            ending_date__date__gte=start,
+            status=True
+        ).count()
+        
+        result = {
+            "status": True,
+            "data": [
+                {
+                    "holidayCount": holiday_count,
+                    "classCount": class_count,
+                    "classCancelTeacherCount": cancel_count
+                }
+            ]
+        }
+        
+        return result
+        
     except Exception as e:
         logger.error(f"DashboardHelper : GetClassCountByMonth : {str(e)}")
         raise e
@@ -2872,68 +2849,58 @@ def get_total_bpl(center_id, start_date, end_date):
     logger.info(f"DashboardHelper : GetTotalBpl : Started")
     
     try:
-        with connection.cursor() as cursor:
-            # Get total BPL students
-            bpl_sql = """
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE CenterId = %s 
-                AND Bpl = 1
-                AND DATE(CreatedOn) >= %s 
-                AND DATE(CreatedOn) <= %s
-            """
-            cursor.execute(bpl_sql, [center_id, start_date.date(), end_date.date()])
-            bpl_count = cursor.fetchone()[0] or 0
-            
-            # Get female BPL students
-            female_sql = """
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE CenterId = %s 
-                AND Bpl = 1
-                AND Gender = 'FeMale'
-                AND DATE(CreatedOn) >= %s 
-                AND DATE(CreatedOn) <= %s
-            """
-            cursor.execute(female_sql, [center_id, start_date.date(), end_date.date()])
-            female_count = cursor.fetchone()[0] or 0
-            
-            # Get male BPL students
-            male_sql = """
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE CenterId = %s 
-                AND Bpl = 1
-                AND Gender = 'Male'
-                AND DATE(CreatedOn) >= %s 
-                AND DATE(CreatedOn) <= %s
-            """
-            cursor.execute(male_sql, [center_id, start_date.date(), end_date.date()])
-            male_count = cursor.fetchone()[0] or 0
-            
-            # Get total students
-            total_sql = """
-                SELECT COUNT(*) 
-                FROM Student 
-                WHERE CenterId = %s
-            """
-            cursor.execute(total_sql, [center_id])
-            total_students = cursor.fetchone()[0] or 0
-            
-            result = {
-                "Status": True,
-                "TotalStudents": total_students,
-                "Data": [
-                    {
-                        "FeMaleCount": female_count,
-                        "MaleCount": male_count,
-                        "TotalBplStudents": bpl_count
-                    }
-                ]
-            }
-            
-            return json.dumps(result)
-            
+        start = start_date.date()
+        end = end_date.date()
+        
+        # Get total BPL students
+        bpl_count = Student.objects.filter(
+            center_id=center_id,
+            bpl=True,
+            created_on__date__gte=start,
+            created_on__date__lte=end,
+            status=True
+        ).count()
+        
+        # Get female BPL students
+        female_count = Student.objects.filter(
+            center_id=center_id,
+            bpl=True,
+            gender='FeMale',
+            created_on__date__gte=start,
+            created_on__date__lte=end,
+            status=True
+        ).count()
+        
+        # Get male BPL students
+        male_count = Student.objects.filter(
+            center_id=center_id,
+            bpl=True,
+            gender='Male',
+            created_on__date__gte=start,
+            created_on__date__lte=end,
+            status=True
+        ).count()
+        
+        # Get total students
+        total_students = Student.objects.filter(
+            center_id=center_id,
+            status=True
+        ).count()
+        
+        result = {
+            "Status": True,
+            "TotalStudents": total_students,
+            "Data": [
+                {
+                    "FeMaleCount": female_count,
+                    "MaleCount": male_count,
+                    "TotalBplStudents": bpl_count
+                }
+            ]
+        }
+        
+        return json.dumps(result)
+        
     except Exception as e:
         logger.error(f"DashboardHelper : GetTotalBpl : {str(e)}")
         raise e
@@ -3609,26 +3576,22 @@ def get_all_holidays_by_teacher_id(teacher_id):
     
     try:
         today = datetime.now().date()
-        sql = """
-            SELECT 
-                h.Id,
-                h.Name,
-                h.CenterId,
-                h.Description
-            FROM Holidays h
-            INNER JOIN Center c ON h.CenterId = c.Id
-            WHERE c.AssignedTeachers = %s 
-            AND DATE(h.StartDate) >= %s 
-            AND DATE(h.EndDate) <= %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [teacher_id, today, today])
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        holidays = Holidays.objects.filter(
+            center__assigned_teachers=teacher_id,
+            start_date__date__gte=today,
+            end_date__date__lte=today,
+            status=True
+        ).select_related('center')
+        
+        result = []
+        for h in holidays:
+            result.append({
+                'Id': h.id,
+                'Name': h.name,
+                'CenterId': h.center_id,
+                'Description': h.description
+            })
+        return result
             
     except Exception as e:
         logger.error(f"HolidaysHelper : GetAllHolidaysByTeacherId : {str(e)}")
@@ -3639,20 +3602,21 @@ def get_all_holidays_by_year(year):
     logger.info(f"HolidaysHelper : GetAllHolidaysByYear : Started")
     
     try:
-        sql = """
-            SELECT 
-                Id, Name, Description, Status, StartDate, EndDate, CenterId, CreatedOn, CreatedBy
-            FROM Holidays
-            WHERE YEAR(StartDate) = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [year])
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        holidays = Holidays.objects.filter(start_date__year=year).select_related('center')
+        result = []
+        for h in holidays:
+            result.append({
+                'Id': h.id,
+                'Name': h.name,
+                'Description': h.description,
+                'Status': h.status,
+                'StartDate': h.start_date,
+                'EndDate': h.end_date,
+                'CenterId': h.center_id,
+                'CreatedOn': h.created_on,
+                'CreatedBy': h.created_by
+            })
+        return result
             
     except Exception as e:
         logger.error(f"HolidaysHelper : GetAllHolidaysByYear : {str(e)}")
@@ -3663,20 +3627,21 @@ def get_all_holidays_by_center_id(center_id):
     logger.info(f"HolidaysHelper : GetAllHolidaysByCenterId : Started")
     
     try:
-        sql = """
-            SELECT 
-                Id, Name, Description, Status, StartDate, EndDate, CenterId, CreatedOn, CreatedBy
-            FROM Holidays
-            WHERE CenterId = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [center_id])
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        holidays = Holidays.objects.filter(center_id=center_id).select_related('center')
+        result = []
+        for h in holidays:
+            result.append({
+                'Id': h.id,
+                'Name': h.name,
+                'Description': h.description,
+                'Status': h.status,
+                'StartDate': h.start_date,
+                'EndDate': h.end_date,
+                'CenterId': h.center_id,
+                'CreatedOn': h.created_on,
+                'CreatedBy': h.created_by
+            })
+        return result
             
     except Exception as e:
         logger.error(f"HolidaysHelper : GetAllHolidaysByCenterId : {str(e)}")
@@ -3690,90 +3655,32 @@ def get_all_holidays(status, user_id=0):
         today = datetime.now().date()
         result = []
         
-        with connection.cursor() as cursor:
-            if user_id == 0:
-                # SuperAdmin - get all holidays
-                if status == 1:
-                    # All holidays
-                    sql = """
-                        SELECT 
-                            h.Id,
-                            h.Name,
-                            h.StartDate,
-                            h.EndDate,
-                            h.CreatedBy,
-                            h.CreatedOn,
-                            h.CenterId,
-                            c.CenterName
-                        FROM Holidays h
-                        INNER JOIN Center c ON h.CenterId = c.Id
-                        ORDER BY h.StartDate
-                    """
-                    cursor.execute(sql)
-                else:
-                    # Upcoming holidays
-                    sql = """
-                        SELECT 
-                            h.Id,
-                            h.Name,
-                            h.StartDate,
-                            h.EndDate,
-                            h.CreatedBy,
-                            h.CreatedOn,
-                            h.CenterId,
-                            c.CenterName
-                        FROM Holidays h
-                        INNER JOIN Center c ON h.CenterId = c.Id
-                        WHERE DATE(h.StartDate) >= %s
-                        ORDER BY h.StartDate
-                    """
-                    cursor.execute(sql, [today])
-            else:
-                # Regional Admin - filter by created_by
-                if status == 1:
-                    # All holidays
-                    sql = """
-                        SELECT 
-                            h.Id,
-                            h.Name,
-                            h.StartDate,
-                            h.EndDate,
-                            h.CreatedBy,
-                            h.CreatedOn,
-                            h.CenterId,
-                            c.CenterName
-                        FROM Holidays h
-                        INNER JOIN Center c ON h.CenterId = c.Id
-                        WHERE h.CreatedBy = %s
-                        ORDER BY h.StartDate
-                    """
-                    cursor.execute(sql, [user_id])
-                else:
-                    # Upcoming holidays
-                    sql = """
-                        SELECT 
-                            h.Id,
-                            h.Name,
-                            h.StartDate,
-                            h.EndDate,
-                            h.CreatedBy,
-                            h.CreatedOn,
-                            h.CenterId,
-                            c.CenterName
-                        FROM Holidays h
-                        INNER JOIN Center c ON h.CenterId = c.Id
-                        WHERE h.CreatedBy = %s 
-                        AND DATE(h.StartDate) >= %s
-                        ORDER BY h.StartDate
-                    """
-                    cursor.execute(sql, [user_id, today])
-            
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            
-            return result
+        if user_id == 0:
+            # SuperAdmin - get all holidays
+            queryset = Holidays.objects.select_related('center').order_by('start_date')
+            if status != 1:
+                # Upcoming holidays
+                queryset = queryset.filter(start_date__date__gte=today)
+        else:
+            # Regional Admin - filter by created_by
+            queryset = Holidays.objects.filter(created_by=user_id).select_related('center').order_by('start_date')
+            if status != 1:
+                # Upcoming holidays
+                queryset = queryset.filter(start_date__date__gte=today)
+        
+        for h in queryset:
+            result.append({
+                'Id': h.id,
+                'Name': h.name,
+                'StartDate': h.start_date,
+                'EndDate': h.end_date,
+                'CreatedBy': h.created_by,
+                'CreatedOn': h.created_on,
+                'CenterId': h.center_id,
+                'CenterName': h.center.center_name if h.center else None
+            })
+        
+        return result
             
     except Exception as e:
         logger.error(f"HolidaysHelper : GetAllHolidays : {str(e)}")
@@ -3811,53 +3718,26 @@ def get_all_panchayats(offset, limit):
     logger.info(f"PanchayatHelper : GetAllPanchayat : Started")
     
     try:
-        with connection.cursor() as cursor:
-            if offset == 0 and limit == 0:
-                sql = """
-                    SELECT 
-                        p.Id,
-                        p.PanchayatGuidId,
-                        p.Name,
-                        p.DistrictId,
-                        d.Name as DistrictName,
-                        p.VidhanSabhaId,
-                        v.Name as VidhanSabhaName,
-                        p.CreatedOn,
-                        p.CreatedBy,
-                        p.Status
-                    FROM Panchayat p
-                    INNER JOIN VidhanSabha v ON p.VidhanSabhaId = v.Id
-                    INNER JOIN District d ON p.DistrictId = d.Id
-                    ORDER BY p.Id
-                """
-                cursor.execute(sql)
-            else:
-                sql = """
-                    SELECT 
-                        p.Id,
-                        p.PanchayatGuidId,
-                        p.Name,
-                        p.DistrictId,
-                        d.Name as DistrictName,
-                        p.VidhanSabhaId,
-                        v.Name as VidhanSabhaName,
-                        p.CreatedOn,
-                        p.CreatedBy,
-                        p.Status
-                    FROM Panchayat p
-                    INNER JOIN VidhanSabha v ON p.VidhanSabhaId = v.Id
-                    INNER JOIN District d ON p.DistrictId = d.Id
-                    ORDER BY p.Id
-                    LIMIT %s OFFSET %s
-                """
-                cursor.execute(sql, [limit, offset])
-            
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        queryset = Panchayat.objects.filter(status=True).select_related('district', 'vidhan_sabha', 'vidhan_sabha__district').order_by('id')
+        
+        if offset > 0 or limit > 0:
+            queryset = queryset[offset:offset + limit]
+        
+        result = []
+        for p in queryset:
+            result.append({
+                'Id': p.id,
+                'PanchayatGuidId': p.panchayat_guid_id,
+                'Name': p.name,
+                'DistrictId': p.district_id,
+                'DistrictName': p.district.name if p.district else None,
+                'VidhanSabhaId': p.vidhan_sabha_id,
+                'VidhanSabhaName': p.vidhan_sabha.name if p.vidhan_sabha else None,
+                'CreatedOn': p.created_on,
+                'CreatedBy': p.created_by,
+                'Status': p.status
+            })
+        return result
             
     except Exception as e:
         logger.error(f"PanchayatHelper : GetAllPanchayat : {str(e)}")
@@ -3924,29 +3804,20 @@ def save_panchayat(panchayat_data):
 def get_panchayat_by_id(panchayat_id):
     """Get panchayat by ID"""
     try:
-        sql = """
-            SELECT 
-                p.Id,
-                p.PanchayatGuidId,
-                p.Name,
-                p.DistrictId,
-                d.Name as DistrictName,
-                p.VidhanSabhaId,
-                v.Name as VidhanSabhaName,
-                p.CreatedOn,
-                p.CreatedBy,
-                p.Status
-            FROM Panchayat p
-            INNER JOIN VidhanSabha v ON p.VidhanSabhaId = v.Id
-            INNER JOIN District d ON p.DistrictId = d.Id
-            WHERE p.Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [panchayat_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        panchayat = Panchayat.objects.filter(id=panchayat_id, status=True).select_related('district', 'vidhan_sabha').first()
+        if panchayat:
+            return {
+                'Id': panchayat.id,
+                'PanchayatGuidId': panchayat.panchayat_guid_id,
+                'Name': panchayat.name,
+                'DistrictId': panchayat.district_id,
+                'DistrictName': panchayat.district.name if panchayat.district else None,
+                'VidhanSabhaId': panchayat.vidhan_sabha_id,
+                'VidhanSabhaName': panchayat.vidhan_sabha.name if panchayat.vidhan_sabha else None,
+                'CreatedOn': panchayat.created_on,
+                'CreatedBy': panchayat.created_by,
+                'Status': panchayat.status
+            }
         return None
     except Exception as e:
         logger.error(f"PanchayatHelper : get_panchayat_by_id : {str(e)}")
@@ -3957,25 +3828,18 @@ def get_panchayat_by_district_and_vidhan_sabha_id(district_id, vidhan_sabha_id):
     logger.info(f"PanchayatHelper : GetPanchayatByDistrictAndVidhanSabhaId : Started")
     
     try:
-        sql = """
-            SELECT 
-                Id,
-                PanchayatGuidId,
-                Name,
-                DistrictId,
-                VidhanSabhaId,
-                CreatedOn,
-                CreatedBy,
-                Status
-            FROM Panchayat
-            WHERE DistrictId = %s AND VidhanSabhaId = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [district_id, vidhan_sabha_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        panchayat = Panchayat.objects.filter(district_id=district_id, vidhan_sabha_id=vidhan_sabha_id, status=True).first()
+        if panchayat:
+            return {
+                'Id': panchayat.id,
+                'PanchayatGuidId': panchayat.panchayat_guid_id,
+                'Name': panchayat.name,
+                'DistrictId': panchayat.district_id,
+                'VidhanSabhaId': panchayat.vidhan_sabha_id,
+                'CreatedOn': panchayat.created_on,
+                'CreatedBy': panchayat.created_by,
+                'Status': panchayat.status
+            }
         return None
         
     except Exception as e:
@@ -3987,11 +3851,7 @@ def check_panchayat_name(name):
     logger.info(f"PanchayatHelper : CheckPanchayatName : Started")
     
     try:
-        sql = "SELECT Name FROM Panchayat WHERE Name = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [name])
-            row = cursor.fetchone()
-            return row[0] if row else None
+        return Panchayat.objects.filter(name=name).values_list('name', flat=True).first()
     except Exception as e:
         logger.error(f"PanchayatHelper : CheckPanchayatName : {str(e)}")
         raise e
@@ -4461,13 +4321,14 @@ def save_school(school_data):
 def get_school_by_id(school_id):
     """Get school by ID"""
     try:
-        sql = "SELECT Id, SchoolName, CreatedOn, CreatedBy FROM School WHERE Id = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [school_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        school = School.objects.filter(id=school_id).first()
+        if school:
+            return {
+                'Id': school.id,
+                'SchoolName': school.school_name,
+                'CreatedOn': school.created_on,
+                'CreatedBy': school.created_by
+            }
         return None
     except Exception as e:
         logger.error(f"SchoolHelper : get_school_by_id : {str(e)}")
@@ -4478,15 +4339,16 @@ def get_all_schools():
     logger.info(f"SchoolHelper : GetAllSchools : Started")
     
     try:
-        sql = "SELECT Id, SchoolName, CreatedOn, CreatedBy FROM School ORDER BY Id"
-        with connection.cursor() as cursor:
-            cursor.execute(sql)
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        schools = School.objects.all().order_by('id')
+        result = []
+        for s in schools:
+            result.append({
+                'Id': s.id,
+                'SchoolName': s.school_name,
+                'CreatedOn': s.created_on,
+                'CreatedBy': s.created_by
+            })
+        return result
     except Exception as e:
         logger.error(f"SchoolHelper : GetAllSchools : {str(e)}")
         raise e
@@ -4601,7 +4463,8 @@ def get_all_student_with_avg_attendance(center_id):
         
         # Get all students in the center
         student_queryset = Student.objects.filter(
-            center_id=center_id
+            center_id=center_id,
+            status=True  # Only active students
         ).values(
             'id', 'enrollment_id', 'full_name', 'joining_date', 'status'
         )
@@ -4792,32 +4655,52 @@ def login_teacher(name, password):
     try:
         hashed_password = hash_password(password)
         
-        sql = """
-            SELECT 
-                Id, TeacherGuidId, FullName, Age, Gender, DateOfBirth,
-                PhoneNumber, WhatsApp, Email, Status, Count, Picture,
-                Password, FullAddress, Education, Token,
-                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
-                CreatedOn, CreatedBy
-            FROM Teacher
-            WHERE FullName = %s AND Password = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [name, hashed_password])
-            row = cursor.fetchone()
+        user = User.objects.filter(name=name, password=hashed_password, type=3, status=True).select_related('teacher').first()
+        
+        if user and hasattr(user, 'teacher') and user.teacher:
+            teacher = user.teacher
             
-            if row:
-                columns = [col[0] for col in cursor.description]
-                teacher_dict = dict(zip(columns, row))
-                
-                # Generate token
-                token = AccessToken()
-                token['teacher_id'] = teacher_dict.get('Id')
-                token['teacher_name'] = teacher_dict.get('FullName')
-                token.set_exp(lifetime=timedelta(days=30))
-                teacher_dict['Token'] = str(token)
-                
-                return teacher_dict
+            # Generate token
+            token = AccessToken()
+            token['teacher_id'] = teacher.id
+            token['teacher_name'] = user.name
+            token.set_exp(lifetime=timedelta(days=30))
+            
+            return {
+                'Id': teacher.id,
+                'TeacherGuidId': teacher.teacher_guid_id,
+                'FullName': user.name,
+                'Age': teacher.age,
+                'Gender': teacher.gender,
+                'DateOfBirth': teacher.date_of_birth,
+                'PhoneNumber': user.phone_number,
+                'WhatsApp': user.whats_app,
+                'Email': user.email,
+                'Status': user.status,
+                'Count': teacher.count,
+                'Picture': user.picture.url if user.picture else None,
+                'Password': user.password,
+                'FullAddress': teacher.full_address,
+                'Education': teacher.education,
+                'Token': str(token),
+                'VidhanSabhaId': teacher.vidhan_sabha_id,
+                'DistrictId': teacher.district_id,
+                'PanchayatId': teacher.panchayat_id,
+                'CenterId': teacher.center_id,
+                'VillageId': teacher.village_id,
+                'CreatedOn': teacher.created_on,
+                'CreatedBy': teacher.created_by,
+                'UserId': user.id,
+                'UserName': user.name,
+                'UserPhoneNumber': user.phone_number,
+                'UserEmail': user.email,
+                'UserPicture': user.picture.url if user.picture else None,
+                'DistrictName': teacher.district.name if teacher.district else None,
+                'VidhanSabhaName': teacher.vidhan_sabha.name if teacher.vidhan_sabha else None,
+                'PanchayatName': teacher.panchayat.name if teacher.panchayat else None,
+                'CenterName': teacher.center.center_name if teacher.center else None,
+                'VillageName': teacher.village.name if teacher.village else None,
+            }
         
         return None
         
@@ -4914,24 +4797,49 @@ def save_teacher(teacher_data):
         raise e
 
 def get_teacher_by_id(teacher_id):
-    """Get teacher by ID"""
+    """Get teacher by User ID with User data joined"""
     try:
-        sql = """
-            SELECT 
-                Id, TeacherGuidId, FullName, Age, Gender, DateOfBirth,
-                PhoneNumber, WhatsApp, Email, Status, Count, Picture,
-                Password, FullAddress, Education, Token,
-                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
-                CreatedOn, CreatedBy
-            FROM Teacher
-            WHERE Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [teacher_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        teacher = Teacher.objects.filter(user__id=teacher_id).select_related(
+            'user', 'district', 'vidhan_sabha', 'panchayat', 'center', 'village'
+        ).first()
+        
+        if teacher and teacher.user and teacher.user.type == 3:
+            user = teacher.user
+            return {
+                'Id': user.id,
+                'TeacherGuidId': teacher.teacher_guid_id,
+                'FullName': user.name,
+                'Age': teacher.age,
+                'Gender': teacher.gender,
+                'DateOfBirth': teacher.date_of_birth,
+                'PhoneNumber': user.phone_number,
+                'WhatsApp': user.whats_app,
+                'Email': user.email,
+                'Status': user.status,
+                'Count': teacher.count,
+                'Picture': user.picture.url if user.picture else None,
+                'Password': user.password,
+                'FullAddress': teacher.full_address,
+                'Education': teacher.education,
+                'Token': user.token,
+                'VidhanSabhaId': teacher.vidhan_sabha_id,
+                'DistrictId': teacher.district_id,
+                'PanchayatId': teacher.panchayat_id,
+                'CenterId': teacher.center_id,
+                'VillageId': teacher.village_id,
+                'CreatedOn': teacher.created_on,
+                'CreatedBy': teacher.created_by,
+                'UserId': user.id,
+                'UserName': user.name,
+                'UserPhoneNumber': user.phone_number,
+                'UserEmail': user.email,
+                'UserPicture': user.picture.url if user.picture else None,
+                'DistrictName': teacher.district.name if teacher.district else None,
+                'VidhanSabhaName': teacher.vidhan_sabha.name if teacher.vidhan_sabha else None,
+                'PanchayatName': teacher.panchayat.name if teacher.panchayat else None,
+                'CenterName': teacher.center.center_name if teacher.center else None,
+                'VillageName': teacher.village.name if teacher.village else None,
+            }
         return None
     except Exception as e:
         logger.error(f"TeacherHelper : get_teacher_by_id : {str(e)}")
@@ -4947,47 +4855,24 @@ def get_all_vidhan_sabhas(offset, limit):
     logger.info(f"VidhanSabhaHelper : GetAllVidhanSabha : Started")
     
     try:
-        with connection.cursor() as cursor:
-            if offset == 0 and limit == 0:
-                sql = """
-                    SELECT 
-                        v.Id,
-                        v.VidhanSabhaGuidId,
-                        v.Name,
-                        v.DistrictId,
-                        d.Name as DistrictName,
-                        v.CreatedOn,
-                        v.CreatedBy,
-                        v.Status
-                    FROM VidhanSabha v
-                    INNER JOIN District d ON v.DistrictId = d.Id
-                    ORDER BY v.Id
-                """
-                cursor.execute(sql)
-            else:
-                sql = """
-                    SELECT 
-                        v.Id,
-                        v.VidhanSabhaGuidId,
-                        v.Name,
-                        v.DistrictId,
-                        d.Name as DistrictName,
-                        v.CreatedOn,
-                        v.CreatedBy,
-                        v.Status
-                    FROM VidhanSabha v
-                    INNER JOIN District d ON v.DistrictId = d.Id
-                    ORDER BY v.Id
-                    LIMIT %s OFFSET %s
-                """
-                cursor.execute(sql, [limit, offset])
-            
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        queryset = VidhanSabha.objects.filter(status=True).select_related('district').order_by('id')
+        
+        if offset > 0 or limit > 0:
+            queryset = queryset[offset:offset + limit]
+        
+        result = []
+        for v in queryset:
+            result.append({
+                'Id': v.id,
+                'VidhanSabhaGuidId': v.vidhan_sabha_guid_id,
+                'Name': v.name,
+                'DistrictId': v.district_id,
+                'DistrictName': v.district.name if v.district else None,
+                'CreatedOn': v.created_on,
+                'CreatedBy': v.created_by,
+                'Status': v.status
+            })
+        return result
             
     except Exception as e:
         logger.error(f"VidhanSabhaHelper : GetAllVidhanSabha : {str(e)}")
@@ -5051,26 +4936,18 @@ def save_vidhan_sabha(vidhan_sabha_data):
 def get_vidhan_sabha_by_id(vidhan_sabha_id):
     """Get VidhanSabha by ID"""
     try:
-        sql = """
-            SELECT 
-                v.Id,
-                v.VidhanSabhaGuidId,
-                v.Name,
-                v.DistrictId,
-                d.Name as DistrictName,
-                v.CreatedOn,
-                v.CreatedBy,
-                v.Status
-            FROM VidhanSabha v
-            INNER JOIN District d ON v.DistrictId = d.Id
-            WHERE v.Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [vidhan_sabha_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        v = VidhanSabha.objects.filter(id=vidhan_sabha_id, status=True).select_related('district').first()
+        if v:
+            return {
+                'Id': v.id,
+                'VidhanSabhaGuidId': v.vidhan_sabha_guid_id,
+                'Name': v.name,
+                'DistrictId': v.district_id,
+                'DistrictName': v.district.name if v.district else None,
+                'CreatedOn': v.created_on,
+                'CreatedBy': v.created_by,
+                'Status': v.status
+            }
         return None
     except Exception as e:
         logger.error(f"VidhanSabhaHelper : get_vidhan_sabha_by_id : {str(e)}")
@@ -5081,18 +4958,17 @@ def get_vidhan_sabha_by_district_id(district_id):
     logger.info(f"VidhanSabhaHelper : GetVidhanSabhaByDistrictId : Started")
     
     try:
-        sql = """
-            SELECT 
-                Id, VidhanSabhaGuidId, Name, DistrictId, CreatedOn, CreatedBy, Status
-            FROM VidhanSabha
-            WHERE DistrictId = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [district_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        v = VidhanSabha.objects.filter(district_id=district_id, status=True).first()
+        if v:
+            return {
+                'Id': v.id,
+                'VidhanSabhaGuidId': v.vidhan_sabha_guid_id,
+                'Name': v.name,
+                'DistrictId': v.district_id,
+                'CreatedOn': v.created_on,
+                'CreatedBy': v.created_by,
+                'Status': v.status
+            }
         return None
         
     except Exception as e:
@@ -5104,11 +4980,7 @@ def check_vidhan_sabha_name(name):
     logger.info(f"VidhanSabhaHelper : CheckVidhanSabhaName : Started")
     
     try:
-        sql = "SELECT Name FROM VidhanSabha WHERE Name = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [name])
-            row = cursor.fetchone()
-            return row[0] if row else None
+        return VidhanSabha.objects.filter(name=name).values_list('name', flat=True).first()
     except Exception as e:
         logger.error(f"VidhanSabhaHelper : CheckVidhanSabhaName : {str(e)}")
         raise e
@@ -5123,59 +4995,28 @@ def get_all_villages(offset, limit):
     logger.info(f"VillageHelper : GetAllVillage : Started")
     
     try:
-        with connection.cursor() as cursor:
-            if offset == 0 and limit == 0:
-                sql = """
-                    SELECT 
-                        v.Id,
-                        v.VillageGuidId,
-                        v.Name,
-                        v.DistrictId,
-                        d.Name as DistrictName,
-                        v.VidhanSabhaId,
-                        vid.Name as VidhanSabhaName,
-                        v.PanchayatId,
-                        p.Name as PanchayatName,
-                        v.CreatedOn,
-                        v.CreatedBy,
-                        v.Status
-                    FROM Village v
-                    INNER JOIN Panchayat p ON v.PanchayatId = p.Id
-                    INNER JOIN District d ON v.DistrictId = d.Id
-                    INNER JOIN VidhanSabha vid ON v.VidhanSabhaId = vid.Id
-                    ORDER BY v.Id
-                """
-                cursor.execute(sql)
-            else:
-                sql = """
-                    SELECT 
-                        v.Id,
-                        v.VillageGuidId,
-                        v.Name,
-                        v.DistrictId,
-                        d.Name as DistrictName,
-                        v.VidhanSabhaId,
-                        vid.Name as VidhanSabhaName,
-                        v.PanchayatId,
-                        p.Name as PanchayatName,
-                        v.CreatedOn,
-                        v.CreatedBy,
-                        v.Status
-                    FROM Village v
-                    INNER JOIN Panchayat p ON v.PanchayatId = p.Id
-                    INNER JOIN District d ON v.DistrictId = d.Id
-                    INNER JOIN VidhanSabha vid ON v.VidhanSabhaId = vid.Id
-                    ORDER BY v.Id
-                    LIMIT %s OFFSET %s
-                """
-                cursor.execute(sql, [limit, offset])
-            
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        queryset = Village.objects.filter(status=True).select_related('district', 'vidhan_sabha', 'panchayat').order_by('id')
+        
+        if offset > 0 or limit > 0:
+            queryset = queryset[offset:offset + limit]
+        
+        result = []
+        for v in queryset:
+            result.append({
+                'Id': v.id,
+                'VillageGuidId': v.village_guid_id,
+                'Name': v.name,
+                'DistrictId': v.district_id,
+                'DistrictName': v.district.name if v.district else None,
+                'VidhanSabhaId': v.vidhan_sabha_id,
+                'VidhanSabhaName': v.vidhan_sabha.name if v.vidhan_sabha else None,
+                'PanchayatId': v.panchayat_id,
+                'PanchayatName': v.panchayat.name if v.panchayat else None,
+                'CreatedOn': v.created_on,
+                'CreatedBy': v.created_by,
+                'Status': v.status
+            })
+        return result
             
     except Exception as e:
         logger.error(f"VillageHelper : GetAllVillage : {str(e)}")
@@ -5245,32 +5086,22 @@ def save_village(village_data):
 def get_village_by_id(village_id):
     """Get village by ID"""
     try:
-        sql = """
-            SELECT 
-                v.Id,
-                v.VillageGuidId,
-                v.Name,
-                v.DistrictId,
-                d.Name as DistrictName,
-                v.VidhanSabhaId,
-                vid.Name as VidhanSabhaName,
-                v.PanchayatId,
-                p.Name as PanchayatName,
-                v.CreatedOn,
-                v.CreatedBy,
-                v.Status
-            FROM Village v
-            INNER JOIN Panchayat p ON v.PanchayatId = p.Id
-            INNER JOIN District d ON v.DistrictId = d.Id
-            INNER JOIN VidhanSabha vid ON v.VidhanSabhaId = vid.Id
-            WHERE v.Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [village_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        village = Village.objects.filter(id=village_id, status=True).select_related('district', 'vidhan_sabha', 'panchayat').first()
+        if village:
+            return {
+                'Id': village.id,
+                'VillageGuidId': village.village_guid_id,
+                'Name': village.name,
+                'DistrictId': village.district_id,
+                'DistrictName': village.district.name if village.district else None,
+                'VidhanSabhaId': village.vidhan_sabha_id,
+                'VidhanSabhaName': village.vidhan_sabha.name if village.vidhan_sabha else None,
+                'PanchayatId': village.panchayat_id,
+                'PanchayatName': village.panchayat.name if village.panchayat else None,
+                'CreatedOn': village.created_on,
+                'CreatedBy': village.created_by,
+                'Status': village.status
+            }
         return None
     except Exception as e:
         logger.error(f"VillageHelper : get_village_by_id : {str(e)}")
@@ -5281,19 +5112,24 @@ def get_village_by_district_vidhan_sabha_and_panchayat(district_id, vidhan_sabha
     logger.info(f"VillageHelper : GetVillageByDistrictVidhanSabhaAndPanchId : Started")
     
     try:
-        sql = """
-            SELECT 
-                Id, VillageGuidId, Name, DistrictId, VidhanSabhaId, PanchayatId,
-                CreatedOn, CreatedBy, Status
-            FROM Village
-            WHERE DistrictId = %s AND VidhanSabhaId = %s AND PanchayatId = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [district_id, vidhan_sabha_id, panchayat_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        village = Village.objects.filter(district_id=district_id, vidhan_sabha_id=vidhan_sabha_id, panchayat_id=panchayat_id, status=True).first()
+        if village:
+            return {
+                'Id': village.id,
+                'VillageGuidId': village.village_guid_id,
+                'Name': village.name,
+                'DistrictId': village.district_id,
+                'VidhanSabhaId': village.vidhan_sabha_id,
+                'PanchayatId': village.panchayat_id,
+                'CreatedOn': village.created_on,
+                'CreatedBy': village.created_by,
+                'Status': village.status
+            }
+        return None
+        
+    except Exception as e:
+        logger.error(f"VillageHelper : GetVillageByDistrictVidhanSabhaAndPanchId : {str(e)}")
+        raise e
         return None
         
     except Exception as e:
@@ -5305,11 +5141,7 @@ def check_village_name(name):
     logger.info(f"VillageHelper : CheckVillageName : Started")
     
     try:
-        sql = "SELECT Name FROM Village WHERE Name = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [name])
-            row = cursor.fetchone()
-            return row[0] if row else None
+        return Village.objects.filter(name=name).values_list('name', flat=True).first()
     except Exception as e:
         logger.error(f"VillageHelper : CheckVillageName : {str(e)}")
         raise e
@@ -5356,38 +5188,60 @@ def get_all_regional_admins():
         raise e
 
 def login_regional_admin(name, password):
-    """Login regional admin by name and password"""
+    """Login regional admin by name and password with User join"""
     logger.info(f"RegionalAdminHelper : LoginRegionalAdmin : Started")
     
     try:
         hashed_password = hash_password(password)
         
-        sql = """
-            SELECT 
-                Id, RegionalAdminGuidId, FullName, Age, Gender, DateOfBirth,
-                PhoneNumber, WhatsApp, Email, Contact, Status, RoleId,
-                Picture, LastLoginTime, Password, FullAddress, Type, Token,
-                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
-                CreatedOn, CreatedBy
-            FROM RegionalAdmin
-            WHERE FullName = %s AND Password = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [name, hashed_password])
-            row = cursor.fetchone()
+        # Find user = User.objects.filter(name=name, password=hashed_password, role_id=2, status=True).select_related('regional_admin').first()
+        
+        if user and hasattr(user, 'regional_admin') and user.regional_admin:
+            regional_admin = user.regional_admin
             
-            if row:
-                columns = [col[0] for col in cursor.description]
-                regional_admin_dict = dict(zip(columns, row))
-                
-                # Generate token
-                token = AccessToken()
-                token['regional_admin_id'] = regional_admin_dict.get('Id')
-                token['regional_admin_name'] = regional_admin_dict.get('FullName')
-                token.set_exp(lifetime=timedelta(days=30))
-                regional_admin_dict['Token'] = str(token)
-                
-                return regional_admin_dict
+            # Generate token
+            token = AccessToken()
+            token['regional_admin_id'] = regional_admin.id
+            token['regional_admin_name'] = user.name
+            token.set_exp(lifetime=timedelta(days=30))
+            
+            return {
+                'Id': regional_admin.id,
+                'RegionalAdminGuidId': regional_admin.regional_admin_guid_id,
+                'FullName': user.name,
+                'Age': regional_admin.age,
+                'Gender': regional_admin.gender,
+                'DateOfBirth': regional_admin.date_of_birth,
+                'PhoneNumber': user.phone_number,
+                'WhatsApp': regional_admin.whats_app if hasattr(regional_admin, 'whats_app') else None,
+                'Email': user.email,
+                'Contact': regional_admin.contact,
+                'Status': user.status,
+                'RoleId': user.role_id,
+                'Picture': user.picture.url if user.picture else None,
+                'LastLoginTime': regional_admin.last_login_time if hasattr(regional_admin, 'last_login_time') else None,
+                'Password': user.password,
+                'FullAddress': regional_admin.full_address,
+                'Type': user.type,
+                'Token': str(token),
+                'VidhanSabhaId': regional_admin.vidhan_sabha_id,
+                'DistrictId': regional_admin.district_id,
+                'PanchayatId': regional_admin.panchayat_id,
+                'CenterId': regional_admin.center_id,
+                'VillageId': regional_admin.village_id,
+                'CreatedOn': regional_admin.created_on,
+                'CreatedBy': regional_admin.created_by,
+                'UserId': user.id,
+                'UserName': user.name,
+                'UserPhoneNumber': user.phone_number,
+                'UserEmail': user.email,
+                'UserPicture': user.picture.url if user.picture else None,
+                'DistrictName': regional_admin.district.name if regional_admin.district else None,
+                'VidhanSabhaName': regional_admin.vidhan_sabha.name if regional_admin.vidhan_sabha else None,
+                'PanchayatName': regional_admin.panchayat.name if regional_admin.panchayat else None,
+                'CenterName': regional_admin.center.center_name if regional_admin.center else None,
+                'VillageName': regional_admin.village.name if regional_admin.village else None,
+            }
         
         return None
         
@@ -5485,24 +5339,50 @@ def save_regional_admin(regional_admin_data):
         raise e
 
 def get_regional_admin_by_id(regional_admin_id):
-    """Get regional admin by ID"""
+    """Get regional admin by User ID with User data joined"""
     try:
-        sql = """
-            SELECT 
-                Id, RegionalAdminGuidId, FullName, Age, Gender, DateOfBirth,
-                PhoneNumber, WhatsApp, Email, Contact, Status, RoleId,
-                Picture, LastLoginTime, Password, FullAddress, Type, Token,
-                VidhanSabhaId, DistrictId, PanchayatId, CenterId, VillageId,
-                CreatedOn, CreatedBy
-            FROM RegionalAdmin
-            WHERE Id = %s
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [regional_admin_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        regional_admin = RegionalAdmin.objects.filter(user__id=regional_admin_id).select_related(
+            'user', 'district', 'vidhan_sabha', 'panchayat', 'center', 'village'
+        ).first()
+        if regional_admin and regional_admin.user and regional_admin.user.role_id == 2:
+            user = regional_admin.user
+            return {
+                'Id': user.id,
+                'RegionalAdminGuidId': regional_admin.regional_admin_guid_id,
+                'FullName': user.name,
+                'Age': regional_admin.age,
+                'Gender': regional_admin.gender,
+                'DateOfBirth': regional_admin.date_of_birth,
+                'PhoneNumber': user.phone_number,
+                'WhatsApp': user.whats_app,
+                'Email': user.email,
+                'Contact': regional_admin.contact,
+                'Status': user.status,
+                'RoleId': user.role_id,
+                'Picture': user.picture.url if user.picture else None,
+                'LastLoginTime': user.last_login_time,
+                'Password': user.password,
+                'FullAddress': regional_admin.full_address,
+                'Type': user.type,
+                'Token': user.token,
+                'VidhanSabhaId': regional_admin.vidhan_sabha_id,
+                'DistrictId': regional_admin.district_id,
+                'PanchayatId': regional_admin.panchayat_id,
+                'CenterId': regional_admin.center_id,
+                'VillageId': regional_admin.village_id,
+                'CreatedOn': regional_admin.created_on,
+                'CreatedBy': regional_admin.created_by,
+                'UserId': user.id,
+                'UserName': user.name,
+                'UserPhoneNumber': user.phone_number,
+                'UserEmail': user.email,
+                'UserPicture': user.picture.url if user.picture else None,
+                'DistrictName': regional_admin.district.name if regional_admin.district else None,
+                'VidhanSabhaName': regional_admin.vidhan_sabha.name if regional_admin.vidhan_sabha else None,
+                'PanchayatName': regional_admin.panchayat.name if regional_admin.panchayat else None,
+                'CenterName': regional_admin.center.center_name if regional_admin.center else None,
+                'VillageName': regional_admin.village.name if regional_admin.village else None,
+            }
         return None
     except Exception as e:
         logger.error(f"RegionalAdminHelper : get_regional_admin_by_id : {str(e)}")
@@ -5568,13 +5448,16 @@ def save_announcement(announcement_data):
 def get_announcement_by_id(announcement_id):
     """Get announcement by ID"""
     try:
-        sql = "SELECT Id, Title, Description, Image, CreatedOn, CreatedBy FROM Announcement WHERE Id = %s"
-        with connection.cursor() as cursor:
-            cursor.execute(sql, [announcement_id])
-            row = cursor.fetchone()
-            if row:
-                columns = [col[0] for col in cursor.description]
-                return dict(zip(columns, row))
+        announcement = Announcement.objects.filter(id=announcement_id, status=True).first()
+        if announcement:
+            return {
+                'Id': announcement.id,
+                'Title': announcement.title,
+                'Description': announcement.description,
+                'Image': announcement.image,
+                'CreatedOn': announcement.created_on,
+                'CreatedBy': announcement.created_by
+            }
         return None
     except Exception as e:
         logger.error(f"AnnouncementHelper : get_announcement_by_id : {str(e)}")
@@ -5585,15 +5468,18 @@ def get_all_announcements():
     logger.info(f"AnnouncementHelper : GetAnnouncement : Started")
     
     try:
-        sql = "SELECT Id, Title, Description, Image, CreatedOn, CreatedBy FROM Announcement ORDER BY Id"
-        with connection.cursor() as cursor:
-            cursor.execute(sql)
-            rows = cursor.fetchall()
-            columns = [col[0] for col in cursor.description]
-            result = []
-            for row in rows:
-                result.append(dict(zip(columns, row)))
-            return result
+        announcements = Announcement.objects.filter(status=True).order_by('id')
+        result = []
+        for a in announcements:
+            result.append({
+                'Id': a.id,
+                'Title': a.title,
+                'Description': a.description,
+                'Image': a.image,
+                'CreatedOn': a.created_on,
+                'CreatedBy': a.created_by
+            })
+        return result
     except Exception as e:
         logger.error(f"AnnouncementHelper : GetAnnouncement : {str(e)}")
         raise e

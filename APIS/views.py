@@ -212,7 +212,6 @@ class AnnouncementSaveannouncementPostView(APIView):
                 user_id = get_user_id_from_token(request)
                 if user_id:
                     log_activity(
-                        user_id=user_id,
                         module='Announcement',
                         action='SAVE',
                         record_id=getattr(saved_announcement, 'AnnouncementId', 0),
@@ -264,7 +263,6 @@ class AnnouncementGetannouncementGetView(APIView):
                 user_id = get_user_id_from_token(request)
                 if user_id:
                     log_activity(
-                        user_id=user_id,
                         module='Announcement',
                         action='VIEW',
                         record_id=0,
@@ -350,7 +348,6 @@ class CenterSavecenterPostView(APIView):
                 user_id = get_user_id_from_token(request)
                 if user_id:
                     log_activity(
-                        user_id=user_id,
                         module='Center',
                         action='SAVE',
                         record_id=getattr(saved_center, 'Id', 0),
@@ -426,7 +423,6 @@ class CenterGetAllCentersView(APIView):
                 user_id = get_user_id_from_token(request)
                 if user_id:
                     log_activity(
-                        user_id=user_id,
                         module='Center',
                         action='VIEW',
                         record_id=0,
@@ -505,7 +501,6 @@ class CenterGetAllCentersByStatusView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Center',
                     action='VIEW',
                     record_id=0,
@@ -551,7 +546,6 @@ class CenterGetcenteryidGetView(APIView):
                 user_id = get_user_id_from_token(request)
                 if user_id:
                     log_activity(
-                        user_id=user_id,
                         module='Center',
                         action='VIEW',
                         record_id=getattr(center, 'Id', 0),
@@ -616,7 +610,6 @@ class CenterGetcenterbyteacheridGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Center',
                         action='VIEW',
                         record_id=getattr(center, 'Id', 0),
@@ -692,7 +685,6 @@ class CenterGetallcenterattendanceGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Center',
                         action='VIEW',
                         record_id=0,
@@ -786,7 +778,6 @@ class CenterUpdatecenteractiveordeactiveGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Center',
                         action='UPDATE',
                         record_id=int(center_id),
@@ -852,7 +843,6 @@ class CenterGettotalattendancecountofcenterGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Center',
                         action='VIEW',
                         record_id=0,
@@ -930,7 +920,6 @@ class ClassSaveclassPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Class',
                         action='SAVE',
                         record_id=getattr(saved_class, 'Id', 0) if hasattr(saved_class, 'Id') else 0,
@@ -994,7 +983,6 @@ class ClassCancelclassPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Class',
                         action='UPDATE',
                         record_id=class_data.get('ClassEnrolmentId', 0),
@@ -1057,7 +1045,6 @@ class ClassUpdateendclasstimePostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Class',
                         action='UPDATE',
                         record_id=class_id,
@@ -1123,7 +1110,6 @@ class ClassUpdateclasssubstatusPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Class',
                         action='UPDATE',
                         record_id=class_id,
@@ -1188,7 +1174,6 @@ class ClassCancelclassbyteacherPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Class',
                         action='UPDATE',
                         record_id=data.get('Id', 0),
@@ -1250,7 +1235,6 @@ class ClassDeleteclassbyteacheridPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Class',
                         action='DELETE',
                         record_id=class_id,
@@ -1315,7 +1299,6 @@ class ClassGetclasscurrentstatusGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Class',
                     action='VIEW',
                     record_id=center_id,
@@ -1363,7 +1346,6 @@ class ClassGetliveclassdetailGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Class',
                         action='VIEW',
                         record_id=class_id,
@@ -1433,7 +1415,6 @@ class DistrictGetalldistrictGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='District',
                         action='VIEW',
                         record_id=0,
@@ -1498,7 +1479,6 @@ class DistrictSavedistrictPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='District',
                         action='SAVE',
                         record_id=getattr(saved_district, 'Id', 0),
@@ -1558,7 +1538,6 @@ class VidhansabhaGetallvidhansabhaGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='VidhanSabha',
                         action='VIEW',
                         record_id=0,
@@ -1623,7 +1602,6 @@ class VidhansabhaSavevidhansabhaPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='VidhanSabha',
                         action='CREATE',
                         record_id=response_serializer.data.get('Id'),
@@ -1687,7 +1665,6 @@ class VidhansabhaGetvidhansabhabydistrictidGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='VidhanSabha',
                         action='SAVE' if not request.data.get('Id') else 'UPDATE',
                         record_id=response_serializer.data.get('Id'),
@@ -1748,7 +1725,6 @@ class VidhansabhaCheckvidhansabhanamePostView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='VidhanSabha',
                     action='CHECK_NAME',
                     record_id=None,
@@ -1808,7 +1784,6 @@ class PanchayatGetallpanchayatGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Panchayat',
                         action='VIEW',
                         record_id=0,
@@ -1873,7 +1848,6 @@ class PanchayatSavepanchayatPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Panchayat',
                         action='SAVE',
                         record_id=getattr(saved_panchayat, 'Id', 0),
@@ -1941,7 +1915,6 @@ class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Panchayat',
                         action='VIEW',
                         record_id=getattr(panchayat, 'Id', 0),
@@ -2002,7 +1975,6 @@ class PanchayatCheckpanchayatnamePostView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Panchayat',
                     action='CHECK_NAME',
                     record_id=None,
@@ -2063,7 +2035,6 @@ class VillageGetallvillageGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Village',
                         action='VIEW',
                         record_id=None,
@@ -2128,7 +2099,6 @@ class VillageSavevillagePostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Village',
                         action='SAVE' if not request.data.get('Id') else 'UPDATE',
                         record_id=response_serializer.data.get('Id'),
@@ -2197,7 +2167,6 @@ class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Village',
                         action='VIEW',
                         record_id=response_serializer.data.get('Id'),
@@ -2258,7 +2227,6 @@ class VillageCheckvillagenamePostView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Village',
                     action='CHECK_NAME',
                     record_id=None,
@@ -2327,7 +2295,6 @@ class SchoolSaveschoolPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='School',
                         action='SAVE',
                         record_id=getattr(saved_school, 'Id', 0),
@@ -2379,7 +2346,6 @@ class SchoolGetallschoolsGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='School',
                         action='VIEW',
                         record_id=0,
@@ -2485,7 +2451,6 @@ class HolidaysSaveholidaysPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Holidays',
                         action='SAVE',
                         record_id=holiday_id,
@@ -2549,7 +2514,6 @@ class HolidaysGetallholidaysbyteacheridGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Holidays',
                         action='VIEW',
                         record_id=0,
@@ -2614,7 +2578,6 @@ class HolidaysGetallholidaysbycenteridGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Holidays',
                         action='VIEW',
                         record_id=0,
@@ -2679,7 +2642,6 @@ class HolidaysGetallholidaysbyyearGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Holidays',
                         action='VIEW',
                         record_id=0,
@@ -2735,7 +2697,6 @@ class HolidaysGetallholidaysGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Holidays',
                         action='VIEW',
                         record_id=0,
@@ -2798,7 +2759,6 @@ class HolidaysDeleteholidaybyidPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Holidays',
                         action='DELETE',
                         record_id=int(holiday_id),
@@ -2895,7 +2855,6 @@ class StudentSavestudentPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Student',
                         action='SAVE',
                         record_id=getattr(saved_student, 'Id', 0),
@@ -2959,7 +2918,6 @@ class StudentGetstudentbyidGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Student',
                         action='VIEW',
                         record_id=int(student_id),
@@ -3026,7 +2984,6 @@ class StudentUpdatestudentactiveorinactivePostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Student',
                         action='UPDATE',
                         record_id=student_id,
@@ -3171,7 +3128,6 @@ class StudentGetallstudentsGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Student',
                         action='GET',
                         record_id=None,
@@ -3240,7 +3196,6 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                 # Log activity for duplicate attendance
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3259,7 +3214,6 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                 # Log activity for inactive student
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3278,7 +3232,6 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                 # Log activity for student not found
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3297,7 +3250,6 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                  # Log activity for save attendance
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3350,7 +3302,6 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                 # Log activity for duplicate automatic attendance
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3369,7 +3320,6 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                 # Log activity for inactive student
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3388,7 +3338,6 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                 # Log activity for student not found
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3407,7 +3356,6 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                 # Log activity for automatic attendance applied
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3460,7 +3408,6 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                 # Log activity for duplicate manual attendance
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3479,7 +3426,6 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                 # Log activity for manual attendance limit reached
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3498,7 +3444,6 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                 # Log activity for manual attendance applied
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='CREATE',
                         record_id=None,
@@ -3550,7 +3495,6 @@ class StudentattendanceGetallstudentwihavgattendanceGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='VIEW',
                         record_id=center_id,
@@ -3615,7 +3559,6 @@ class StudentattendanceGetallabsentattendanceGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='VIEW',
                         record_id=center_id,
@@ -3682,7 +3625,6 @@ class StudentattendanceGetallstudentattendancstatusGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='VIEW',
                         record_id=center_id,
@@ -3752,7 +3694,6 @@ class StudentattendanceGetallstudentattendancbymonthGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='StudentAttendance',
                         action='VIEW',
                         record_id=student_id,
@@ -3827,7 +3768,6 @@ class UserGetAllTeachersView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='VIEW',
                         record_id=userId,
@@ -3882,7 +3822,6 @@ class UserGetAllRegionalAdminsView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='VIEW',
                         record_id=0,
@@ -3941,7 +3880,6 @@ class UserLoginView(APIView):
                 logged_user_id = user.get('id') if isinstance(user, dict) else None
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='LOGIN',
                         record_id=logged_user_id,
@@ -4089,7 +4027,6 @@ class UserSaveSuperAdminView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='CREATE',
                         record_id=saved_user.get('Id') if isinstance(saved_user, dict) else None,
@@ -4155,7 +4092,6 @@ class UserUpdateDeviceIdView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='UPDATE',
                         record_id=user_id,
@@ -4239,7 +4175,6 @@ class UserSaveUserView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='CREATE' if not user_data.get('Id') else 'UPDATE',
                         record_id=saved_user.get('Id') if isinstance(saved_user, dict) else None,
@@ -4323,7 +4258,6 @@ class UserUpdateSuperAdminUserView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='UPDATE',
                         record_id=user_data.get('Id'),
@@ -4386,7 +4320,6 @@ class UserGetUserByIdView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='VIEW',
                         record_id=int(user_id),
@@ -4450,7 +4383,6 @@ class UserGetUserDetailByPhoneNumberView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='VIEW',
                         record_id=user.get('Id'),
@@ -4517,7 +4449,6 @@ class UserUpdatePasswordView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='UPDATE',
                         record_id=user_id,
@@ -4571,7 +4502,7 @@ class UserGetAllUnAssignedTeacherView(APIView):
                     'id': teacher.user.id,
                     'name': teacher.user.name,
                     'assigned': False,
-                    'profile': teacher.user.picture,
+                    'profile': teacher.user.picture.url if teacher.user.picture else None,
                     'phoneNumber': teacher.user.phone_number
                 })
             
@@ -4582,7 +4513,6 @@ class UserGetAllUnAssignedTeacherView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='User',
                         action='VIEW',
                         record_id=0,
@@ -4714,7 +4644,6 @@ class TeacherLoginteacherPostView(APIView):
                 logged_user_id = teacher.get("Id")
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Teacher',
                         action='LOGIN',
                         record_id=logged_user_id,
@@ -4783,7 +4712,6 @@ class TeacherSaveteacherPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='Teacher',
                         action='CREATE',
                         record_id=response_serializer.data.get('Id'),
@@ -4840,7 +4768,6 @@ class RegionaladminGetallregionaladminGetView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='RegionalAdmin',
                         action='VIEW',
                         record_id=0,
@@ -4907,7 +4834,6 @@ class RegionaladminLoginregionaladminPostView(APIView):
                 logged_user_id = regional_admin.get("Id")
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='RegionalAdmin',
                         action='LOGIN',
                         record_id=logged_user_id,
@@ -4976,7 +4902,6 @@ class RegionaladminSaveregionaladminPostView(APIView):
                 logged_user_id = get_user_id_from_token(request)
                 if logged_user_id:
                     log_activity(
-                        user_id=logged_user_id,
                         module='RegionalAdmin',
                         action='CREATE',
                         record_id=response_serializer.data.get('Id'),
@@ -5029,7 +4954,7 @@ class FileUploadprofileimagePostView(DotNetAPIView):
     def post(self, request, *args, **kwargs):
         uploaded = []
         for file_obj in request.FILES.getlist("files") or request.FILES.values():
-            file_name = default_storage.save(f"UploadProfileImage/{uuid.uuid4()}_{file_obj.name}", file_obj)
+            file_name = default_storage.save(f"profile_pic/{uuid.uuid4()}_{file_obj.name}", file_obj)
             uploaded.append(default_storage.url(file_name))
         return ok(uploaded, "File uploaded successfully")
 
@@ -5064,7 +4989,6 @@ class DashboardGetclasscountbymonthGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=int(center_id),
@@ -5106,7 +5030,6 @@ class DashboardGettotalgenterratiobycenteridGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=int(center_id),
@@ -5149,7 +5072,6 @@ class DashboardGettotalstudentofclassGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=int(center_id),
@@ -5189,7 +5111,6 @@ class DashboardGetcenterdetailbymonthGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=int(center_id),
@@ -5232,7 +5153,6 @@ class DashboardGettotalbplGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=int(center_id),
@@ -5275,7 +5195,6 @@ class DashboardGettotalstudentcategoryofclassGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=int(center_id),
@@ -5325,7 +5244,6 @@ class DashboardGetuserbyfilterGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=0,
@@ -5375,7 +5293,6 @@ class DashboardGettotalbplbyfilterGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=0,
@@ -5425,7 +5342,6 @@ class DashboardGettotalgenderratiobyfilterGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=0,
@@ -5475,7 +5391,6 @@ class DashboardGettotalstudentcategoryofclassbyfilterGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=0,
@@ -5525,7 +5440,6 @@ class DashboardGettotalstudengradeofclassbyfilterGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=0,
@@ -5572,7 +5486,6 @@ class DashboardGetdistrictofcenterbyfilterGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=0,
@@ -5602,7 +5515,6 @@ class DashboardGetstudentattendancebypercentageGetView(APIView):
             logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
-                    user_id=logged_user_id,
                     module='Dashboard',
                     action='VIEW',
                     record_id=0,

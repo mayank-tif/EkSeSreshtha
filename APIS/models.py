@@ -263,7 +263,7 @@ class User(models.Model):
     phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
     whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    picture = models.TextField(db_column="Picture", null=True, blank=True)
+    picture = models.ImageField(db_column="Picture", upload_to='profile_pic/', null=True, blank=True)
     last_login_time = models.CharField(db_column="LastLoginTime", max_length=50, null=True, blank=True)
     device_id = models.TextField(db_column="DeviceId", null=True, blank=True)
     token = models.TextField(db_column="Token", null=True, blank=True)

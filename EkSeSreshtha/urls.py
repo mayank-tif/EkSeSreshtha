@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from APIS.views import WeatherforecastGetView
 
 
@@ -24,3 +26,6 @@ urlpatterns = [
     path('api/', include('APIS.urls')),
     path('WeatherForecast/', WeatherforecastGetView.as_view(), name='weatherforecast-get'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
