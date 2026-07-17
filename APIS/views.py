@@ -209,6 +209,16 @@ class AnnouncementSaveannouncementPostView(APIView):
             
             if saved_announcement:
                 response_serializer = api_serializers.AnnouncementDtoSerializer(saved_announcement)
+                user_id = get_user_id_from_token(request)
+                if user_id:
+                    log_activity(
+                        user_id=user_id,
+                        module='Announcement',
+                        action='SAVE',
+                        record_id=getattr(saved_announcement, 'AnnouncementId', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -250,6 +260,17 @@ class AnnouncementGetannouncementGetView(APIView):
             
             if announcements is not None and len(announcements) > 0:
                 response_serializer = api_serializers.AnnouncementDtoSerializer(announcements, many=True)
+                # Log activity for viewing
+                user_id = get_user_id_from_token(request)
+                if user_id:
+                    log_activity(
+                        user_id=user_id,
+                        module='Announcement',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(announcements)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -326,6 +347,16 @@ class CenterSavecenterPostView(APIView):
             
             if saved_center:
                 response_serializer = api_serializers.CenterDetailDtoSerializer(saved_center)
+                user_id = get_user_id_from_token(request)
+                if user_id:
+                    log_activity(
+                        user_id=user_id,
+                        module='Center',
+                        action='SAVE',
+                        record_id=getattr(saved_center, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -391,6 +422,17 @@ class CenterGetAllCentersView(APIView):
             if all_centers is not None and len(all_centers) > 0:
                 # Serialize response
                 response_serializer = api_serializers.AllCenterDtoSerializer(all_centers, many=True)
+                # Log activity for viewing
+                user_id = get_user_id_from_token(request)
+                if user_id:
+                    log_activity(
+                        user_id=user_id,
+                        module='Center',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(all_centers)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -459,6 +501,18 @@ class CenterGetAllCentersByStatusView(APIView):
             # Serialize response
             response_serializer = api_serializers.AllCenterStatusDtoSerializer(all_centers, many=True)
 
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Center',
+                    action='VIEW',
+                    record_id=0,
+                    data={'count': len(all_centers)},
+                    request=request
+                )
+
             logger.info(f"CenterGetAllCentersByStatusView : GetStudentAttendanceOfCenter : End")
             return Response(response_serializer.data, status=status.HTTP_200_OK)
 
@@ -493,6 +547,17 @@ class CenterGetcenteryidGetView(APIView):
             
             if center:
                 response_serializer = api_serializers.CenterDetailDtoSerializer(center)
+                # Log activity for viewing
+                user_id = get_user_id_from_token(request)
+                if user_id:
+                    log_activity(
+                        user_id=user_id,
+                        module='Center',
+                        action='VIEW',
+                        record_id=getattr(center, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -547,6 +612,17 @@ class CenterGetcenterbyteacheridGetView(APIView):
             
             if center:
                 response_serializer = api_serializers.CenterDetailDtoSerializer(center)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Center',
+                        action='VIEW',
+                        record_id=getattr(center, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -612,6 +688,17 @@ class CenterGetallcenterattendanceGetView(APIView):
             )
             
             if centers is not None and len(centers) > 0:
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Center',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(centers)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -695,6 +782,20 @@ class CenterUpdatecenteractiveordeactiveGetView(APIView):
             result = update_center_active_or_deactive(center_log_data)
             
             if result:
+                # Log activity for status update
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Center',
+                        action='UPDATE',
+                        record_id=int(center_id),
+                        data={
+                            'status': status,
+                            'reason': reason
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -747,6 +848,18 @@ class CenterGettotalattendancecountofcenterGetView(APIView):
             result = get_total_attendance_count_of_center(int(user_id), date)
             
             if result:
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Center',
+                        action='VIEW',
+                        record_id=0,
+                        data=result,
+                        request=request
+                    )
+
                 return Response(
                     {
                         "data": result,
@@ -813,6 +926,18 @@ class ClassSaveclassPostView(APIView):
             saved_class = save_class(class_data, request)
             
             if saved_class:
+                # Log activity for save
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Class',
+                        action='SAVE',
+                        record_id=getattr(saved_class, 'Id', 0) if hasattr(saved_class, 'Id') else 0,
+                        data=saved_class,
+                        request=request
+                    )
+
                 return Response(
                     {
                         "status": True,
@@ -865,6 +990,18 @@ class ClassCancelclassPostView(APIView):
             result = cancel_class(class_data, request)
             
             if result:
+                # Log activity for cancel
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Class',
+                        action='UPDATE',
+                        record_id=class_data.get('ClassEnrolmentId', 0),
+                        data=class_data,
+                        request=request
+                    )
+
                 return Response(
                     {
                         "status": True,
@@ -916,6 +1053,21 @@ class ClassUpdateendclasstimePostView(APIView):
             result = update_end_class_time(class_id, request)
             
             if result:
+                # Log activity for end class time update
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Class',
+                        action='UPDATE',
+                        record_id=class_id,
+                        data={
+                            'Id': class_id,
+                            'action': 'EndClassTimeUpdated'
+                        },
+                        request=request
+                    )
+
                 return Response(
                     {
                         "status": True,
@@ -967,6 +1119,20 @@ class ClassUpdateclasssubstatusPostView(APIView):
             result = update_class_sub_status(class_id, request)
             
             if result:
+                # Log activity for class sub status update
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Class',
+                        action='UPDATE',
+                        record_id=class_id,
+                        data={
+                            'Id': class_id,
+                            'action': 'ClassSubStatusUpdated'
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1018,6 +1184,18 @@ class ClassCancelclassbyteacherPostView(APIView):
             result = cancel_class_by_teacher(data, request)
             
             if result:
+                # Log activity for class cancel by teacher
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Class',
+                        action='UPDATE',
+                        record_id=data.get('Id', 0),
+                        data=data,
+                        request=request
+                    )
+
                 return Response(
                     {
                         "status": True,
@@ -1069,6 +1247,18 @@ class ClassDeleteclassbyteacheridPostView(APIView):
             result = delete_class_by_teacher_id(class_id, request)
             
             if result:
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Class',
+                        action='DELETE',
+                        record_id=class_id,
+                        data={
+                            'classId': class_id
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1120,6 +1310,18 @@ class ClassGetclasscurrentstatusGetView(APIView):
             teacher_id = serializer.validated_data.get('teacherId')
             
             result = get_class_current_status(center_id, teacher_id)
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Class',
+                    action='VIEW',
+                    record_id=center_id,
+                    data=result,
+                    request=request
+                )
             
             return Response(result, status=status.HTTP_200_OK)
                 
@@ -1157,6 +1359,17 @@ class ClassGetliveclassdetailGetView(APIView):
             
             if class_data:
                 response_serializer = api_serializers.ClassLiveDetailDtoSerializer(class_data)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Class',
+                        action='VIEW',
+                        record_id=class_id,
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1216,6 +1429,17 @@ class DistrictGetalldistrictGetView(APIView):
             
             if districts is not None and len(districts) > 0:
                 response_serializer = api_serializers.DistrictDtoSerializer(districts, many=True)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='District',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(districts)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1270,6 +1494,17 @@ class DistrictSavedistrictPostView(APIView):
             
             if saved_district:
                 response_serializer = api_serializers.DistrictDtoSerializer(saved_district)
+                # Log activity for save
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='District',
+                        action='SAVE',
+                        record_id=getattr(saved_district, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1319,6 +1554,17 @@ class VidhansabhaGetallvidhansabhaGetView(APIView):
             
             if vidhan_sabhas is not None and len(vidhan_sabhas) > 0:
                 response_serializer = api_serializers.VidhanSabhaDtoSerializer(vidhan_sabhas, many=True)
+                # Log activity for view all vidhan sabha
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='VidhanSabha',
+                        action='VIEW',
+                        record_id=0,
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1373,6 +1619,17 @@ class VidhansabhaSavevidhansabhaPostView(APIView):
             
             if saved_vidhan_sabha:
                 response_serializer = api_serializers.VidhanSabhaDtoSerializer(saved_vidhan_sabha)
+                # Log activity for save vidhan sabha
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='VidhanSabha',
+                        action='CREATE',
+                        record_id=response_serializer.data.get('Id'),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1426,6 +1683,17 @@ class VidhansabhaGetvidhansabhabydistrictidGetView(APIView):
             
             if vidhan_sabha:
                 response_serializer = api_serializers.VidhanSabhaDtoSerializer(vidhan_sabha)
+                # Log activity for save/update Vidhan Sabha
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='VidhanSabha',
+                        action='SAVE' if not request.data.get('Id') else 'UPDATE',
+                        record_id=response_serializer.data.get('Id'),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1476,6 +1744,17 @@ class VidhansabhaCheckvidhansabhanamePostView(APIView):
                 )
             
             exists = check_vidhan_sabha_name(name)
+            # Log activity for check Vidhan Sabha name
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='VidhanSabha',
+                    action='CHECK_NAME',
+                    record_id=None,
+                    data={"name": name, "exists": exists},
+                    request=request
+                )
             
             if exists:
                 return Response(
@@ -1525,6 +1804,17 @@ class PanchayatGetallpanchayatGetView(APIView):
             
             if panchayats is not None and len(panchayats) > 0:
                 response_serializer = api_serializers.PanchayatDtoSerializer(panchayats, many=True)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Panchayat',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(panchayats)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1579,6 +1869,17 @@ class PanchayatSavepanchayatPostView(APIView):
             
             if saved_panchayat:
                 response_serializer = api_serializers.PanchayatDtoSerializer(saved_panchayat)
+                # Log activity for save
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Panchayat',
+                        action='SAVE',
+                        record_id=getattr(saved_panchayat, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1636,6 +1937,17 @@ class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(APIView):
             
             if panchayat:
                 response_serializer = api_serializers.PanchayatDtoSerializer(panchayat)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Panchayat',
+                        action='VIEW',
+                        record_id=getattr(panchayat, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1686,6 +1998,17 @@ class PanchayatCheckpanchayatnamePostView(APIView):
                 )
             
             exists = check_panchayat_name(name)
+            # Log activity for check panchayat name
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Panchayat',
+                    action='CHECK_NAME',
+                    record_id=None,
+                    data={"name": name, "exists": exists},
+                    request=request
+                )
             
             if exists:
                 return Response(
@@ -1736,6 +2059,17 @@ class VillageGetallvillageGetView(APIView):
             
             if villages is not None and len(villages) > 0:
                 response_serializer = api_serializers.VillageDtoSerializer(villages, many=True)
+                # Log activity for get all villages
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Village',
+                        action='VIEW',
+                        record_id=None,
+                        data={"count": len(response_serializer.data)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1790,6 +2124,17 @@ class VillageSavevillagePostView(APIView):
             
             if saved_village:
                 response_serializer = api_serializers.VillageDtoSerializer(saved_village)
+                # Log activity for save/update village
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Village',
+                        action='SAVE' if not request.data.get('Id') else 'UPDATE',
+                        record_id=response_serializer.data.get('Id'),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1848,6 +2193,17 @@ class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(APIView):
             
             if village:
                 response_serializer = api_serializers.VillageDtoSerializer(village)
+                # Log activity for get village by district, vidhan sabha and panchayat
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Village',
+                        action='VIEW',
+                        record_id=response_serializer.data.get('Id'),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1898,6 +2254,17 @@ class VillageCheckvillagenamePostView(APIView):
                 )
             
             exists = check_village_name(name)
+            # Log activity for check village name
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Village',
+                    action='CHECK_NAME',
+                    record_id=None,
+                    data={"name": name, "exists": exists},
+                    request=request
+                )
             
             if exists:
                 return Response(
@@ -1957,6 +2324,16 @@ class SchoolSaveschoolPostView(APIView):
             
             if saved_school:
                 response_serializer = api_serializers.SchoolDtoSerializer(saved_school)
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='School',
+                        action='SAVE',
+                        record_id=getattr(saved_school, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -1998,6 +2375,17 @@ class SchoolGetallschoolsGetView(APIView):
             
             if schools is not None and len(schools) > 0:
                 response_serializer = api_serializers.SchoolDtoSerializer(schools, many=True)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='School',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(schools)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2092,6 +2480,18 @@ class HolidaysSaveholidaysPostView(APIView):
                     message = "Holdays update successfully"
                 else:
                     message = "Holdays save successfully"
+
+                # Log activity for save/update
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Holidays',
+                        action='SAVE',
+                        record_id=holiday_id,
+                        data=holidays_data,
+                        request=request
+                    )    
                 
                 return Response(
                     {
@@ -2145,6 +2545,17 @@ class HolidaysGetallholidaysbyteacheridGetView(APIView):
             
             if holidays is not None and len(holidays) > 0:
                 response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Holidays',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(holidays)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2199,6 +2610,17 @@ class HolidaysGetallholidaysbycenteridGetView(APIView):
             
             if holidays is not None and len(holidays) > 0:
                 response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Holidays',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(holidays)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2253,6 +2675,17 @@ class HolidaysGetallholidaysbyyearGetView(APIView):
             
             if holidays is not None and len(holidays) > 0:
                 response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Holidays',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(holidays)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2298,6 +2731,17 @@ class HolidaysGetallholidaysGetView(APIView):
             
             if holidays is not None and len(holidays) > 0:
                 response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
+                 # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Holidays',
+                        action='VIEW',
+                        record_id=0,
+                        data={'count': len(holidays)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2350,6 +2794,17 @@ class HolidaysDeleteholidaybyidPostView(APIView):
             result = delete_holiday_by_id(int(holiday_id))
             
             if result:
+                # Log activity for delete
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Holidays',
+                        action='DELETE',
+                        record_id=int(holiday_id),
+                        data={'id': int(holiday_id)},
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2436,6 +2891,17 @@ class StudentSavestudentPostView(APIView):
             
             if saved_student:
                 response_serializer = api_serializers.StudentDtoSerializer(saved_student)
+                # Log activity for save
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Student',
+                        action='SAVE',
+                        record_id=getattr(saved_student, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2489,6 +2955,17 @@ class StudentGetstudentbyidGetView(APIView):
             
             if student:
                 response_serializer = api_serializers.StudentDetailDtoSerializer(student)
+                # Log activity for viewing
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Student',
+                        action='VIEW',
+                        record_id=int(student_id),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2545,6 +3022,17 @@ class StudentUpdatestudentactiveorinactivePostView(APIView):
             
             if student:
                 response_serializer = api_serializers.StudentDtoSerializer(student)
+                # Log activity for update status
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Student',
+                        action='UPDATE',
+                        record_id=student_id,
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2602,6 +3090,12 @@ class StudentGettotalstudentpresentGetView(APIView):
             
             if result:
                 response_serializer = api_serializers.StudentPresentClassDtoSerializer(result)
+                log_activity(
+                    request,
+                    "GetTotalStudentPresent",
+                    "Success",
+                    "Student attendance count fetched successfully"
+                )
                 return Response(
                     {
                         "status": True,
@@ -2612,6 +3106,12 @@ class StudentGettotalstudentpresentGetView(APIView):
                     status=status.HTTP_200_OK
                 )
             else:
+                log_activity(
+                    request,
+                    "GetTotalStudentPresent",
+                    "Failed",
+                    "Student attendance not found"
+                )
                 return Response(
                     {
                         "status": False,
@@ -2667,6 +3167,17 @@ class StudentGetallstudentsGetView(APIView):
             
             if students is not None and len(students) > 0:
                 response_serializer = api_serializers.StudentDtoSerializer(students, many=True)
+                # Log activity for get students
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Student',
+                        action='GET',
+                        record_id=None,
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2722,8 +3233,20 @@ class StudentattendanceSavestudentattendancePostView(APIView):
             
             attendance_data = serializer.validated_data
             result = save_student_attendance(attendance_data, is_automatic=False, is_manual=False)
+
+            logged_user_id = get_user_id_from_token(request)
             
             if result == -1:
+                # Log activity for duplicate attendance
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2733,6 +3256,16 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                     status=status.HTTP_200_OK
                 )
             elif result == 0:
+                # Log activity for inactive student
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2742,6 +3275,16 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                     status=status.HTTP_200_OK
                 )
             elif result == -2:
+                # Log activity for student not found
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2751,6 +3294,16 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                     status=status.HTTP_200_OK
                 )
             else:
+                 # Log activity for save attendance
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2791,8 +3344,19 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
             
             attendance_data = serializer.validated_data
             result = save_student_attendance(attendance_data, is_automatic=True, is_manual=False)
+            logged_user_id = get_user_id_from_token(request)
             
             if result == -1:
+                # Log activity for duplicate automatic attendance
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2802,6 +3366,16 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             elif result == 0:
+                # Log activity for inactive student
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2811,6 +3385,16 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                     status=status.HTTP_406_NOT_ACCEPTABLE
                 )
             elif result == -2:
+                # Log activity for student not found
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2820,6 +3404,16 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                     status=status.HTTP_404_NOT_FOUND
                 )
             else:
+                # Log activity for automatic attendance applied
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2860,8 +3454,19 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
             
             attendance_data = serializer.validated_data
             result = save_student_attendance(attendance_data, is_automatic=False, is_manual=True)
-            
+            logged_user_id = get_user_id_from_token(request)
+
             if result == -1:
+                # Log activity for duplicate manual attendance
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2871,6 +3476,16 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             elif result == 0:
+                # Log activity for manual attendance limit reached
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2880,6 +3495,16 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                     status=status.HTTP_404_NOT_FOUND
                 )
             else:
+                # Log activity for manual attendance applied
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2921,6 +3546,20 @@ class StudentattendanceGetallstudentwihavgattendanceGetView(APIView):
             students = get_all_student_with_avg_attendance(int(center_id))
             
             if students is not None and len(students) > 0:
+                # Log activity for view student attendance list
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='VIEW',
+                        record_id=center_id,
+                        data={
+                            "centerId": center_id,
+                            "total_students": len(students)
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -2972,6 +3611,20 @@ class StudentattendanceGetallabsentattendanceGetView(APIView):
             students = get_all_absent_attendance(int(center_id))
             
             if students is not None and len(students) > 0:
+                # Log activity for view absent attendance list
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='VIEW',
+                        record_id=center_id,
+                        data={
+                            "centerId": center_id,
+                            "total_absent_students": len(students)
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3025,6 +3678,21 @@ class StudentattendanceGetallstudentattendancstatusGetView(APIView):
             students = get_all_student_attendance_status(int(center_id), scan_date)
             
             if students is not None and len(students) > 0:
+                # Log activity for view student attendance status
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='VIEW',
+                        record_id=center_id,
+                        data={
+                            "centerId": center_id,
+                            "scanDate": scan_date,
+                            "total_students": len(students)
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3080,6 +3748,23 @@ class StudentattendanceGetallstudentattendancbymonthGetView(APIView):
             students = get_all_student_attendance_by_month(int(center_id), int(student_id), int(month), int(year))
             
             if students is not None and len(students) > 0:
+                # Log activity for view student monthly attendance
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='StudentAttendance',
+                        action='VIEW',
+                        record_id=student_id,
+                        data={
+                            "centerId": center_id,
+                            "studentId": student_id,
+                            "month": month,
+                            "year": year,
+                            "total_records": len(students)
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3138,6 +3823,17 @@ class UserGetAllTeachersView(APIView):
             
             if all_teachers is not None:
                 response_serializer = api_serializers.TeacherDetailSerializer(all_teachers, many=True)
+                # Log activity for view all teachers
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='VIEW',
+                        record_id=userId,
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3182,6 +3878,17 @@ class UserGetAllRegionalAdminsView(APIView):
             
             if all_regional_admins is not None:
                 response_serializer = api_serializers.RegionalAdminDetailSerializer(all_regional_admins, many=True)
+                # Log activity for view all regional admins
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='VIEW',
+                        record_id=0,
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3230,6 +3937,19 @@ class UserLoginView(APIView):
             user = login_user(mobile_number, password)
             
             if user is not None:
+                # Log activity for user login
+                logged_user_id = user.get('id') if isinstance(user, dict) else None
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='LOGIN',
+                        record_id=logged_user_id,
+                        data={
+                            "mobileNumber": mobile_number
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3365,6 +4085,17 @@ class UserSaveSuperAdminView(APIView):
             saved_user = save_user(user_data)
             
             if saved_user:
+                # Log activity for save super admin
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='CREATE',
+                        record_id=saved_user.get('Id') if isinstance(saved_user, dict) else None,
+                        data=saved_user,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3420,6 +4151,20 @@ class UserUpdateDeviceIdView(APIView):
             updated_user = update_user_device_id(user_id, device_id)
             
             if updated_user:
+                # Log activity for update device id
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='UPDATE',
+                        record_id=user_id,
+                        data={
+                            "userId": user_id,
+                            "DeviceId": device_id
+                        },
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3490,6 +4235,17 @@ class UserSaveUserView(APIView):
             saved_user = save_user(user_data)
             
             if saved_user:
+                # Log activity for save user
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='CREATE' if not user_data.get('Id') else 'UPDATE',
+                        record_id=saved_user.get('Id') if isinstance(saved_user, dict) else None,
+                        data=saved_user,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3563,6 +4319,17 @@ class UserUpdateSuperAdminUserView(APIView):
             saved_user = update_super_admin_user(user_data)
             
             if saved_user:
+                # Log activity for update super admin user
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='UPDATE',
+                        record_id=user_data.get('Id'),
+                        data=saved_user,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3615,6 +4382,17 @@ class UserGetUserByIdView(APIView):
             user = get_user_by_id(int(user_id))
             
             if user:
+                # Log activity for view user
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='VIEW',
+                        record_id=int(user_id),
+                        data=user,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3668,6 +4446,17 @@ class UserGetUserDetailByPhoneNumberView(APIView):
             user = get_user_detail_by_phone(phone_number)
             
             if user:
+                # Log activity for view user by phone number
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='VIEW',
+                        record_id=user.get('Id'),
+                        data=user,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3724,6 +4513,17 @@ class UserUpdatePasswordView(APIView):
             user = update_user_password(user_id, new_password)
             
             if user:
+                # Log activity for update password
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='UPDATE',
+                        record_id=user_id,
+                        data=user,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3778,6 +4578,17 @@ class UserGetAllUnAssignedTeacherView(APIView):
             serializer = api_serializers.TeacherUnAssignedDetailSerializer(data, many=True)
             
             if data:
+                # Log activity for view unassigned teachers
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='User',
+                        action='VIEW',
+                        record_id=0,
+                        data=serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3899,6 +4710,17 @@ class TeacherLoginteacherPostView(APIView):
             teacher = login_teacher(name, password)
             
             if teacher:
+                # Log activity for teacher login
+                logged_user_id = teacher.get("Id")
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Teacher',
+                        action='LOGIN',
+                        record_id=logged_user_id,
+                        data=teacher,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -3957,6 +4779,17 @@ class TeacherSaveteacherPostView(APIView):
             
             if saved_teacher:
                 response_serializer = api_serializers.TeacherDtoSerializer(saved_teacher)
+                # Log activity for save teacher
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='Teacher',
+                        action='CREATE',
+                        record_id=response_serializer.data.get('Id'),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -4003,6 +4836,17 @@ class RegionaladminGetallregionaladminGetView(APIView):
             
             if regional_admins is not None and len(regional_admins) > 0:
                 response_serializer = api_serializers.RegionalAdminDtoSerializer(regional_admins, many=True)
+                # Log activity for view regional admins
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='RegionalAdmin',
+                        action='VIEW',
+                        record_id=0,
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -4059,6 +4903,17 @@ class RegionaladminLoginregionaladminPostView(APIView):
             regional_admin = login_regional_admin(name, password)
             
             if regional_admin:
+                # Log activity for regional admin login
+                logged_user_id = regional_admin.get("Id")
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='RegionalAdmin',
+                        action='LOGIN',
+                        record_id=logged_user_id,
+                        data=regional_admin,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -4117,6 +4972,17 @@ class RegionaladminSaveregionaladminPostView(APIView):
             
             if saved_regional_admin:
                 response_serializer = api_serializers.RegionalAdminDtoSerializer(saved_regional_admin)
+                # Log activity for save regional admin
+                logged_user_id = get_user_id_from_token(request)
+                if logged_user_id:
+                    log_activity(
+                        user_id=logged_user_id,
+                        module='RegionalAdmin',
+                        action='CREATE',
+                        record_id=response_serializer.data.get('Id'),
+                        data=response_serializer.data,
+                        request=request
+                    )
                 return Response(
                     {
                         "status": True,
@@ -4193,6 +5059,18 @@ class DashboardGetclasscountbymonthGetView(APIView):
             end_date = parse_any_datetime(end_date)
             
             result = get_class_count_by_month(int(center_id), start_date, end_date)
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=int(center_id),
+                    data=json.loads(result),
+                    request=request
+                )    
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4224,6 +5102,17 @@ class DashboardGettotalgenterratiobycenteridGetView(APIView):
             end_date = parse_any_datetime(end_date)
             
             result = get_total_gender_ratio_by_center_id(int(center_id), start_date, end_date)
+
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=int(center_id),
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4255,6 +5144,18 @@ class DashboardGettotalstudentofclassGetView(APIView):
             end_date = parse_any_datetime(end_date)
             
             result = get_total_student_of_class(int(center_id), start_date, end_date)
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=int(center_id),
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4283,6 +5184,18 @@ class DashboardGetcenterdetailbymonthGetView(APIView):
                 )
             
             result = get_center_detail_by_month(int(center_id), int(month), int(year))
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=int(center_id),
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4314,6 +5227,18 @@ class DashboardGettotalbplGetView(APIView):
             end_date = parse_any_datetime(end_date)
             
             result = get_total_bpl(int(center_id), start_date, end_date)
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=int(center_id),
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4345,6 +5270,18 @@ class DashboardGettotalstudentcategoryofclassGetView(APIView):
             end_date = parse_any_datetime(end_date)
             
             result = get_total_student_category_of_class(int(center_id), start_date, end_date)
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=int(center_id),
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4383,6 +5320,18 @@ class DashboardGetuserbyfilterGetView(APIView):
                 int(panchayta_id), int(village_id), 
                 start_date, end_date
             )
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=0,
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4421,6 +5370,18 @@ class DashboardGettotalbplbyfilterGetView(APIView):
                 int(panchayta_id), int(village_id), 
                 start_date, end_date
             )
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=0,
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4459,6 +5420,18 @@ class DashboardGettotalgenderratiobyfilterGetView(APIView):
                 int(panchayta_id), int(village_id), 
                 start_date, end_date
             )
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=0,
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4497,6 +5470,18 @@ class DashboardGettotalstudentcategoryofclassbyfilterGetView(APIView):
                 int(panchayta_id), int(village_id), 
                 start_date, end_date
             )
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=0,
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4535,6 +5520,18 @@ class DashboardGettotalstudengradeofclassbyfilterGetView(APIView):
                 int(panchayta_id), int(village_id), 
                 start_date, end_date
             )
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=0,
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4570,6 +5567,18 @@ class DashboardGetdistrictofcenterbyfilterGetView(APIView):
                 int(district_id), int(vidhan_sabha_id), 
                 start_date, end_date
             )
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=0,
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
@@ -4588,6 +5597,18 @@ class DashboardGetstudentattendancebypercentageGetView(APIView):
             logger.info("VillageView : GetStudentAttendanceByPercentage : Started")
             
             result = get_student_attendance_by_percentage()
+
+            # Log activity for viewing
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    user_id=logged_user_id,
+                    module='Dashboard',
+                    action='VIEW',
+                    record_id=0,
+                    data=json.loads(result),
+                    request=request
+                )
             
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
