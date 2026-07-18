@@ -1,0 +1,248 @@
+{
+	"info": {
+		"name": "EkSeSreshtha API Tests",
+		"description": "Complete API test collection for SuperAdmin, RegionalAdmin, and Teacher roles",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{ "key": "baseUrl", "value": "http://127.0.0.1:8000/api", "type": "string" },
+		{ "key": "superAdminToken", "value": "", "type": "string" },
+		{ "key": "regionalAdminToken", "value": "", "type": "string" },
+		{ "key": "teacherToken", "value": "", "type": "string" },
+		{ "key": "centerId", "value": "1", "type": "string" }
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{ "key": "token", "value": "{{superAdminToken}}", "type": "string" }
+		]
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "SuperAdmin Login",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/User/LoginUser",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"PhoneNumber\": \"9999999999\",\n  \"Password\": \"password123\"\n}" }
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  const token = json.Data?.Token || json.data?.Token;",
+									"  if (token) pm.collectionVariables.set('superAdminToken', token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "RegionalAdmin Login",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/RegionalAdmin/LoginRegionalAdmin",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"PhoneNumber\": \"8888888888\",\n  \"Password\": \"password123\"\n}" }
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  const token = json.Data?.Token || json.data?.Token;",
+									"  if (token) pm.collectionVariables.set('regionalAdminToken', token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "Teacher Login",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/Teacher/LoginTeacher",
+						"header": [ { "key": "Content-Type", "value": "application/json" } ],
+						"body": { "mode": "raw", "raw": "{\n  \"PhoneNumber\": \"7777777777\",\n  \"Password\": \"password123\"\n}" }
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"  const json = pm.response.json();",
+									"  const token = json.Data?.Token || json.data?.Token;",
+									"  if (token) pm.collectionVariables.set('teacherToken', token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "SuperAdmin Tests",
+			"auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{superAdminToken}}" }] },
+			"item": [
+				{ "name": "Get All Users", "request": { "method": "GET", "url": "{{baseUrl}}/User/GetAllUsers" } },
+				{ "name": "Get User by ID", "request": { "method": "GET", "url": "{{baseUrl}}/User/GetUserById/1" } },
+				{ "name": "Get All Centers", "request": { "method": "GET", "url": "{{baseUrl}}/Center/GetAllCenters" } },
+				{ "name": "Get Center by ID", "request": { "method": "GET", "url": "{{baseUrl}}/Center/GetCenterById/{{centerId}}" } },
+				{ "name": "Get All Districts", "request": { "method": "GET", "url": "{{baseUrl}}/District/GetAllDistricts" } },
+				{ "name": "Get All Vidhan Sabhas", "request": { "method": "GET", "url": "{{baseUrl}}/VidhanSabha/GetAllVidhanSabhas" } },
+				{ "name": "Get All Panchayats", "request": { "method": "GET", "url": "{{baseUrl}}/Panchayat/GetAllPanchayats" } },
+				{ "name": "Get All Villages", "request": { "method": "GET", "url": "{{baseUrl}}/Village/GetAllVillages" } },
+				{ "name": "Get All Schools", "request": { "method": "GET", "url": "{{baseUrl}}/School/GetAllSchools" } },
+				{ "name": "Get All Classes", "request": { "method": "GET", "url": "{{baseUrl}}/Class/GetAllClasses" } },
+				{ "name": "Get All Teachers", "request": { "method": "GET", "url": "{{baseUrl}}/Teacher/GetAllTeachers" } },
+				{ "name": "Get All Regional Admins", "request": { "method": "GET", "url": "{{baseUrl}}/RegionalAdmin/GetAllRegionalAdmins" } },
+				{ "name": "Get All Announcements", "request": { "method": "GET", "url": "{{baseUrl}}/Announcement/GetAllAnnouncements" } },
+				{ "name": "Get All Holidays", "request": { "method": "GET", "url": "{{baseUrl}}/Holiday/GetAllHolidays" } },
+				{
+					"name": "Dashboard: Class Count by Month",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/Dashboard/GetClassCountByMonth",
+						"queryParams": [
+							{ "key": "centerId", "value": "{{centerId}}" },
+							{ "key": "startDate", "value": "2024-01-01" },
+							{ "key": "endDate", "value": "2024-12-31" }
+						]
+					}
+				},
+				{
+					"name": "Dashboard: Total Student of Class",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/Dashboard/GetTotalStudentOfClass",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				},
+				{
+					"name": "Dashboard: Total Gender Ratio",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/Dashboard/GetTotalGenterRatioByCenterId",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				},
+				{
+					"name": "Student Attendance: Avg Attendance",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/StudentAttendance/GetAllStudentWithAvgAttendance",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				},
+				{
+					"name": "Student Attendance: Absent Today",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/StudentAttendance/GetAllAbsentAttendance",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				}
+			]
+		},
+		{
+			"name": "RegionalAdmin Tests",
+			"auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regionalAdminToken}}" }] },
+			"item": [
+				{ "name": "Get All Centers (RA)", "request": { "method": "GET", "url": "{{baseUrl}}/Center/GetAllCenters" } },
+				{ "name": "Get All Teachers (RA)", "request": { "method": "GET", "url": "{{baseUrl}}/Teacher/GetAllTeachers" } },
+				{ "name": "Get All Classes (RA)", "request": { "method": "GET", "url": "{{baseUrl}}/Class/GetAllClasses" } },
+				{
+					"name": "Avg Attendance (RA)",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/StudentAttendance/GetAllStudentWithAvgAttendance",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				},
+				{
+					"name": "Absent Today (RA)",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/StudentAttendance/GetAllAbsentAttendance",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				}
+			]
+		},
+		{
+			"name": "Teacher Tests",
+			"auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{teacherToken}}" }] },
+			"item": [
+				{ "name": "Get My Center", "request": { "method": "GET", "url": "{{baseUrl}}/Center/GetCenterById/{{centerId}}" } },
+				{ "name": "Get My Classes", "request": { "method": "GET", "url": "{{baseUrl}}/Class/GetAllClasses" } },
+				{
+					"name": "Avg Attendance (Teacher)",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/StudentAttendance/GetAllStudentWithAvgAttendance",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				},
+				{
+					"name": "Absent Today (Teacher)",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/StudentAttendance/GetAllAbsentAttendance",
+						"queryParams": [{ "key": "centerId", "value": "{{centerId}}" }]
+					}
+				},
+				{
+					"name": "Attendance Status for Date",
+					"request": {
+						"method": "GET",
+						"url": "{{baseUrl}}/StudentAttendance/GetAllStudentAttendancStatus",
+						"queryParams": [
+							{ "key": "centerId", "value": "{{centerId}}" },
+							{ "key": "scanDate", "value": "2024-01-15" }
+						]
+					}
+				},
+				{
+					"name": "Save Student Attendance",
+					"request": {
+						"method": "POST",
+						"url": "{{baseUrl}}/StudentAttendance/SaveStudentAttendance",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StudentIds\": [1, 2],\n  \"ClassId\": 1,\n  \"CenterId\": 1,\n  \"UserId\": 1,\n  \"ScanDate\": \"2024-01-15T10:00:00\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Negative Tests (No Auth)",
+			"item": [
+				{
+					"name": "Get Centers Without Token",
+					"request": { "method": "GET", "url": "{{baseUrl}}/Center/GetAllCenters" },
+					"event": [{
+						"listen": "test",
+						"script": { "exec": ["pm.test('Should return 401', () => pm.expect(pm.response.code).to.equal(401));"], "type": "text/javascript" }
+					}]
+				}
+			]
+		}
+	]
+}

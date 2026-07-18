@@ -800,12 +800,12 @@ class StudentPresentClassDtoSerializer(serializers.Serializer):
 # StudentAttendance Serializers
 class StudentAttendanceSaveRequestSerializer(RequestSerializer):
     foreign_key_fields = {"ClassId": ClassModel, "CenterId": Center}
-    foreign_key_list_fields = {"StudentIds": Student}
+    # foreign_key_list_fields removed - StudentIds is now a comma-separated string
     
     Id = optional_int()
     ClassId = required_int()
     UserId = required_int()
-    StudentIds = serializers.ListField(child=serializers.IntegerField(), required=True, allow_empty=False)
+    StudentIds = required_char()  # Comma-separated string (matches .NET API)
     ScanDate = required_datetime()
     CenterId = required_int()
 

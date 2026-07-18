@@ -4321,7 +4321,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
     """Save student attendance
     
     Args:
-        attendance_data: Dict with StudentIds[], ClassId, CenterId, UserId, ScanDate
+        attendance_data: Dict with StudentIds (comma-separated string), ClassId, CenterId, UserId, ScanDate
         is_automatic: True for QR scan auto-attendance
         is_manual: True for teacher manual entry
     
@@ -4334,7 +4334,15 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
     logger.info(f"StudentAttendanceHelper : SaveStudentAttendance : Started")
     
     try:
-        student_ids = attendance_data.get('StudentIds', [])
+        # Parse StudentIds from comma-separated string (matches .NET API)
+        student_ids_raw = attendance_data.get('StudentIds', '')
+        if isinstance(student_ids_raw, str):
+            student_ids = [int(s.strip()) for s in student_ids_raw.split(',') if s.strip()]
+        elif isinstance(student_ids_raw, list):
+            student_ids = student_ids_raw
+        else:
+            student_ids = []
+        
         class_id = attendance_data.get('ClassId')
         center_id = attendance_data.get('CenterId')
         user_id = attendance_data.get('UserId')
@@ -4660,7 +4668,7 @@ def login_teacher(name, password):
     try:
         hashed_password = hash_password(password)
         
-        user = User.objects.filter(name=name, password=hashed_password, type=3, status=True).select_related('teacher').first()
+        user = User.objects.filter(name=name, password=hashed_password, role_id=3, status=True).select_related('teacher').first()
         
         if user and hasattr(user, 'teacher') and user.teacher:
             teacher = user.teacher
@@ -5230,7 +5238,7 @@ def login_regional_admin(name, password):
                 'LastLoginTime': regional_admin.last_login_time if hasattr(regional_admin, 'last_login_time') else None,
                 'Password': user.password,
                 'FullAddress': regional_admin.full_address,
-                'Type': user.type,
+                'Type': user.role_id,
                 'Token': str(token),
                 'VidhanSabhaId': regional_admin.vidhan_sabha_id,
                 'DistrictId': regional_admin.district_id,
