@@ -2601,12 +2601,12 @@ def get_class_count_by_month(center_id, start_date, end_date):
         ).count()
         
         result = {
-            "status": True,
-            "data": [
+            "Status": True,
+            "Data": [
                 {
-                    "holidayCount": holiday_count,
-                    "classCount": class_count,
-                    "classCancelTeacherCount": cancel_count
+                    "HolidayCount": holiday_count,
+                    "ClassCount": class_count,
+                    "ClassCancelTeacherCount": cancel_count
                 }
             ]
         }
@@ -2757,8 +2757,8 @@ def get_center_detail_by_month(center_id, month, year):
         end_date = start_date.replace(day=1, month=start_date.month + 1) - timedelta(days=1)
         
         result = {
-            "status": True,
-            "data": []
+            "Status": True,
+            "Data": []
         }
         
         with connection.cursor() as cursor:
@@ -2767,43 +2767,43 @@ def get_center_detail_by_month(center_id, month, year):
             
             while current_date <= end_date:
                 data = {
-                    "date": current_date.strftime('%Y-%m-%d'),
-                    "type": i + 1,
-                    "detail": []
+                    "Date": current_date.strftime('%Y-%m-%d'),
+                    "Type": i + 1,
+                    "Detail": []
                 }
                 
                 if i == 0:
-                    data["detail"].append({
-                        "class": "Class1",
-                        "classId": 1,
-                        "startedDate": "2023-11-20",
-                        "endDate": "2023-11-20",
-                        "totalStudent": 25
+                    data["Detail"].append({
+                        "Class": "Class1",
+                        "ClassId": 1,
+                        "StartedDate": "2023-11-20",
+                        "EndDate": "2023-11-20",
+                        "TotalStudent": 25
                     })
                 elif i == 1:
-                    data["detail"].append({
-                        "holidayName": "Holiday",
-                        "startDate": "2023-11-20",
-                        "endDate": "2023-11-20"
+                    data["Detail"].append({
+                        "HolidayName": "Holiday",
+                        "StartDate": "2023-11-20",
+                        "EndDate": "2023-11-20"
                     })
                 elif i == 2:
-                    data["detail"].append({
-                        "classCancelBy": "Cancel by teacher",
-                        "reason": "Cancel by teacher",
-                        "startingDate": "2023-11-20",
-                        "endingDate": "2023-11-20"
+                    data["Detail"].append({
+                        "ClassCancelBy": "Cancel by teacher",
+                        "Reason": "Cancel by teacher",
+                        "StartingDate": "2023-11-20",
+                        "EndingDate": "2023-11-20"
                     })
                 elif i == 3:
-                    data["detail"].append({
-                        "reason": "Center deactivate",
-                        "cancelBy": "Cancel by admin"
+                    data["Detail"].append({
+                        "Reason": "Center deactivate",
+                        "CancelBy": "Cancel by admin"
                     })
                 else:
-                    data["detail"].append({
-                        "reason": "Upcoming"
+                    data["Detail"].append({
+                        "Reason": "Upcoming"
                     })
                 
-                result["data"].append(data)
+                result["Data"].append(data)
                 current_date += timedelta(days=1)
                 i += 1
         
@@ -2975,9 +2975,9 @@ def get_user_by_filter(district_id, vidhan_sabha_id, panchayta_id, village_id, s
             center_count = cursor.fetchone()[0] or 0
             
             result = {
-                "status": True,
-                "teacherCount": user_count,
-                "centerCount": center_count
+                "Status": True,
+                "TeacherCount": user_count,
+                "CenterCount": center_count
             }
             
             return json.dumps(result)
@@ -3291,16 +3291,16 @@ def get_total_student_grade_of_class_by_filter(district_id, vidhan_sabha_id, pan
             rows = cursor.fetchall()
             
             result = {
-                "status": True,
-                "data": []
+                "Status": True,
+                "Data": []
             }
             
             for row in rows:
-                result["data"].append({
-                    "grade": row[0],
-                    "feMaleCount": row[2] or 0,
-                    "maleCount": row[3] or 0,
-                    "totalStudentCount": row[1] or 0
+                result["Data"].append({
+                    "Grade": row[0],
+                    "FeMaleCount": row[2] or 0,
+                    "MaleCount": row[3] or 0,
+                    "TotalStudentCount": row[1] or 0
                 })
             
             return json.dumps(result)
@@ -3326,9 +3326,9 @@ def get_district_of_center_by_filter(district_id, vidhan_sabha_id, start_date, e
             total_centers = cursor.fetchone()[0] or 0
             
             result = {
-                "status": True,
-                "totalCenters": total_centers,
-                "data": []
+                "Status": True,
+                "TotalCenters": total_centers,
+                "Data": []
             }
             
             if district_id == 0 and vidhan_sabha_id == 0:
@@ -3353,10 +3353,10 @@ def get_district_of_center_by_filter(district_id, vidhan_sabha_id, start_date, e
                 district_dict = {d[0]: d[1] for d in districts}
                 
                 for row in rows:
-                    result["data"].append({
-                        "districtId": row[0],
-                        "districtName": district_dict.get(row[0]),
-                        "totalCenterCount": row[1]
+                    result["Data"].append({
+                        "DistrictId": row[0],
+                        "DistrictName": district_dict.get(row[0]),
+                        "TotalCenterCount": row[1]
                     })
                     
             elif district_id != 0 and vidhan_sabha_id != 0:
@@ -3378,11 +3378,11 @@ def get_district_of_center_by_filter(district_id, vidhan_sabha_id, start_date, e
                 dist_row = cursor.fetchone()
                 district_name = dist_row[0] if dist_row else None
                 
-                result["totalCenterCount"] = center_count
-                result["districtName"] = district_name
-                result["vidhanSabhaName"] = district_name
-                result["districtId"] = district_id
-                result["vidhanSabhaId"] = vidhan_sabha_id
+                result["TotalCenterCount"] = center_count
+                result["DistrictName"] = district_name
+                result["VidhanSabhaName"] = district_name
+                result["DistrictId"] = district_id
+                result["VidhanSabhaId"] = vidhan_sabha_id
                 
             elif district_id != 0:
                 # Get centers by district
@@ -3404,10 +3404,10 @@ def get_district_of_center_by_filter(district_id, vidhan_sabha_id, start_date, e
                     dist_row = cursor.fetchone()
                     district_name = dist_row[0] if dist_row else None
                     
-                    result["data"].append({
-                        "districtName": district_name,
-                        "districtId": district_id,
-                        "totalCenterCount": row[0] or 0
+                    result["Data"].append({
+                        "DistrictName": district_name,
+                        "DistrictId": district_id,
+                        "TotalCenterCount": row[0] or 0
                     })
             
             return json.dumps(result)
