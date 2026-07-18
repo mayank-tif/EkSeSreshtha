@@ -5005,7 +5005,7 @@ class DashboardGetclasscountbymonthGetView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class DashboardGettotalgenterratiobycenteridGetView(APIView):
+class DashboardGettotalgenderratiobycenteridGetView(APIView):
     """Returns student gender counts for a center."""
     
     def get(self, request):
@@ -5040,7 +5040,7 @@ class DashboardGettotalgenterratiobycenteridGetView(APIView):
             return Response(json.loads(result), status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"DashboardView : GetTotalGenterRatioByCenterId : {str(e)}")
+            logger.error(f"DashboardView : GetTotalGenderRatioByCenterId : {str(e)}")
             return Response(
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST

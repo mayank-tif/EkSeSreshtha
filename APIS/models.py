@@ -297,6 +297,18 @@ class User(models.Model):
     def __str__(self):
         return self.name or str(self.id)
 
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_active(self):
+        return self.status
+
+    @property
+    def is_anonymous(self):
+        return False
+
 
 class SuperAdmin(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)

@@ -1212,14 +1212,7 @@ def login_user(mobile_number, password):
                 super_admin = SuperAdmin.objects.filter(user=user).first()
                 if super_admin:
                     response_data.update({
-                        "age": super_admin.age,
-                        "gender": super_admin.gender,
-                        "contact": super_admin.contact,
-                        "dateOfBirth": super_admin.date_of_birth,
-                        "fullAddress": super_admin.full_address,
-                        "education": super_admin.education,
-                        "enrollmentDate": format_dotnet_datetime(super_admin.enrollment_date) if super_admin.enrollment_date else None,
-                        "createdOn": format_dotnet_datetime(super_admin.created_on) if super_admin.created_on else user.created_on,
+                        "status": super_admin.status,
                     })
                     
             elif role_code == 'REGIONAL_ADMIN':
@@ -2611,7 +2604,7 @@ def get_class_count_by_month(center_id, start_date, end_date):
             ]
         }
         
-        return result
+        result
         
     except Exception as e:
         logger.error(f"DashboardHelper : GetClassCountByMonth : {str(e)}")
@@ -4674,6 +4667,7 @@ def login_teacher(name, password):
             
             # Generate token
             token = AccessToken()
+            token['user_id'] = user.id
             token['teacher_id'] = teacher.id
             token['teacher_name'] = user.name
             token.set_exp(lifetime=timedelta(days=30))
@@ -5206,13 +5200,15 @@ def login_regional_admin(name, password):
     try:
         hashed_password = hash_password(password)
         
-        # Find user = User.objects.filter(name=name, password=hashed_password, role_id=2, status=True).select_related('regional_admin').first()
+        # Find user
+        user = User.objects.filter(name=name, password=hashed_password, role_id=2, status=True).select_related('regional_admin').first()
         
         if user and hasattr(user, 'regional_admin') and user.regional_admin:
             regional_admin = user.regional_admin
             
             # Generate token
             token = AccessToken()
+            token['user_id'] = user.id
             token['regional_admin_id'] = regional_admin.id
             token['regional_admin_name'] = user.name
             token.set_exp(lifetime=timedelta(days=30))

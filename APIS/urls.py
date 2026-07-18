@@ -28,7 +28,8 @@ urlpatterns = [
     path('Class/GetLiveClassDetail', ClassGetliveclassdetailGetView.as_view(), name='class-getliveclassdetail-get'),
     
     path('Dashboard/GetClassCountByMonth', DashboardGetclasscountbymonthGetView.as_view(), name='dashboard-getclasscountbymonth-get'),
-    path('Dashboard/GetTotalGenterRatioByCenterId', DashboardGettotalgenterratiobycenteridGetView.as_view(), name='dashboard-gettotalgenterratiobycenterid-get'),
+    path('Dashboard/GetTotalGenterRatioByCenterId', DashboardGettotalgenderratiobycenteridGetView.as_view(), name='dashboard-gettotalgenterratiobycenterid-get'),
+    path('Dashboard/GetTotalGenderRatioByCenterId', DashboardGettotalgenderratiobycenteridGetView.as_view(), name='dashboard-gettotalgenderratiobycenterid-get'),
     path('Dashboard/GetTotalStudentOfClass', DashboardGettotalstudentofclassGetView.as_view(), name='dashboard-gettotalstudentofclass-get'),
     path('Dashboard/GetCenterDetailByMonth', DashboardGetcenterdetailbymonthGetView.as_view(), name='dashboard-getcenterdetailbymonth-get'),
     path('Dashboard/GetTotalBpl', DashboardGettotalbplGetView.as_view(), name='dashboard-gettotalbpl-get'),
