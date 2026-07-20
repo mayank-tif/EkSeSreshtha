@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 import pandas as pd
+from datetime import datetime
 from .models import *
 from django.urls import resolve
 from rest_framework import status
@@ -16,7 +17,6 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import AccessToken
-from .serializers import *
 
 from EkSeSreshtha.env_details import *
 from .models import *
@@ -126,14 +126,7 @@ def hash_password(password):
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
-def parse_any_datetime(value):
-    if value in (None, ""):
-        return None
-    parsed = parse_datetime(str(value))
-    if parsed:
-        return parsed
-    parsed_date = parse_date(str(value))
-    return parsed_date
+from .date_utils import parse_any_datetime
 
 
 def apply_pagination(queryset, request):

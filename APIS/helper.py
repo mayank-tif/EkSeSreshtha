@@ -1404,11 +1404,16 @@ def save_user(user_data):
                         else:
                             # It's a URL string
                             user.picture = picture_data
+                            
+                    role = None
+                    if user_type:
+                        role = Role.objects.filter(id=user_type).first()
                     
                     # Preserve these fields (matches .NET)
                     user.enrolment_roll_id = user_data.get('EnrolmentRollId') or user.enrolment_roll_id
                     user.status = existing_status
                     user.created_on = existing_created_on
+                    user.role = role or user.role
                     user.password = user_data.get('Password') or existing_password
                 
                 user.updated_on = datetime.now()
@@ -1500,13 +1505,13 @@ def save_user(user_data):
                             teacher.full_address = user_data['FullAddress']
                         if 'Education' in user_data and user_data['Education'] is not None:
                             teacher.education = user_data['Education']
-                        if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
-                            teacher.district_id = user_data['DistrictId']
-                        if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
-                            teacher.vidhan_sabha_id = user_data['VidhanSabhaId']
-                        if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
-                            teacher.panchayat_id = user_data['PanchayatId']
-                        if 'VillageId' in user_data and user_data['VillageId'] is not None:
+                        # if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
+                        #     teacher.district_id = user_data['DistrictId']
+                        # if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
+                        #     teacher.vidhan_sabha_id = user_data['VidhanSabhaId']
+                        # if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
+                        #     teacher.panchayat_id = user_data['PanchayatId']
+                        # if 'VillageId' in user_data and user_data['VillageId'] is not None:
                             teacher.village_id = user_data['VillageId']
                         if 'Count' in user_data and user_data['Count'] is not None:
                             teacher.count = user_data['Count']
@@ -2038,13 +2043,14 @@ def save_class(class_data, request):
             if existing:
                 return None
             
-            # Insert new class - FIX: Added missing Status parameter
+            # Insert new class - FIX: Added missing Status parameter and active_status
             insert_sql = """
                 INSERT INTO Class (
                     ClassEnrolmentId, Name, CenterId, UsersId, 
                     TotalStudents, AvilableStudents, StartedDate, 
-                    Status, SubStatus, CreatedOn, CreatedBy
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    Status, SubStatus, CreatedOn, CreatedBy,
+                    active_status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(insert_sql, [
                 class_enrolment_id,
@@ -2054,10 +2060,11 @@ def save_class(class_data, request):
                 class_data.get('totalStudents'),
                 class_data.get('avilableStudents'),
                 datetime.now(),
-                1,  # Active status
+                1,  # Active status (Status field)
                 0,   # SubStatus
                 datetime.now(),
-                current_user_id  # CreatedBy
+                current_user_id,  # CreatedBy
+                1  # active_status = True
             ])
             
             # Get the inserted ID
