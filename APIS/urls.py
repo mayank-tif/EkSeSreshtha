@@ -21,7 +21,7 @@ urlpatterns = [
     
     path('Class/SaveClass', ClassSaveclassPostView.as_view(), name='class-saveclass-post'),
     path('Class/CancelClass', ClassCancelclassPostView.as_view(), name='class-cancelclass-post'),
-    path('Class/UpdateEndClassTime', ClassUpdateendclasstimePostView.as_view(), name='class-updateendclasstime-post'),
+    path('Class/UpdateEndClassTime', ClassUpdateEndClassTimePostView.as_view(), name='class-updateendclasstime-post'),
     path('Class/UpdateClassSubStatus', ClassUpdateclasssubstatusPostView.as_view(), name='class-updateclasssubstatus-post'),
     path('Class/CancelClassByTeacher', ClassCancelclassbyteacherPostView.as_view(), name='class-cancelclassbyteacher-post'),
     path('Class/DeleteClassByTeacherId', ClassDeleteclassbyteacheridPostView.as_view(), name='class-deleteclassbyteacherid-post'),

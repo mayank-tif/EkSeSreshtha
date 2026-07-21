@@ -3,7 +3,8 @@ from datetime import datetime
 from django.utils.dateparse import parse_date, parse_datetime
 from rest_framework import serializers
 from .models import *
-from .utils import mobile_number_validation
+from decimal import Decimal, InvalidOperation
+from rest_framework import serializers
 
 
 class GenerateAppTokenSerializer(serializers.Serializer):
@@ -462,13 +463,39 @@ class CancelClassDtoSerializer(serializers.Serializer):
     reason = serializers.CharField(required=True)
     cancelBy = serializers.IntegerField(required=True)
 
-class EndClassDtoSerializer(RequestSerializer):
-    Id = required_int()
+class EndClassDtoSerializer(serializers.Serializer):
+    Id = serializers.IntegerField(required=True)
     ClassroomPhoto = serializers.ImageField(required=True)
-    PresentCount = required_int()
-    AbsentCount = required_int()
-    Latitude = optional_char()
-    Longitude = optional_char()
+    Latitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    Longitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    def validate_Id(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Id must be a positive integer")
+        return value
+
+    def validate(self, attrs):
+        latitude = attrs.get("Latitude")
+        longitude = attrs.get("Longitude")
+
+        # Check if both are provided
+        if not latitude or not longitude:
+            raise serializers.ValidationError({
+                "Latitude": "Latitude is required.",
+                "Longitude": "Longitude is required."
+            })
+
+        # Check if numeric
+        try:
+            latitude = Decimal(str(latitude))
+            longitude = Decimal(str(longitude))
+        except (InvalidOperation, ValueError):
+            raise serializers.ValidationError(
+                "Latitude and Longitude must be valid numeric values."
+            )
+
+        return attrs
+    
 
 class UpdateClassSubStatusDtoSerializer(serializers.Serializer):
     Id = serializers.IntegerField(required=True)
@@ -845,6 +872,14 @@ class StudentAttendanceSaveRequestSerializer(serializers.Serializer):
     Latitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     Longitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     studentIdCard = serializers.ImageField(required=False)
+    
+    def validate(self, attrs):
+        """Ensure all IDs are positive integers."""
+        for field in ['ClassId', 'CenterId', 'UserId']:
+            value = attrs.get(field)
+            if value is not None and value <= 0:
+                raise serializers.ValidationError({field: f"{field} must be a positive integer"})
+        return attrs
 
 class StudentAttendanceCenterQuerySerializer(RequestSerializer):
     centerId = required_int()

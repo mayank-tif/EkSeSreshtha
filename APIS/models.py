@@ -405,7 +405,12 @@ class ClassModel(models.Model):
     #   Constants: CLASS_STATUS_ACTIVE=1, CLASS_STATUS_COMPLETED=2, CLASS_STATUS_CANCEL=3
     #   Used in: Dashboard queries, class listings, filtering active classes
     # ============================================================
-    status = models.IntegerField(db_column="Status", null=True, blank=True)
+    CLASS_STATUS_CHOICES = [
+        (1, 'Active'),
+        (2, 'Completed'),
+        (3, 'Cancelled'),
+    ]
+    status = models.IntegerField(db_column="Status", null=True, blank=True, choices=CLASS_STATUS_CHOICES)
     
     # active_status (BooleanField): SOFT DELETE FLAG
     #   True  = Active record (not deleted)

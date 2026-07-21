@@ -5779,4 +5779,44 @@ def get_user_id_from_token(request):
         
     except (TokenError, InvalidToken, Exception) as e:
         logger.error(f"Error extracting user ID from token: {str(e)}")
-        return None   
+        return None
+
+
+
+def end_class_session(class_id, photo_url, class_obj, teacher_id=0):
+    """End class session with attendance counts calculated from records.
+    
+    This function must be called within an atomic transaction for consistency.
+    """
+    logger.info(f"ClassHelper : EndClassSession : Started for class {class_id}")
+    
+    try:
+        with transaction.atomic():
+            today = datetime.now().date()
+            
+            # Count present students
+            present_count = StudentAttendance.objects.filter(
+                class_obj_id=class_id,
+                status=True,
+                scan_date__date=today
+            ).count()
+            
+            # Calculate absent
+            total_students = class_obj.total_students or 0
+            absent_count = total_students - present_count
+            
+            # Update class
+            class_obj.end_date = datetime.now()
+            class_obj.status = 2
+            class_obj.session_closed = True
+            class_obj.present_count = present_count
+            class_obj.absent_count = absent_count
+            class_obj.classroom_photo_url = photo_url
+            class_obj.closed_by_id = teacher_id
+            class_obj.save()
+            
+            return present_count, absent_count
+        
+    except Exception as e:
+        logger.error(f"ClassHelper : EndClassSession : {str(e)}")
+        raise e

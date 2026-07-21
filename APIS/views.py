@@ -27,6 +27,7 @@ from .serializers import GenerateAppTokenSerializer, LoginSerializer, UserLoginR
 from .utils import *
 from .token_validation import *
 from .helper import *
+import os
 
 
 logger = logging.getLogger(__name__)
@@ -197,8 +198,7 @@ class AnnouncementSaveannouncementPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
-                        "details": serializer.errors,
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -964,7 +964,7 @@ class ClassSaveclassPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1036,7 +1036,7 @@ class ClassCancelclassPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1086,8 +1086,9 @@ class ClassCancelclassPostView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class ClassUpdateendclasstimePostView(APIView):
-    """Updates end class time with camera photo and attendance counts"""
+class ClassUpdateEndClassTimePostView(APIView):
+    """Updates end class time with camera photo and attendance counts.
+    Attendance counts are calculated from existing attendance records."""
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def post(self, request):
@@ -1099,28 +1100,16 @@ class ClassUpdateendclasstimePostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
             class_id = serializer.validated_data.get('Id')
-            present_count = serializer.validated_data.get('PresentCount')
-            absent_count = serializer.validated_data.get('AbsentCount')
             photo_file = request.FILES.get('ClassroomPhoto')
             latitude = serializer.validated_data.get('Latitude')
             longitude = serializer.validated_data.get('Longitude')
-            
-            if not all([class_id, present_count is not None, absent_count is not None]):
-                return Response(
-                    {
-                        "status": False,
-                        "error": "Missing required fields: Id, PresentCount, AbsentCount",
-                        "code": status.HTTP_400_BAD_REQUEST
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
             
             class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
             if not class_obj:
@@ -1131,7 +1120,7 @@ class ClassUpdateendclasstimePostView(APIView):
                         "code": status.HTTP_404_NOT_FOUND
                     },
                     status=status.HTTP_404_NOT_FOUND
-            )
+                )
             
             if class_obj.status == 2:
                 return Response(
@@ -1155,8 +1144,6 @@ class ClassUpdateendclasstimePostView(APIView):
             
             # Verify GPS location if provided
             if latitude and longitude and class_obj.center_id:
-                from APIS.helper import verify_attendance_location
-                from APIS.models import Center
                 center = Center.objects.filter(id=class_obj.center_id, status=True).first()
                 if center:
                     if center.location_status != 'VERIFIED':
@@ -1176,44 +1163,30 @@ class ClassUpdateendclasstimePostView(APIView):
                             "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
                             "code": status.HTTP_400_BAD_REQUEST
                         }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Validate photo EXIF (camera capture only)
-            if not photo_file:
-                return Response({
-                    "status": False,
-                    "error": "Classroom photo required (camera capture only)",
-                    "code": status.HTTP_400_BAD_REQUEST
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            from APIS.helper import save_classroom_photo, end_class_session
-            from django.utils import timezone
-            
+        
             try:
-                photo_url = save_classroom_photo(class_id, photo_file, 0)  # teacher_id can be 0 or from token
-            except ValueError as e:
+                # Save photo directly
+                ext = os.path.splitext(photo_file.name)[1] if photo_file.name else '.jpg'
+                filename = f"class_{class_id}_{uuid.uuid4().hex}{ext}"
+                filepath = os.path.join('class_photos', filename)
+                saved_path = default_storage.save(filepath, photo_file)
+                photo_url = default_storage.url(saved_path)
+            except Exception as e:
                 return Response({
                     "status": False,
                     "error": str(e),
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": -16
                 }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # End session with all data
-            teacher_id = get_user_id_from_token(request) or 0
-            success = end_class_session(class_id, photo_url, int(present_count), int(absent_count), teacher_id)
-            
-            if not success:
-                return Response({
-                    "status": False,
-                    "error": "Failed to end class session",
-                    "code": status.HTTP_500_INTERNAL_SERVER_ERROR
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                            
+            # Calculate attendance counts from records
+            logged_user_id = get_user_id_from_token(request)
+            present_count, absent_count = end_class_session(class_id, photo_url, class_obj, logged_user_id)
             
             # Refresh class object
             class_obj.refresh_from_db()
             
             # Log activity
-            logged_user_id = get_user_id_from_token(request)
             if logged_user_id:
                 log_activity(
                     module='Class',
@@ -1239,8 +1212,8 @@ class ClassUpdateendclasstimePostView(APIView):
                         "ClassName": class_obj.name,
                         "EndTime": class_obj.end_date,
                         "ClassroomPhotoUrl": class_obj.classroom_photo_url,
-                        "PresentCount": class_obj.present_count,
-                        "AbsentCount": class_obj.absent_count,
+                        "PresentCount": present_count,
+                        "AbsentCount": absent_count,
                         "SessionClosed": class_obj.session_closed,
                         "ClosedBy": class_obj.closed_by_id
                     }
@@ -1249,7 +1222,7 @@ class ClassUpdateendclasstimePostView(APIView):
             )
             
         except Exception as e:
-            logger.error(f"UserView : UpdateEndClassTime : {str(e)}")
+            logger.error(f"UserView : UpdateEndTime : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -1271,7 +1244,7 @@ class ClassUpdateclasssubstatusPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1335,7 +1308,7 @@ class ClassCancelclassbyteacherPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1397,7 +1370,7 @@ class ClassDeleteclassbyteacheridPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1459,7 +1432,7 @@ class ClassGetclasscurrentstatusGetView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1506,7 +1479,7 @@ class ClassGetliveclassdetailGetView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1639,7 +1612,7 @@ class DistrictSavedistrictPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -1762,7 +1735,7 @@ class VidhansabhaSavevidhansabhaPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -2008,7 +1981,7 @@ class PanchayatSavepanchayatPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -2259,7 +2232,7 @@ class VillageSavevillagePostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -3142,7 +3115,7 @@ class StudentUpdatestudentactiveorinactivePostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -3356,7 +3329,7 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -3463,7 +3436,7 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -3570,7 +3543,7 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -4361,7 +4334,7 @@ class UserUpdateDeviceIdView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -4977,7 +4950,7 @@ class TeacherSaveteacherPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST
@@ -5167,7 +5140,7 @@ class RegionaladminSaveregionaladminPostView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
                     status=status.HTTP_400_BAD_REQUEST

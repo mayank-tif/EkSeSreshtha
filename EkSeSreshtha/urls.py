@@ -26,14 +26,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('APIS.urls')),
     path('WeatherForecast/', WeatherforecastGetView.as_view(), name='weatherforecast-get'),
-    # API Schema - drf-spectacular default
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
-    # API Schema - drf-yasg style aliases
-    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui-alias'),
-    path('swagger.json', SpectacularAPIView.as_view(), name='schema-json'),
-    path('redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc-alias'),
 ]
 
 if settings.DEBUG:
