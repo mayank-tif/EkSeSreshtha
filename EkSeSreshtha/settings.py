@@ -151,6 +151,17 @@ SPECTACULAR_SETTINGS = {
 }
 
 
+# Location Verification
+CENTER_LOCATION_TOLERANCE_METERS = 100  # Default GPS tolerance
+
+# Manual Attendance
+MANUAL_ATTENDANCE_MONTHLY_LIMIT = 3
+
+# Media Paths
+STUDENT_QR_CODE_PATH = 'student_qr_codes/'
+CLASSROOM_PHOTO_PATH = 'classroom_photos/'
+
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

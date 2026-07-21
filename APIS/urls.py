@@ -8,6 +8,7 @@ urlpatterns = [
     path('Announcement/GetAnnouncement', AnnouncementGetannouncementGetView.as_view(), name='announcement-getannouncement-get'),
     
     path('Center/SaveCenter', CenterSavecenterPostView.as_view(), name='center-savecenter-post'),
+    path('Center/VerifyLocation', CenterVerifyLocationPostView.as_view(), name='center-verifylocation-post'),
     path('Center/GetCenteryId', CenterGetcenteryidGetView.as_view(), name='center-getcenteryid-get'),
     path('Center/GetAllCenters', CenterGetAllCentersView.as_view(), name='center-getallcenters-get'),
     path('Center/GetAllCentersByStatus', CenterGetAllCentersByStatusView.as_view(), name='center-getallcentersbystatus-get'),

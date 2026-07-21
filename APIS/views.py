@@ -390,6 +390,73 @@ class CommonCheckusermobilenumberPostView(CenterSavecenterPostView):
     serializer_class = api_serializers.CenterSaveCenterRequestSerializer
 
 
+class CenterVerifyLocationPostView(APIView):
+    """Verifies center location by coordinator on-site visit."""
+    
+    def post(self, request):
+        try:
+            logger.info("CenterVerifyLocationPostView : VerifyLocation : Started")
+            
+            data = request.data.copy()
+            logger.info(f"CenterVerifyLocationPostView data: {data}")
+            
+            serializer = api_serializers.CenterVerifyLocationRequestSerializer(data=data)
+            if not serializer.is_valid():
+                logger.error(f"CenterVerifyLocationPostView validation errors: {serializer.errors}")
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Invalid parameters",
+                        "details": serializer.errors,
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            verified_center = verify_center_location(serializer.validated_data, request)
+            
+            if verified_center:
+                response_serializer = api_serializers.CenterVerifyLocationResponseSerializer(verified_center)
+                user_id = get_user_id_from_token(request)
+                if user_id:
+                    log_activity(
+                        module='Center',
+                        action='VERIFY_LOCATION',
+                        record_id=getattr(verified_center, 'Id', 0),
+                        data=response_serializer.data,
+                        request=request
+                    )
+                return Response(
+                    {
+                        "status": True,
+                        "data": response_serializer.data,
+                        "message": "Center location verified successfully",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Center not found or already verified",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+                
+        except Exception as e:
+            logger.error(f"CenterVerifyLocationPostView : VerifyLocation : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
 class CenterGetAllCentersView(APIView):
     """Lists centers, optionally narrowing the result to a teacher/user."""
     
@@ -1020,11 +1087,12 @@ class ClassCancelclassPostView(APIView):
             )
 
 class ClassUpdateendclasstimePostView(APIView):
-    """Updates end class time"""
+    """Updates end class time with camera photo and attendance counts"""
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def post(self, request):
         try:
-            logger.info("UserView : SaveClass : Started")
+            logger.info("UserView : UpdateEndClassTime : Started")
             
             serializer = api_serializers.EndClassDtoSerializer(data=request.data)
             if not serializer.is_valid():
@@ -1038,43 +1106,150 @@ class ClassUpdateendclasstimePostView(APIView):
                 )
             
             class_id = serializer.validated_data.get('Id')
-            result = update_end_class_time(class_id, request)
+            present_count = serializer.validated_data.get('PresentCount')
+            absent_count = serializer.validated_data.get('AbsentCount')
+            photo_file = request.FILES.get('ClassroomPhoto')
+            latitude = serializer.validated_data.get('Latitude')
+            longitude = serializer.validated_data.get('Longitude')
             
-            if result:
-                # Log activity for end class time update
-                logged_user_id = get_user_id_from_token(request)
-                if logged_user_id:
-                    log_activity(
-                        module='Class',
-                        action='UPDATE',
-                        record_id=class_id,
-                        data={
-                            'Id': class_id,
-                            'action': 'EndClassTimeUpdated'
-                        },
-                        request=request
-                    )
-
-                return Response(
-                    {
-                        "status": True,
-                        "message": "Time updated",
-                        "code": status.HTTP_200_OK
-                    },
-                    status=status.HTTP_200_OK
-                )
-            else:
+            if not all([class_id, present_count is not None, absent_count is not None]):
                 return Response(
                     {
                         "status": False,
-                        "error": "Time not updated",
+                        "error": "Missing required fields: Id, PresentCount, AbsentCount",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
+            if not class_obj:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Class not found",
                         "code": status.HTTP_404_NOT_FOUND
                     },
                     status=status.HTTP_404_NOT_FOUND
+            )
+            
+            if class_obj.status == 2:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Class already completed",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
                 )
-                
+            
+            if class_obj.session_closed:
+                return Response(
+                    {
+                        "status": False,
+                        "error": "Class session already closed",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Verify GPS location if provided
+            if latitude and longitude and class_obj.center_id:
+                from APIS.helper import verify_center_location
+                from APIS.models import Center
+                center = Center.objects.filter(id=class_obj.center_id, status=True).first()
+                if center:
+                    if center.location_status != 'VERIFIED':
+                        return Response({
+                            "status": False,
+                            "error": "Center location not verified. Cannot end class.",
+                            "code": status.HTTP_400_BAD_REQUEST
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    
+                    is_valid_loc, distance, center_lat, center_lng, center_status = verify_center_location(
+                        center.id, float(latitude), float(longitude)
+                    )
+                    
+                    if not is_valid_loc:
+                        return Response({
+                            "status": False,
+                            "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                            "code": status.HTTP_400_BAD_REQUEST
+                        }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate photo EXIF (camera capture only)
+            if not photo_file:
+                return Response({
+                    "status": False,
+                    "error": "Classroom photo required (camera capture only)",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            from APIS.helper import save_classroom_photo, end_class_session
+            from django.utils import timezone
+            
+            try:
+                photo_url = save_classroom_photo(class_id, photo_file, 0)  # teacher_id can be 0 or from token
+            except ValueError as e:
+                return Response({
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -16
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # End session with all data
+            teacher_id = get_user_id_from_token(request) or 0
+            success = end_class_session(class_id, photo_url, int(present_count), int(absent_count), teacher_id)
+            
+            if not success:
+                return Response({
+                    "status": False,
+                    "error": "Failed to end class session",
+                    "code": status.HTTP_500_INTERNAL_SERVER_ERROR
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Refresh class object
+            class_obj.refresh_from_db()
+            
+            # Log activity
+            logged_user_id = get_user_id_from_token(request)
+            if logged_user_id:
+                log_activity(
+                    module='Class',
+                    action='UPDATE',
+                    record_id=class_id,
+                    data={
+                        'Id': class_id,
+                        'action': 'EndClassTimeUpdated',
+                        'PresentCount': present_count,
+                        'AbsentCount': absent_count,
+                        'PhotoUrl': photo_url
+                    },
+                    request=request
+                )
+
+            return Response(
+                {
+                    "status": True,
+                    "message": "Class ended successfully",
+                    "code": status.HTTP_200_OK,
+                    "Data": {
+                        "ClassId": class_obj.id,
+                        "ClassName": class_obj.name,
+                        "EndTime": class_obj.end_date,
+                        "ClassroomPhotoUrl": class_obj.classroom_photo_url,
+                        "PresentCount": class_obj.present_count,
+                        "AbsentCount": class_obj.absent_count,
+                        "SessionClosed": class_obj.session_closed,
+                        "ClosedBy": class_obj.closed_by_id
+                    }
+                },
+                status=status.HTTP_200_OK
+            )
+            
         except Exception as e:
-            logger.error(f"UserView : SaveClass : {str(e)}")
+            logger.error(f"UserView : UpdateEndClassTime : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3281,7 +3456,7 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
     
     def post(self, request):
         try:
-            logger.info("UserView : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveAutomaticStudentAttendance : Started")
             
             serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -3383,11 +3558,12 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
             )
 
 class StudentattendanceSavemanualstudentattendancePostView(APIView):
-    """Saves manual student attendance"""
+    """Saves manual student attendance with GPS validation and 3/month limit"""
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def post(self, request):
         try:
-            logger.info("UserView : SaveStudentAttendance : Started")
+            logger.info("UserView : SaveManualStudentAttendance : Started")
             
             serializer = api_serializers.StudentAttendanceSaveRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -3401,11 +3577,102 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                 )
             
             attendance_data = serializer.validated_data
+            
+            # Get student ID from StudentIds
+            student_ids_raw = attendance_data.get('StudentIds', '')
+            if isinstance(student_ids_raw, str):
+                student_ids = [int(s.strip()) for s in student_ids_raw.split(',') if s.strip()]
+            else:
+                student_ids = []
+            
+            if not student_ids:
+                return Response({
+                    "status": False,
+                    "error": "StudentIds required",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            student_id = student_ids[0]
+            
+            # Get student and center
+            student = Student.objects.filter(id=student_id, status=True).first()
+            if not student:
+                return Response({
+                    "status": False,
+                    "error": "Student not found",
+                    "code": status.HTTP_404_NOT_FOUND
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Check center
+            if not student.center_id:
+                return Response({
+                    "status": False,
+                    "error": "Student not assigned to center",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            center = Center.objects.filter(id=student.center_id, status=True).first()
+            if not center:
+                return Response({
+                    "status": False,
+                    "error": "Center not found",
+                    "code": status.HTTP_404_NOT_FOUND
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            if center.location_status != 'VERIFIED':
+                return Response({
+                    "status": False,
+                    "error": "Center location not verified. Cannot mark manual attendance.",
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -13
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verify GPS location
+            latitude = attendance_data.get('Latitude')
+            longitude = attendance_data.get('Longitude')
+            if not (latitude and longitude):
+                return Response({
+                    "status": False,
+                    "error": "GPS location required for manual attendance",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            from APIS.helper import verify_center_location
+            is_valid_loc, distance, center_lat, center_lng, center_status = verify_center_location(
+                center.id, float(latitude), float(longitude)
+            )
+            
+            if not is_valid_loc:
+                return Response({
+                    "status": False,
+                    "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -14
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check manual attendance limit (3/month)
+            allowed, current, remaining, limit = check_manual_attendance_limit(student_id)
+            if not allowed:
+                return Response({
+                    "status": False,
+                    "error": f"Monthly manual attendance limit reached ({current}/{limit}). Next reset: 1st of next month.",
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -15,
+                    "CurrentCount": current,
+                    "Limit": limit,
+                    "Remaining": remaining
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Save attendance
             result = save_student_attendance(attendance_data, is_automatic=False, is_manual=True)
+            
+            # Increment manual attendance counter
+            if result == 1:
+                increment_manual_attendance(student_id)
+            
             logged_user_id = get_user_id_from_token(request)
 
             if result == -1:
-                # Log activity for duplicate manual attendance
                 if logged_user_id:
                     log_activity(
                         module='StudentAttendance',
@@ -3423,7 +3690,6 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             elif result == 0:
-                # Log activity for manual attendance limit reached
                 if logged_user_id:
                     log_activity(
                         module='StudentAttendance',
@@ -3435,13 +3701,29 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                 return Response(
                     {
                         "status": True,
-                        "message": "Manual attendance already exists with 6 times",
+                        "message": "Student already inactive",
+                        "code": status.HTTP_406_NOT_ACCEPTABLE
+                    },
+                    status=status.HTTP_406_NOT_ACCEPTABLE
+                )
+            elif result == -2:
+                if logged_user_id:
+                    log_activity(
+                        module='StudentAttendance',
+                        action='CREATE',
+                        record_id=None,
+                        data=attendance_data,
+                        request=request
+                    )
+                return Response(
+                    {
+                        "status": True,
+                        "message": "student not exists in center",
                         "code": status.HTTP_404_NOT_FOUND
                     },
                     status=status.HTTP_404_NOT_FOUND
                 )
             else:
-                # Log activity for manual attendance applied
                 if logged_user_id:
                     log_activity(
                         module='StudentAttendance',
@@ -3454,7 +3736,9 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                     {
                         "status": True,
                         "message": "Student attendance applied",
-                        "code": status.HTTP_200_OK
+                        "code": status.HTTP_200_OK,
+                        "RemainingManualCount": remaining - 1,
+                        "MonthlyLimit": limit
                     },
                     status=status.HTTP_200_OK
                 )

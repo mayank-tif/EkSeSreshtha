@@ -1,3 +1,4 @@
+from decimal import Decimal
 import json
 import logging
 from datetime import datetime
@@ -17,6 +18,19 @@ from .utils import *
 logger = logging.getLogger(__name__)
 
 # Constants
+# ============================================================
+# CLASS STATUS VALUES (for ClassModel.status field)
+# ============================================================
+# 1 = Active/Running - Class is currently in session
+# 2 = Completed/Ended - Class session has finished normally
+# 3 = Cancelled - Class was cancelled before/during session
+# ============================================================
+# These constants are used in:
+# - Dashboard queries (get_class_count_by_month, get_total_student_of_class)
+# - Class filtering (GetClassCurrentStatus, GetLiveClassDetail)
+# - Class cancellation (CancelClass, CancelClassByTeacher)
+# - Helper functions (get_class_current_status)
+# ============================================================
 CLASS_STATUS_ACTIVE = 1
 CLASS_STATUS_COMPLETED = 2
 CLASS_STATUS_CANCEL = 3
@@ -508,6 +522,11 @@ def get_center_by_id(center_id):
                 c.DistrictId,
                 c.PanchayatId,
                 c.VillageId,
+                c.Latitude,
+                c.Longitude,
+                c.LocationStatus,
+                c.LocationVerifiedAt,
+                c.LocationVerifiedBy,
                 d.Name as DistrictName,
                 v.Name as VidhanSabhaName,
                 vi.Name as VillageName,
@@ -874,6 +893,9 @@ def save_center(center_data, request):
                 # Update existing center - preserve Status and ClassStatus (matches .NET)
                 try:
                     center = Center.objects.get(id=center_id, status=True)
+                    print("data", center_data)
+                    latitude = center_data.get('Latitude') if 'Latitude' in center_data else None
+                    longitude = center_data.get('Longitude') if 'Longitude' in center_data else None
 
                     # Get old teacher and regional admin for cleanup if needed
                     old_teacher_id = center.assigned_teachers
@@ -899,6 +921,15 @@ def save_center(center_data, request):
 
                     # Preserve status and class_status (matches .NET)
                     # Status and ClassStatus are preserved
+                    if latitude and longitude:
+                        center.latitude = Decimal(str(latitude))
+                        center.longitude = Decimal(str(longitude))
+                        center.location_status = 'VERIFIED'
+                        center.location_verified_at = datetime.now()
+                        if current_user_id:
+                            center.location_verified_by_id = current_user_id
+                    else:
+                        center.location_status = 'PENDING'
 
                     center.updated_on = datetime.now()
                     center.updated_by = current_user_id
@@ -1001,6 +1032,9 @@ def save_center(center_data, request):
                 # Insert new center
                 center_guid = str(uuid.uuid4())
                 created_date = datetime.now()
+                
+                latitude = center_data.get('Latitude') if 'Latitude' in center_data else None
+                longitude = center_data.get('Longitude') if 'Longitude' in center_data else None
 
                 # Get teacher and regional admin user IDs
                 teacher_user_id = center_data.get('AssignedTeachers')
@@ -1020,7 +1054,12 @@ def save_center(center_data, request):
                     class_status=False,
                     created_date=created_date,
                     created_on=datetime.now(),
-                    created_by=current_user_id
+                    created_by=current_user_id,
+                    latitude=Decimal(str(latitude)) if latitude else None,
+                    longitude=Decimal(str(longitude)) if longitude else None,
+                    location_status="VERIFIED" if (latitude and longitude) else "PENDING",
+                    location_verified_at=datetime.now() if (latitude and longitude) else None,
+                    location_verified_by_id=current_user_id if (latitude and longitude) else None
                 )
                 center.save()
                 center_id = center.id
@@ -1077,6 +1116,68 @@ def save_center(center_data, request):
         
     except Exception as e:
         logger.error(f"CenterHelper : SaveCenter : {str(e)}")
+        raise e
+
+
+def verify_center_location(center_data, request):
+    """Verify center location by coordinator on-site visit.
+    Updates center location status to VERIFIED and saves verification log.
+    """
+    logger.info(f"CenterHelper : VerifyCenterLocation : Started")
+    
+    try:
+        center_id = int(center_data.get('Id', 0))
+        latitude = center_data.get('Latitude')
+        longitude = center_data.get('Longitude')
+        notes = center_data.get('Notes', '')
+        current_user_id = get_user_id_from_token(request)
+        
+        if center_id <= 0:
+            logger.error("CenterHelper : VerifyCenterLocation : Invalid center ID")
+            return None
+            
+        if not latitude or not longitude:
+            logger.error("CenterHelper : VerifyCenterLocation : Latitude and longitude required")
+            return None
+        
+        with transaction.atomic():
+            try:
+                center = Center.objects.get(id=center_id, status=True)
+            except Center.DoesNotExist:
+                logger.error(f"CenterHelper : VerifyCenterLocation : Center {center_id} not found")
+                return None
+            
+            # Store old coordinates for verification log
+            old_latitude = center.latitude
+            old_longitude = center.longitude
+            
+            # Update center with new coordinates and verified status
+            center.latitude = Decimal(str(latitude))
+            center.longitude = Decimal(str(longitude))
+            center.location_status = 'VERIFIED'
+            center.location_verified_at = datetime.now()
+            if current_user_id:
+                center.location_verified_by_id = current_user_id
+            center.updated_on = datetime.now()
+            center.updated_by = current_user_id
+            center.save()
+            
+            # Create verification log entry
+            CenterLocationVerification.objects.create(
+                center=center,
+                verified_by_id=current_user_id,
+                old_latitude=old_latitude,
+                old_longitude=old_longitude,
+                new_latitude=Decimal(str(latitude)),
+                new_longitude=Decimal(str(longitude)),
+                notes=notes
+            )
+            
+            logger.info(f"CenterHelper : VerifyCenterLocation : Center {center_id} location verified by user {current_user_id}")
+            return get_center_by_id(center_id)
+            
+    except Exception as e:
+        logger.error(f"CenterHelper : VerifyCenterLocation : {str(e)}")
         raise e
 
 

@@ -304,6 +304,10 @@ class AllCenterDtoSerializer(serializers.Serializer):
     teacherName = serializers.CharField(allow_null=True, required=False)
     assignedRegionalAdmin = serializers.IntegerField(allow_null=True, required=False)
     regionalAdminName = serializers.CharField(allow_null=True, required=False)
+    latitude = serializers.DecimalField(max_digits=10, decimal_places=7, allow_null=True, required=False)
+    longitude = serializers.DecimalField(max_digits=10, decimal_places=7, allow_null=True, required=False)
+    location_verified_at = serializers.DateTimeField(allow_null=True, required=False)
+    location_verified_by = serializers.IntegerField(allow_null=True, required=False)
     
 class CenterGetAllCentersByStatusQuerySerializer(serializers.Serializer):
     status = serializers.IntegerField(required=True)
@@ -352,6 +356,16 @@ class CenterSaveCenterRequestSerializer(RequestSerializer):
     DistrictId = serializers.IntegerField(required=True)
     PanchayatId = serializers.IntegerField(required=True)
     VillageId = serializers.IntegerField(required=False, allow_null=True)
+    Latitude = serializers.DecimalField(max_digits=100, decimal_places=7, required=False, allow_null=True)
+    Longitude = serializers.DecimalField(max_digits=100, decimal_places=7, required=False, allow_null=True)
+
+
+
+class CenterVerifyLocationRequestSerializer(RequestSerializer):
+    """Serializer for center location verification."""
+    Id = serializers.IntegerField(required=True)
+    Latitude = serializers.DecimalField(max_digits=10, decimal_places=7, required=True)
+    Longitude = serializers.DecimalField(max_digits=10, decimal_places=7, required=True)
 
 
 
@@ -373,6 +387,23 @@ class CenterDetailDtoSerializer(serializers.Serializer):
     regionalAdminName = serializers.CharField(source='RegionalAdminName', allow_null=True, required=False)
     totalStudents = serializers.IntegerField(source='TotalStudents', allow_null=True, required=False)
     teacher = serializers.DictField(allow_null=True, required=False)
+    latitude = serializers.DecimalField(source='Latitude', max_digits=10, decimal_places=7, allow_null=True, required=False)
+    longitude = serializers.DecimalField(source='Longitude', max_digits=10, decimal_places=7, allow_null=True, required=False)
+    location_status = serializers.CharField(source='LocationStatus', allow_null=True, required=False)
+    location_verified_by = serializers.IntegerField(source='LocationVerifiedBy', allow_null=True, required=False)
+    location_verified_at = serializers.DateTimeField(source='LocationVerifiedAt', allow_null=True, required=False)
+
+
+class CenterVerifyLocationResponseSerializer(serializers.Serializer):
+    """Response serializer for center location verification."""
+    id = serializers.IntegerField(source='Id')
+    centerName = serializers.CharField(source='CenterName', allow_null=True, required=False)
+    latitude = serializers.DecimalField(source='Latitude', max_digits=10, decimal_places=7, allow_null=True, required=False)
+    longitude = serializers.DecimalField(source='Longitude', max_digits=10, decimal_places=7, allow_null=True, required=False)
+    locationStatus = serializers.CharField(source='LocationStatus', allow_null=True, required=False)
+    locationVerifiedAt = serializers.DateTimeField(source='LocationVerifiedAt', allow_null=True, required=False)
+    locationVerifiedBy = serializers.IntegerField(source='LocationVerifiedBy', allow_null=True, required=False)
+
 
 class UserDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
@@ -431,8 +462,13 @@ class CancelClassDtoSerializer(serializers.Serializer):
     reason = serializers.CharField(required=True)
     cancelBy = serializers.IntegerField(required=True)
 
-class EndClassDtoSerializer(serializers.Serializer):
-    Id = serializers.IntegerField(required=True)
+class EndClassDtoSerializer(RequestSerializer):
+    Id = required_int()
+    ClassroomPhoto = serializers.ImageField(required=True)
+    PresentCount = required_int()
+    AbsentCount = required_int()
+    Latitude = optional_char()
+    Longitude = optional_char()
 
 class UpdateClassSubStatusDtoSerializer(serializers.Serializer):
     Id = serializers.IntegerField(required=True)
@@ -808,6 +844,10 @@ class StudentAttendanceSaveRequestSerializer(RequestSerializer):
     StudentIds = required_char()  # Comma-separated string (matches .NET API)
     ScanDate = required_datetime()
     CenterId = required_int()
+    # New fields for QR attendance
+    Latitude = optional_char()
+    Longitude = optional_char()
+    studentIdCard = serializers.ImageField(required=False)  # Photo of student ID card
 
 class StudentAttendanceCenterQuerySerializer(RequestSerializer):
     centerId = required_int()

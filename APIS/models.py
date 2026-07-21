@@ -177,10 +177,64 @@ class Center(models.Model):
     center_name = models.CharField(db_column="CenterName", max_length=50, null=True, blank=True, unique=True)
     created_date = models.DateTimeField(db_column="CreatedDate", null=True, blank=True)
     started_date = models.DateTimeField(db_column="StartedDate", null=True, blank=True)
+    
+    # ============================================================
+    # THREE DIFFERENT STATUS FIELDS - DO NOT CONFUSE
+    # ============================================================
+    # status (BooleanField): SOFT DELETE FLAG
+    #   True  = Active center record
+    #   False = Soft deleted center
+    #   Used in: ALL queries should filter with status=True
+    #   Same pattern as User.status, Student.status, Teacher.status, etc.
+    # ============================================================
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    
+    # class_status (BooleanField): CLASS-RELATED STATUS
+    #   This appears to track if a class is associated/active at this center
+    #   Used in: Center queries with class status filtering
+    #   NOTE: Different from ClassModel.status (which is Integer 1/2/3)
+    # ============================================================
     class_status = models.BooleanField(db_column="ClassStatus", null=True, blank=True)
+    
+    # location_status (CharField): GPS LOCATION VERIFICATION STATUS (Mobile App Enhancement)
+    #   'PENDING' = Center registered but GPS not yet verified by coordinator
+    #   'VERIFIED' = Coordinator visited and verified GPS coordinates
+    #   Used in: QR attendance validation (Center must be VERIFIED)
+    #   Set by: CenterSaveView (if GPS provided) or CenterVerifyLocationView
+    # ============================================================
+    location_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Location Verification Pending'),
+            ('VERIFIED', 'Location Verified'),
+        ],
+        default='PENDING',
+        db_column="LocationStatus"
+    )
+    
     assigned_teachers = models.IntegerField(db_column="AssignedTeachers", null=True, blank=True)
     assigned_regional_admin = models.IntegerField(db_column="AssignedRegionalAdmin", null=True, blank=True)
+    
+    # GPS Location
+    latitude = models.DecimalField(
+        max_digits=10, decimal_places=7, 
+        null=True, blank=True,
+        db_column="Latitude"
+    )
+    longitude = models.DecimalField(
+        max_digits=10, decimal_places=7, 
+        null=True, blank=True,
+        db_column="Longitude"
+    )
+    
+    # Audit Trail
+    location_verified_at = models.DateTimeField(
+        null=True, blank=True, db_column="LocationVerifiedAt"
+    )
+    location_verified_by = models.ForeignKey(
+        'User', null=True, blank=True, 
+        on_delete=models.SET_NULL, db_column="LocationVerifiedBy"
+    )
     
     # Foreign Keys
     district = models.ForeignKey(
@@ -233,6 +287,7 @@ class Center(models.Model):
             models.Index(fields=['village'], name='idx_center_village'),
             models.Index(fields=['status'], name='idx_center_status'),
             models.Index(fields=['class_status'], name='idx_center_class_status'),
+            models.Index(fields=['location_status'], name='idx_center_location_status'),
         ]
 
     def __str__(self):
@@ -339,7 +394,41 @@ class ClassModel(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     class_enrolment_id = models.CharField(db_column="ClassEnrolmentId", max_length=50, null=True, blank=True, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
+    
+    # ============================================================
+    # TWO DIFFERENT STATUS FIELDS - DO NOT CONFUSE
+    # ============================================================
+    # status (IntegerField): CLASS LIFECYCLE STATUS
+    #   1 = Active/Running
+    #   2 = Completed/Ended
+    #   3 = Cancelled
+    #   Constants: CLASS_STATUS_ACTIVE=1, CLASS_STATUS_COMPLETED=2, CLASS_STATUS_CANCEL=3
+    #   Used in: Dashboard queries, class listings, filtering active classes
+    # ============================================================
     status = models.IntegerField(db_column="Status", null=True, blank=True)
+    
+    # active_status (BooleanField): SOFT DELETE FLAG
+    #   True  = Active record (not deleted)
+    #   False = Soft deleted record
+    #   Used in: All queries should filter with active_status=True to exclude deleted records
+    #   This follows the same pattern as User.status, Center.status, Student.status, etc.
+    # ============================================================
+    active_status = models.BooleanField(db_column="active_status", null=True, blank=True, default=True)
+    
+    # sub_status (IntegerField): SUB-STATUS for additional granularity
+    #   Used for: Additional class sub-status tracking
+    # ============================================================
+    sub_status = models.IntegerField(db_column="SubStatus")
+    
+    # session_closed (BooleanField): SESSION CLOSURE FLAG (NEW - Mobile App Enhancement)
+    #   True  = Class session has been formally closed by teacher with photo
+    #   False = Session still open or not yet closed
+    #   Used in: ClassEndSessionView, prevents duplicate closure
+    # ============================================================
+    session_closed = models.BooleanField(
+        default=False, db_column="SessionClosed"
+    )
+    
     total_students = models.IntegerField(db_column="TotalStudents", null=True, blank=True)
     avilable_students = models.IntegerField(db_column="AvilableStudents", null=True, blank=True)
     started_date = models.DateTimeField(db_column="StartedDate", null=True, blank=True)
@@ -348,8 +437,21 @@ class ClassModel(models.Model):
     cancel_by = models.IntegerField(db_column="CancelBy", null=True, blank=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     cancel_date = models.DateTimeField(db_column="CancelDate", null=True, blank=True)
-    sub_status = models.IntegerField(db_column="SubStatus")
-    active_status = models.BooleanField(db_column="active_status", null=True, blank=True, default=True)
+    
+    # Session Closure Fields
+    classroom_photo_url = models.CharField(
+        max_length=500, null=True, blank=True, db_column="ClassroomPhotoUrl"
+    )
+    present_count = models.IntegerField(
+        default=0, db_column="PresentCount"
+    )
+    absent_count = models.IntegerField(
+        default=0, db_column="AbsentCount"
+    )
+    closed_by = models.ForeignKey(
+        'User', null=True, blank=True, 
+        on_delete=models.SET_NULL, db_column="ClosedBy"
+    )
     
     # Foreign Keys
     center = models.ForeignKey(
@@ -378,6 +480,7 @@ class ClassModel(models.Model):
             models.Index(fields=['users_id'], name='idx_class_users'),
             models.Index(fields=['sub_status'], name='idx_class_sub_status'),
             models.Index(fields=['started_date'], name='idx_class_started_date'),
+            models.Index(fields=['session_closed'], name='idx_class_session_closed'),
         ]
 
     def __str__(self):
@@ -956,6 +1059,37 @@ class StudentAttendance(models.Model):
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
     type = models.BooleanField(db_column="Type", null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    
+    # Attendance Type & Location
+    ATTENDANCE_TYPE_CHOICES = [
+        ('QR_AUTO', 'QR Auto Scan'),
+        ('QR_MANUAL', 'QR Manual Entry'),
+        ('MANUAL', 'Manual Fallback'),
+    ]
+    attendance_type = models.CharField(
+        max_length=20,
+        choices=ATTENDANCE_TYPE_CHOICES,
+        default='QR_AUTO',
+        db_column="AttendanceType"
+    )
+    captured_latitude = models.DecimalField(
+        max_digits=10, decimal_places=7, 
+        null=True, blank=True, db_column="CapturedLatitude"
+    )
+    captured_longitude = models.DecimalField(
+        max_digits=10, decimal_places=7, 
+        null=True, blank=True, db_column="CapturedLongitude"
+    )
+    location_verified = models.BooleanField(
+        default=False, db_column="LocationVerified"
+    )
+    manual_reason = models.TextField(
+        null=True, blank=True, db_column="ManualReason"
+    )
+    device_info = models.CharField(
+        max_length=200, null=True, blank=True, db_column="DeviceInfo"
+    )
+    
     # Foreign Keys
     class_obj = models.ForeignKey(
         ClassModel,
@@ -994,6 +1128,7 @@ class StudentAttendance(models.Model):
             models.Index(fields=['center'], name='idx_attendance_center'),
             models.Index(fields=['scan_date'], name='idx_attendance_scan_date'),
             models.Index(fields=['user_id'], name='idx_attendance_user'),
+            models.Index(fields=['attendance_type'], name='idx_attendance_type'),
         ]
 
 
@@ -1087,4 +1222,51 @@ class ActivityLog(models.Model):
             models.Index(fields=['user_id'], name='idx_activitylog_user'),
             models.Index(fields=['module'], name='idx_activitylog_module'),
             models.Index(fields=['created_on'], name='idx_activitylog_created_on'),
+        ]
+
+
+class StudentManualAttendanceLimit(models.Model):
+    student = models.ForeignKey(
+        Student, on_delete=models.CASCADE, db_column="StudentId"
+    )
+    year = models.IntegerField(db_column="Year")
+    month = models.IntegerField(db_column="Month")  # 1-12
+    count = models.IntegerField(default=0, db_column="Count")
+    created_at = models.DateTimeField(auto_now_add=True, db_column="CreatedAt")
+    updated_at = models.DateTimeField(auto_now=True, db_column="UpdatedAt")
+    
+    class Meta:
+        db_table = "StudentManualAttendanceLimit"
+        unique_together = ('student', 'year', 'month')
+        indexes = [
+            models.Index(fields=['student', 'year', 'month']),
+        ]
+
+
+class CenterLocationVerification(models.Model):
+    center = models.ForeignKey(
+        Center, on_delete=models.CASCADE, db_column="CenterId"
+    )
+    verified_by = models.ForeignKey(
+        'User', on_delete=models.SET_NULL, null=True, db_column="VerifiedBy"
+    )
+    old_latitude = models.DecimalField(
+        max_digits=10, decimal_places=7, null=True, blank=True, db_column="OldLatitude"
+    )
+    old_longitude = models.DecimalField(
+        max_digits=10, decimal_places=7, null=True, blank=True, db_column="OldLongitude"
+    )
+    new_latitude = models.DecimalField(
+        max_digits=10, decimal_places=7, db_column="NewLatitude"
+    )
+    new_longitude = models.DecimalField(
+        max_digits=10, decimal_places=7, db_column="NewLongitude"
+    )
+    verified_at = models.DateTimeField(auto_now_add=True, db_column="VerifiedAt")
+    notes = models.TextField(null=True, blank=True, db_column="Notes")
+    
+    class Meta:
+        db_table = "CenterLocationVerification"
+        indexes = [
+            models.Index(fields=['center', 'verified_at']),
         ]
