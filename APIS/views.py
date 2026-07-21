@@ -1155,7 +1155,7 @@ class ClassUpdateendclasstimePostView(APIView):
             
             # Verify GPS location if provided
             if latitude and longitude and class_obj.center_id:
-                from APIS.helper import verify_center_location
+                from APIS.helper import verify_attendance_location
                 from APIS.models import Center
                 center = Center.objects.filter(id=class_obj.center_id, status=True).first()
                 if center:
@@ -1166,7 +1166,7 @@ class ClassUpdateendclasstimePostView(APIView):
                             "code": status.HTTP_400_BAD_REQUEST
                         }, status=status.HTTP_400_BAD_REQUEST)
                     
-                    is_valid_loc, distance, center_lat, center_lng, center_status = verify_center_location(
+                    is_valid_loc, distance, center_lat, center_lng, center_status = verify_attendance_location(
                         center.id, float(latitude), float(longitude)
                     )
                     
@@ -3611,13 +3611,15 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                     "code": status.HTTP_400_BAD_REQUEST
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            center = Center.objects.filter(id=student.center_id, status=True).first()
+            center = Center.objects.filter(id=attendance_data.get("CenterId"), status=True).first()
             if not center:
                 return Response({
                     "status": False,
                     "error": "Center not found",
                     "code": status.HTTP_404_NOT_FOUND
                 }, status=status.HTTP_404_NOT_FOUND)
+                
+            print(center.location_status)
             
             if center.location_status != 'VERIFIED':
                 return Response({
@@ -3637,8 +3639,7 @@ class StudentattendanceSavemanualstudentattendancePostView(APIView):
                     "code": status.HTTP_400_BAD_REQUEST
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            from APIS.helper import verify_center_location
-            is_valid_loc, distance, center_lat, center_lng, center_status = verify_center_location(
+            is_valid_loc, distance, center_lat, center_lng, center_status = verify_attendance_location(
                 center.id, float(latitude), float(longitude)
             )
             

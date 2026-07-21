@@ -1081,7 +1081,7 @@ class StudentAttendance(models.Model):
         null=True, blank=True, db_column="CapturedLongitude"
     )
     location_verified = models.BooleanField(
-        default=False, db_column="LocationVerified"
+        default=False, null=True, blank=True, db_column="LocationVerified"
     )
     manual_reason = models.TextField(
         null=True, blank=True, db_column="ManualReason"

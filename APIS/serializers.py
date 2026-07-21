@@ -834,20 +834,17 @@ class StudentPresentClassDtoSerializer(serializers.Serializer):
     cancelClassCount = serializers.IntegerField(allow_null=True, required=False)
     
 # StudentAttendance Serializers
-class StudentAttendanceSaveRequestSerializer(RequestSerializer):
-    foreign_key_fields = {"ClassId": ClassModel, "CenterId": Center}
-    # foreign_key_list_fields removed - StudentIds is now a comma-separated string
-    
-    Id = optional_int()
-    ClassId = required_int()
-    UserId = required_int()
-    StudentIds = required_char()  # Comma-separated string (matches .NET API)
-    ScanDate = required_datetime()
-    CenterId = required_int()
+class StudentAttendanceSaveRequestSerializer(serializers.Serializer):
+    Id = serializers.IntegerField(required=False, allow_null=True)
+    ClassId = serializers.IntegerField(required=True)
+    UserId = serializers.IntegerField(required=True)
+    StudentIds = serializers.CharField(required=True)  # Comma-separated string (matches .NET API)
+    ScanDate = serializers.DateTimeField(required=True)
+    CenterId = serializers.IntegerField(required=True)
     # New fields for QR attendance
-    Latitude = optional_char()
-    Longitude = optional_char()
-    studentIdCard = serializers.ImageField(required=False)  # Photo of student ID card
+    Latitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    Longitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    studentIdCard = serializers.ImageField(required=False)
 
 class StudentAttendanceCenterQuerySerializer(RequestSerializer):
     centerId = required_int()

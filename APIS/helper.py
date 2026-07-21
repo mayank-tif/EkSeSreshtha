@@ -1181,6 +1181,118 @@ def verify_center_location(center_data, request):
         raise e
 
 
+def verify_attendance_location(center_id, student_latitude, student_longitude):
+    """Verify if student GPS location is within 100m radius of center for attendance marking.
+    Returns tuple: (is_valid: bool, distance_m: float, center_lat: float, center_lng: float, center_status: str)"""
+    logger.info(f"StudentHelper : VerifyAttendanceLocation : Started for center {center_id}")
+    
+    try:
+        center = Center.objects.filter(id=center_id, status=True).first()
+        if not center:
+            return False, 999999, 0, 0, "CENTER_NOT_FOUND"
+        
+        if not center.latitude or not center.longitude:
+            return False, 999999, 0, 0, "CENTER_NO_COORDINATES"
+        
+        if center.location_status != 'VERIFIED':
+            return False, 999999, float(center.latitude), float(center.longitude), "CENTER_NOT_VERIFIED"
+        
+        # Calculate distance using Haversine formula
+        from math import radians, sin, cos, sqrt, atan2
+        
+        R = 6371000  # Earth radius in meters
+        
+        lat1 = radians(float(center.latitude))
+        lon1 = radians(float(center.longitude))
+        lat2 = radians(float(student_latitude))
+        lon2 = radians(float(student_longitude))
+        
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * atan2(sqrt(a), sqrt(1-a))
+        distance = R * c
+        
+        is_valid = distance <= 100  # 100 meter radius
+        
+        logger.info(f"StudentHelper : VerifyAttendanceLocation : Distance = {distance:.1f}m, Valid = {is_valid}")
+        
+        return is_valid, distance, float(center.latitude), float(center.longitude), center.location_status
+        
+    except Exception as e:
+        logger.error(f"StudentHelper : VerifyAttendanceLocation : {str(e)}")
+        return False, 999999, 0, 0, "ERROR"
+
+
+def check_manual_attendance_limit(student_id):
+    """Check if student has reached monthly manual attendance limit (3/month).
+    Returns tuple: (allowed: bool, current_count: int, remaining: int, limit: int)"""
+    logger.info(f"StudentHelper : CheckManualAttendanceLimit : Started for student {student_id}")
+    
+    try:
+        from datetime import datetime
+        current_year = datetime.now().year
+        current_month = datetime.now().month
+        
+        # Get or create the monthly limit record
+        limit_record, created = StudentManualAttendanceLimit.objects.get_or_create(
+            student_id=student_id,
+            year=current_year,
+            month=current_month,
+            defaults={'count': 0}
+        )
+        
+        limit = 3  # Hardcoded limit of 3 per month
+        current = limit_record.count
+        remaining = max(0, limit - current)
+        allowed = current < limit
+        
+        logger.info(f"StudentHelper : CheckManualAttendanceLimit : Student {student_id} - Current: {current}/{limit}, Allowed: {allowed}")
+        return allowed, current, remaining, limit
+        
+    except Exception as e:
+        logger.error(f"StudentHelper : CheckManualAttendanceLimit : {str(e)}")
+        raise e
+
+
+def increment_manual_attendance(student_id):
+    """Increment the manual attendance counter for the current month."""
+    logger.info(f"StudentHelper : IncrementManualAttendance : Started for student {student_id}")
+    
+    try:
+        from datetime import datetime
+        current_year = datetime.now().year
+        current_month = datetime.now().month
+        
+        # Use select_for_update to prevent race conditions
+        with transaction.atomic():
+            limit_record = StudentManualAttendanceLimit.objects.select_for_update().get(
+                student_id=student_id,
+                year=current_year,
+                month=current_month
+            )
+            limit_record.count += 1
+            limit_record.save()
+            
+        logger.info(f"StudentHelper : IncrementManualAttendance : Student {student_id} count now {limit_record.count}")
+        return limit_record.count
+        
+    except StudentManualAttendanceLimit.DoesNotExist:
+        # Create if doesn't exist
+        limit_record = StudentManualAttendanceLimit.objects.create(
+            student_id=student_id,
+            year=current_year,
+            month=current_month,
+            count=1
+        )
+        logger.info(f"StudentHelper : IncrementManualAttendance : Created new record for student {student_id} with count 1")
+        return 1
+    except Exception as e:
+        logger.error(f"StudentHelper : IncrementManualAttendance : {str(e)}")
+        raise e
+
+
 # TECHERS SECTION ----------------------------------------------------------
 def get_all_teachers(user_id):
     """Get all teachers with optional filtering by userId"""
@@ -4426,7 +4538,7 @@ def get_all_schools():
 #---------------------------------------------------------
 
 def save_student_attendance(attendance_data, is_automatic=False, is_manual=False):
-    """Save student attendance
+    """Save student attendance using ORM
     
     Args:
         attendance_data: Dict with StudentIds (comma-separated string), ClassId, CenterId, UserId, ScanDate
@@ -4435,7 +4547,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
     
     Return Codes (matches .NET):
         1   = SUCCESS - Student attendance applied
-        0   = FAIL - Student inactive (Status=False) OR manual limit reached (>=360)
+        0   = FAIL - Student inactive (Status=False) OR manual limit reached
         -1  = FAIL - Attendance already exists for this student/class/date
         -2  = FAIL - Student not in this center (CenterId mismatch)
     """
@@ -4455,88 +4567,105 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
         center_id = attendance_data.get('CenterId')
         user_id = attendance_data.get('UserId')
         scan_date = attendance_data.get('ScanDate')
+        latitude = attendance_data.get('Latitude')
+        longitude = attendance_data.get('Longitude')
         
         if not student_ids:
             return -1
         
+        # Get class and center objects for FK
+        class_obj = ClassModel.objects.filter(id=class_id).first()
+        center_obj = Center.objects.filter(id=center_id).first()
+        
         for student_id in student_ids:
             # Check if student is active and belongs to center
-            check_sql = "SELECT Status, CenterId, ManualAttendance FROM Student WHERE Id = %s"
-            with connection.cursor() as cursor:
-                cursor.execute(check_sql, [student_id])
-                student_row = cursor.fetchone()
-                
-                if not student_row:
-                    continue  # Student not found, skip
-                
-                # student_row[0] = Status (bool: True=Active, False=Inactive)
-                # student_row[1] = CenterId (int)
-                # student_row[2] = ManualAttendance (int: count of manual entries)
-                
-                if not is_automatic and not is_manual:
-                    # Regular attendance (teacher marks via app)
-                    if not student_row[0]:  # Status=False → Inactive student
-                        return 0
-                    if student_row[1] != center_id:  # Center mismatch
-                        return -2
-                
-                if is_automatic:
-                    # QR Code auto-scan attendance
-                    if not student_row[0]:  # Inactive
-                        return 0
-                    if student_row[1] != center_id:  # Center mismatch
-                        return -2
-                
-                if is_manual:
-                    # Teacher manual entry
-                    manual_attendance = student_row[2] or 0
-                    # .NET checks >= 360 (6 hours * 60 min?) - but seems high for daily limit
-                    if manual_attendance >= 360:
-                        return 0
-                
-                # Check if attendance already exists for today
-                today = datetime.now().date()
-                if is_automatic or is_manual:
-                    # Auto/Manual: check against TODAY
-                    check_attendance_sql = """
-                        SELECT Id FROM StudentAttendance 
-                        WHERE StudentId = %s AND ClassId = %s AND DATE(ScanDate) = %s
-                    """
-                    cursor.execute(check_attendance_sql, [student_id, class_id, today])
-                    if cursor.fetchone():
-                        return -1  # Already marked today
-                else:
-                    # Regular: check against provided ScanDate
-                    check_attendance_sql = """
-                        SELECT Id FROM StudentAttendance 
-                        WHERE StudentId = %s AND ClassId = %s AND DATE(ScanDate) = %s
-                    """
-                    cursor.execute(check_attendance_sql, [student_id, class_id, scan_date.date()])
-                    if cursor.fetchone():
-                        return -1  # Already marked for this date
-                
-                # Insert attendance record
-                insert_sql = """
-                    INSERT INTO StudentAttendance (ClassId, StudentId, CenterId, UserId, ScanDate, Type)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """
-                # Type: False=Auto/QR scan, True=Manual entry
-                attendance_type = True if is_manual else False
-                scan_date_val = datetime.now() if (is_automatic or is_manual) else scan_date
-                cursor.execute(insert_sql, [class_id, student_id, center_id, user_id, scan_date_val, attendance_type])
-                
-                # Update student ActiveClassStatus = 1 (has active class)
-                update_student_sql = "UPDATE Student SET ActiveClassStatus = 1 WHERE Id = %s"
-                cursor.execute(update_student_sql, [student_id])
-                
-                # Update manual attendance counter
-                if is_manual:
-                    update_manual_sql = "UPDATE Student SET ManualAttendance = ManualAttendance + 1 WHERE Id = %s"
-                    cursor.execute(update_manual_sql, [student_id])
-                
-                # Update class available students count
-                update_class_sql = "UPDATE Class SET AvilableStudents = AvilableStudents + 1 WHERE Id = %s"
-                cursor.execute(update_class_sql, [class_id])
+            student = Student.objects.filter(id=student_id).first()
+            if not student:
+                continue  # Student not found, skip
+            
+            if not is_automatic and not is_manual:
+                # Regular attendance (teacher marks via app)
+                if not student.status:  # Status=False → Inactive student
+                    return 0
+                if student.center_id != center_id:  # Center mismatch
+                    return -2
+            
+            if is_automatic:
+                # QR Code auto-scan attendance
+                if not student.status:  # Inactive
+                    return 0
+                if student.center_id != center_id:  # Center mismatch
+                    return -2
+            
+            if is_manual:
+                # Teacher manual entry
+                manual_attendance = student.manual_attendance or 0
+                if manual_attendance >= 360:
+                    return 0
+            
+            # Check if attendance already exists for today
+            today = datetime.now().date()
+            if is_automatic or is_manual:
+                # Auto/Manual: check against TODAY
+                existing = StudentAttendance.objects.filter(
+                    student_id=student_id,
+                    class_obj_id=class_id,
+                    scan_date__date=today
+                ).exists()
+                if existing:
+                    return -1  # Already marked today
+            else:
+                # Regular: check against provided ScanDate
+                existing = StudentAttendance.objects.filter(
+                    student_id=student_id,
+                    class_obj_id=class_id,
+                    scan_date__date=scan_date.date()
+                ).exists()
+                if existing:
+                    return -1  # Already marked for this date
+            
+            # Determine attendance type
+            if is_manual:
+                attendance_type = True  # Type=True for manual
+                attendance_type_str = 'MANUAL'
+            elif is_automatic:
+                attendance_type = False  # Type=False for auto
+                attendance_type_str = 'QR_AUTO'
+            else:
+                attendance_type = False  # Type=False for regular
+                attendance_type_str = 'QR_MANUAL'
+            
+            scan_date_val = datetime.now() if (is_automatic or is_manual) else scan_date
+            
+            # Create attendance record using ORM
+            StudentAttendance.objects.create(
+                class_obj=class_obj,
+                student=student,
+                center=center_obj,
+                user_id=user_id,
+                scan_date=scan_date_val,
+                type=attendance_type,
+                attendance_type=attendance_type_str,
+                captured_latitude=Decimal(str(latitude)) if latitude else None,
+                captured_longitude=Decimal(str(longitude)) if longitude else None,
+                location_verified=bool(latitude and longitude),
+                created_by=user_id,
+                created_on=datetime.now()
+            )
+            
+            # Update student ActiveClassStatus = 1 (has active class)
+            student.active_class_status = True
+            student.save(update_fields=['active_class_status', 'updated_on', 'updated_by'])
+            
+            # Update manual attendance counter
+            if is_manual:
+                student.manual_attendance = (student.manual_attendance or 0) + 1
+                student.save(update_fields=['manual_attendance', 'updated_on', 'updated_by'])
+            
+            # Update class available students count
+            if class_obj:
+                class_obj.avilable_students = (class_obj.avilable_students or 0) + 1
+                class_obj.save(update_fields=['avilable_students', 'updated_on', 'updated_by'])
         
         return 1
         
