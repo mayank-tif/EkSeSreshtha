@@ -918,6 +918,8 @@ def save_center(center_data, request):
                         center.panchayat_id = center_data['PanchayatId']
                     if 'VillageId' in center_data and center_data['VillageId'] is not None:
                         center.village_id = center_data['VillageId']
+                    if 'Address' in center_data and center_data['Address'] is not None:
+                        center.Address = center_data['Address']
 
                     # Preserve status and class_status (matches .NET)
                     # Status and ClassStatus are preserved
@@ -965,6 +967,7 @@ def save_center(center_data, request):
                                     new_teacher.assigned_regional_admin_status = True
                                     new_teacher.updated_on = datetime.now()
                                     new_teacher.updated_by = current_user_id
+                                    new_teacher.center = center
                                     new_teacher.save()
 
                                     # Save history for new teacher
@@ -1059,7 +1062,8 @@ def save_center(center_data, request):
                     longitude=Decimal(str(longitude)) if longitude else None,
                     location_status="VERIFIED" if (latitude and longitude) else "PENDING",
                     location_verified_at=datetime.now() if (latitude and longitude) else None,
-                    location_verified_by_id=current_user_id if (latitude and longitude) else None
+                    location_verified_by_id=current_user_id if (latitude and longitude) else None,
+                    address=center_data.get('Address')
                 )
                 center.save()
                 center_id = center.id
@@ -1073,6 +1077,7 @@ def save_center(center_data, request):
                             teacher.assigned_regional_admin_status = True
                             teacher.updated_on = datetime.now()
                             teacher.updated_by = current_user_id
+                            teacher.center = center
                             teacher.save()
 
                             # Save history of user assign (matches .NET)
@@ -1453,20 +1458,35 @@ def login_user(mobile_number, password):
                     
                     # Get list of centers
                     list_of_centers = []
-                    centers = Center.objects.filter(assigned_regional_admin=regional_admin.id)
+                    centers = Center.objects.filter(assigned_regional_admin=user.id)
+                    
+                    # Get full center details for each center
+                    full_centers = []
                     for center in centers:
-                        list_of_centers.append({
-                            'id': center.id,
-                            'centerGuidId': center.center_guid_id,
-                            'centerName': center.center_name,
-                            'assignedTeachers': center.assigned_teachers,
-                            'assignedRegionalAdmin': center.assigned_regional_admin,
-                            'startedDate': format_dotnet_datetime(center.started_date) if center.started_date else None,
-                            'vidhanSabhaId': center.vidhan_sabha_id or 0,
-                            'districtId': center.district_id or 0,
-                            'panchayatId': center.panchayat_id or 0,
-                            'villageId': center.village_id
-                        })
+                        c = Center.objects.filter(id=center.id, status=True).select_related(
+                            'district', 'vidhan_sabha', 'panchayat', 'village'
+                        ).first()
+                        if c:
+                            full_centers.append({
+                                'id': c.id,
+                                'centerGuidId': c.center_guid_id,
+                                'centerName': c.center_name,
+                                'classStatus': c.class_status,
+                                'status': c.status,
+                                'locationStatus': c.location_status,
+                                'createdDate': format_dotnet_datetime(c.created_date) if c.created_date else None,
+                                'startedDate': format_dotnet_datetime(c.started_date) if c.started_date else None,
+                                'assignedTeachers': c.assigned_teachers,
+                                'assignedRegionalAdmin': c.assigned_regional_admin,
+                                'vidhanSabhaId': c.vidhan_sabha_id or 0,
+                                'districtId': c.district_id or 0,
+                                'panchayatId': c.panchayat_id or 0,
+                                'villageId': c.village_id,
+                                'latitude': float(c.latitude) if c.latitude else None,
+                                'longitude': float(c.longitude) if c.longitude else None,
+                                'locationVerifiedAt': format_dotnet_datetime(c.location_verified_at) if c.location_verified_at else None,
+                                'locationVerifiedBy': c.location_verified_by_id,
+                            })
                     
                     response_data.update({
                         "age": regional_admin.age,
@@ -1486,32 +1506,43 @@ def login_user(mobile_number, password):
                         "panchayatId": regional_admin.panchayat_id,
                         "listOfPanchayatId": [rap.panchayat_id for rap in regional_admin_panchayats if rap.panchayat_id],
                         "regionalAdminPanchayat": list_of_panchayat,
-                        "centers": list_of_centers,
+                        "centers": full_centers,
                         "createdOn": format_dotnet_datetime(regional_admin.created_on) if regional_admin.created_on else user.created_on,
                     })
                     
             elif role_code == 'TEACHER':
+                print(user.id)
                 teacher = Teacher.objects.filter(user=user).first()
                 if teacher:
-                    # Get center data
-                    center_data = None
-                    if teacher.center:
-                        center = teacher.center
-                        center_data = {
-                            'id': center.id,
-                            'centerGuidId': center.center_guid_id,
-                            'centerName': center.center_name,
-                            'classStatus': center.class_status,
-                            'status': center.status,
-                            'createdDate': format_dotnet_datetime(center.created_date) if center.created_date else None,
-                            'startedDate': format_dotnet_datetime(center.started_date) if center.started_date else None,
-                            'assignedTeachers': center.assigned_teachers,
-                            'assignedRegionalAdmin': center.assigned_regional_admin,
-                            'vidhanSabhaId': center.vidhan_sabha_id or 0,
-                            'districtId': center.district_id or 0,
-                            'panchayatId': center.panchayat_id or 0,
-                            'villageId': center.village_id
-                        }
+                    # Get center data - build full center details array
+                    print(user.id)
+                    teacher_center = Center.objects.filter(assigned_teachers=user.id, status=True).first()
+                    centers = []
+                    if teacher_center:
+                        c = teacher_center
+                        centers.append({
+                            'id': c.id,
+                            'centerGuidId': c.center_guid_id,
+                            'centerName': c.center_name,
+                            'classStatus': c.class_status,
+                            'status': c.status,
+                            'locationStatus': c.location_status,
+                            'createdDate': format_dotnet_datetime(c.created_date) if c.created_date else None,
+                            'startedDate': format_dotnet_datetime(c.started_date) if c.started_date else None,
+                            'assignedTeachers': c.assigned_teachers,
+                            'assignedRegionalAdmin': c.assigned_regional_admin,
+                            'vidhanSabhaId': c.vidhan_sabha_id or 0,
+                            'districtId': c.district_id or 0,
+                            'panchayatId': c.panchayat_id or 0,
+                            'villageId': c.village_id,
+                            'latitude': float(c.latitude) if c.latitude else None,
+                            'longitude': float(c.longitude) if c.longitude else None,
+                            'locationVerifiedAt': format_dotnet_datetime(c.location_verified_at) if c.location_verified_at else None,
+                            'locationVerifiedBy': c.location_verified_by_id,
+                        })
+                    
+                    # Also keep single center for backward compatibility
+                    center_data = centers[0] if centers else None
                     
                     response_data.update({
                         "age": teacher.age,
@@ -1532,6 +1563,7 @@ def login_user(mobile_number, password):
                         "panchayatId": teacher.panchayat_id,
                         "centerId": teacher.center_id,
                         "center": center_data,
+                        "centers": centers,
                         "createdOn": format_dotnet_datetime(teacher.created_on) if teacher.created_on else user.created_on,
                     })
         

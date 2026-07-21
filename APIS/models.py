@@ -273,6 +273,7 @@ class Center(models.Model):
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
     updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+    address = models.TextField(db_column="Address", null=True, blank=True)
 
     class Meta:
         db_table = "Center"
