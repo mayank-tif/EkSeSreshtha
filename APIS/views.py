@@ -3424,7 +3424,7 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
+class StudentSaveAutomaticAttendanceView(APIView):
     """Saves automatic student attendance"""
     
     def post(self, request):
@@ -3530,7 +3530,7 @@ class StudentattendanceSaveautomaticstudentattendancePostView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-class StudentattendanceSavemanualstudentattendancePostView(APIView):
+class StudentSaveManualAttendanceView(APIView):
     """Saves manual student attendance with GPS validation and 3/month limit"""
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     

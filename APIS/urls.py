@@ -71,8 +71,8 @@ urlpatterns = [
     path('Student/GetAllStudents', StudentGetallstudentsGetView.as_view(), name='student-getallstudents-get'),
     
     path('StudentAttendance/SaveStudentAttendance', StudentattendanceSavestudentattendancePostView.as_view(), name='studentattendance-savestudentattendance-post'),
-    path('StudentAttendance/SaveAutomaticStudentAttendance', StudentattendanceSaveautomaticstudentattendancePostView.as_view(), name='studentattendance-saveautomaticstudentattendance-post'),
-    path('StudentAttendance/SaveManualStudentAttendance', StudentattendanceSavemanualstudentattendancePostView.as_view(), name='studentattendance-savemanualstudentattendance-post'),
+    path('StudentAttendance/SaveAutomaticStudentAttendance', StudentSaveAutomaticAttendanceView.as_view(), name='studentattendance-saveautomaticstudentattendance-post'),
+    path('StudentAttendance/SaveManualStudentAttendance', StudentSaveManualAttendanceView.as_view(), name='studentattendance-savemanualstudentattendance-post'),
     path('StudentAttendance/GetAllStudentWihAvgAttendance', StudentattendanceGetallstudentwihavgattendanceGetView.as_view(), name='studentattendance-getallstudentwihavgattendance-get'),
     path('StudentAttendance/GetAllAbsentAttendance', StudentattendanceGetallabsentattendanceGetView.as_view(), name='studentattendance-getallabsentattendance-get'),
     path('StudentAttendance/GetAllStudentAttendancStatus', StudentattendanceGetallstudentattendancstatusGetView.as_view(), name='studentattendance-getallstudentattendancstatus-get'),

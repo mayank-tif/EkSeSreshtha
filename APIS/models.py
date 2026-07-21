@@ -1067,8 +1067,7 @@ class StudentAttendance(models.Model):
     
     # Attendance Type & Location
     ATTENDANCE_TYPE_CHOICES = [
-        ('QR_AUTO', 'QR Auto Scan'),
-        ('QR_MANUAL', 'QR Manual Entry'),
+        ('AUTO', 'QR Auto Scan'),
         ('MANUAL', 'Manual Fallback'),
     ]
     attendance_type = models.CharField(

@@ -4630,10 +4630,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
                 attendance_type_str = 'MANUAL'
             elif is_automatic:
                 attendance_type = False  # Type=False for auto
-                attendance_type_str = 'QR_AUTO'
-            else:
-                attendance_type = False  # Type=False for regular
-                attendance_type_str = 'QR_MANUAL'
+                attendance_type_str = 'AUTO'
             
             scan_date_val = datetime.now() if (is_automatic or is_manual) else scan_date
             
