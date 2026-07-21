@@ -359,6 +359,7 @@ class CenterSaveCenterRequestSerializer(RequestSerializer):
     VillageId = serializers.IntegerField(required=False, allow_null=True)
     Latitude = serializers.DecimalField(max_digits=100, decimal_places=7, required=False, allow_null=True)
     Longitude = serializers.DecimalField(max_digits=100, decimal_places=7, required=False, allow_null=True)
+    Address = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
 
 
