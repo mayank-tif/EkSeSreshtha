@@ -599,7 +599,7 @@ class CenterGetAllCentersByStatusView(APIView):
                 )
 
             logger.info(f"CenterGetAllCentersByStatusView : GetStudentAttendanceOfCenter : End")
-            return Response(response_serializer.data, status=status.HTTP_200_OK)
+            return Response({"data": response_serializer.data}, status=status.HTTP_200_OK)
 
         except Exception as e:
             import traceback
