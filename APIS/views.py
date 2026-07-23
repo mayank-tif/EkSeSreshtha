@@ -186,6 +186,12 @@ class AnnouncementSaveannouncementPostView(APIView):
                         file_path = f"AnnouncementImages/{file_name}"
                         
                         saved_path = default_storage.save(file_path, ContentFile(image_file.read()))
+                        
+                        file_extension = os.path.splitext(image_file.name)[1]
+                        file_name = f"announcement_{uuid.uuid4()}{file_extension}"
+                        file_path = f"AnnouncementImages/{file_name}"
+                        
+                        saved_path = default_storage.save(file_path, ContentFile(image_file.read()))
                         image_paths.append(default_storage.url(saved_path))
             
             # Prepare data for serializer
