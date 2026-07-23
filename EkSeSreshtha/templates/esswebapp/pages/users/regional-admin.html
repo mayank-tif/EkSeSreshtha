@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regional Admin - Ek Se Sreshtha</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="../../css/variables.css">
+    <link rel="stylesheet" href="../../css/base.css">
+    <link rel="stylesheet" href="../../css/components.css">
+    <link rel="stylesheet" href="../../css/layout.css">
+    <link rel="stylesheet" href="../../css/users.css">
+</head>
+<body>
+
+    <div id="app-shell">
+
+        <!-- Page header -->
+        <div class="page-header">
+            <div class="page-header-info">
+                <h1>Regional Admin</h1>
+                <p>Admins responsible for a specific constituency area.</p>
+            </div>
+        </div>
+
+        <div class="users-layout">
+
+            <!-- ==================================================
+                 LEFT: REGISTRATION FORM
+                 ================================================== -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title" id="ra-form-title">Register Regional Admin</h2>
+                        <p class="card-subtitle">Create an admin scoped to a district or Vidhan Sabha.</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form id="ra-form">
+
+                        <!-- Profile image upload -->
+                        <div class="avatar-upload">
+                            <div class="avatar-upload-preview" id="ra-image-preview">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            <div class="avatar-upload-info">
+                                <h4>Profile photo</h4>
+                                <p>PNG or JPG, up to 2 MB.</p>
+                                <label for="ra-image" class="avatar-upload-btn">Choose file</label>
+                                <input type="file" id="ra-image" accept="image/png,image/jpeg">
+                            </div>
+                        </div>
+
+                        <!-- Personal information -->
+                        <h3 class="section-title">Personal information</h3>
+
+                        <div class="form-group">
+                            <label class="form-label" for="ra-name">Full name <span class="required">*</span></label>
+                            <input type="text" id="ra-name" class="form-input" placeholder="e.g. Rajesh Kumar" required>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="ra-email">Email <span class="required">*</span></label>
+                                <input type="email" id="ra-email" class="form-input" placeholder="name@example.com" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="ra-age">Age</label>
+                                <input type="number" id="ra-age" class="form-input" placeholder="e.g. 34" min="18" max="99">
+                            </div>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="ra-gender">Gender</label>
+                                <select id="ra-gender" class="form-select">
+                                    <option value="">Select gender</option>
+                                    <option>Male</option>
+                                    <option>Female</option>
+                                    <option>Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="ra-dob">Date of birth</label>
+                                <input type="date" id="ra-dob" class="form-input">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="ra-enrollment">Enrollment date</label>
+                            <input type="date" id="ra-enrollment" class="form-input">
+                        </div>
+
+                        <!-- Contact -->
+                        <h3 class="section-title">Contact</h3>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="ra-phone">Phone number <span class="required">*</span></label>
+                                <input type="tel" id="ra-phone" class="form-input" placeholder="10-digit mobile number" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="ra-whatsapp">WhatsApp number</label>
+                                <input type="tel" id="ra-whatsapp" class="form-input" placeholder="If different from phone">
+                            </div>
+                        </div>
+
+                        <!-- Assignment - which area this admin manages -->
+                        <h3 class="section-title">Assignment</h3>
+
+                        <div class="form-group">
+                            <label class="form-label" for="ra-district">District <span class="required">*</span></label>
+                            <select id="ra-district" class="form-select" required onchange="onRaDistrictChange()">
+                                <option value="">Select district</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="ra-vs">Vidhan Sabha <span class="required">*</span></label>
+                            <select id="ra-vs" class="form-select" required disabled onchange="onRaVsChange()">
+                                <option value="">Select Vidhan Sabha</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="ra-panchayat">Panchayat <span class="required">*</span></label>
+                            <select id="ra-panchayat" class="form-select" required disabled>
+                                <option value="">Select Panchayat</option>
+                            </select>
+                        </div>
+
+                        <!-- Security -->
+                        <h3 class="section-title">Security</h3>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="ra-password">Password <span class="required">*</span></label>
+                                <input type="password" id="ra-password" class="form-input" placeholder="At least 8 characters" required minlength="8">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="ra-confirm-password">Confirm password <span class="required">*</span></label>
+                                <input type="password" id="ra-confirm-password" class="form-input" placeholder="Repeat the password" required minlength="8">
+                            </div>
+                        </div>
+
+                        <input type="hidden" id="ra-editing-id">
+                        <input type="hidden" id="ra-image-data">
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="resetRegionalAdminForm()">Reset</button>
+                            <button type="submit" class="btn btn-primary">Save Regional Admin</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ==================================================
+                 RIGHT: EXISTING REGIONAL ADMINS LIST
+                 ================================================== -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">All Regional Admins</h2>
+                        <p class="card-subtitle" id="ra-count-label">0 admins registered.</p>
+                    </div>
+                    <div class="search-bar">
+                        <input type="text" class="form-input" id="ra-search"
+                               placeholder="Search..." oninput="renderRegionalAdminList()">
+                    </div>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div class="user-list" id="ra-list">
+                        <!-- Rendered by regional-admin.js -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../js/common.js"></script>
+    <script src="../../js/sidebar.js"></script>
+    <script src="../../js/regional-admin.js"></script>
+</body>
+</html>

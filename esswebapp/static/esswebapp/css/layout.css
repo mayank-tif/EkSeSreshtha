@@ -1,0 +1,462 @@
+/* ================================================================
+   EK SE SRESHTHA - LAYOUT STYLES
+   ----------------------------------------------------------------
+   Main app shell: sidebar navigation, top header, content area.
+   This defines the global layout used on every page except login.
+   ================================================================ */
+
+/* ================================================================
+   APP SHELL - The main grid layout
+   ================================================================ */
+
+.app-shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) 1fr;
+    min-height: 100vh;
+}
+
+.app-shell.sidebar-collapsed {
+    grid-template-columns: var(--sidebar-collapsed) 1fr;
+}
+
+/* ================================================================
+   SIDEBAR NAVIGATION
+   ================================================================ */
+
+.sidebar {
+    /* Deep brand-blue gradient inspired by the logo's "EK SE" blue.
+       Gives the app a strong identity instead of an all-white shell. */
+    background: linear-gradient(180deg, var(--brand-blue-dark) 0%, var(--brand-blue) 100%);
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: var(--z-sidebar);
+    transition: width var(--transition-base);
+}
+
+/* ---------------------------------------
+   Sidebar - brand/logo area at top
+   The logo sits on a white rounded card so its blue/red artwork
+   stays readable against the dark sidebar.
+   --------------------------------------- */
+.sidebar-brand {
+    padding: var(--space-4) var(--space-4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--header-height);
+}
+
+.sidebar-brand-logo-card {
+    background-color: var(--white);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.sidebar-brand img {
+    height: 42px;
+    width: auto;
+    flex-shrink: 0;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.sidebar-brand-text {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--white);
+    line-height: 1.2;
+}
+
+/* ---------------------------------------
+   Sidebar - navigation list
+   --------------------------------------- */
+.sidebar-nav {
+    padding: var(--space-4) var(--space-3);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+/* Section label between groups */
+.sidebar-section-label {
+    padding: var(--space-3) var(--space-3) var(--space-2);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Nav item wrapper (may contain submenu) */
+.sidebar-item {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Main nav link - light text on the dark blue sidebar */
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.sidebar-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--white);
+}
+
+/* Active item glows with the sun-amber from the logo */
+.sidebar-link.active {
+    background-color: rgba(255, 255, 255, 0.14);
+    color: var(--white);
+    box-shadow: inset 3px 0 0 var(--brand-amber);
+}
+
+.sidebar-link.active:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: var(--white);
+}
+
+/* Icon inside nav link */
+.sidebar-link-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+/* Chevron for expandable items */
+.sidebar-chevron {
+    margin-left: auto;
+    transition: transform var(--transition-base);
+    width: 16px;
+    height: 16px;
+}
+
+.sidebar-item.open .sidebar-chevron {
+    transform: rotate(90deg);
+}
+
+/* Submenu container */
+.sidebar-submenu {
+    display: none;
+    padding-left: var(--space-8);
+    margin-top: var(--space-1);
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.sidebar-item.open .sidebar-submenu {
+    display: flex;
+}
+
+/* Submenu link - smaller & lighter */
+.sidebar-sublink {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    color: rgba(255, 255, 255, 0.62);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+    text-decoration: none;
+    position: relative;
+}
+
+.sidebar-sublink::before {
+    content: '';
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background-color: rgba(255, 255, 255, 0.35);
+    flex-shrink: 0;
+}
+
+.sidebar-sublink:hover {
+    color: var(--white);
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-sublink.active {
+    color: var(--white);
+    background-color: rgba(255, 255, 255, 0.14);
+    font-weight: 500;
+}
+
+.sidebar-sublink.active::before {
+    background-color: var(--brand-amber);
+}
+
+/* ---------------------------------------
+   Sidebar - user profile at bottom
+   --------------------------------------- */
+.sidebar-user {
+    padding: var(--space-4);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-user-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.sidebar-user-name {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--white);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-user-role {
+    font-size: var(--text-xs);
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* ================================================================
+   MAIN CONTENT AREA
+   ================================================================ */
+
+.main-area {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    /* Soft blue-tinted wash instead of flat white/gray so the
+       content area feels warmer while staying light and readable. */
+    background:
+        radial-gradient(1200px 400px at 85% -10%, rgba(59, 130, 246, 0.08), transparent 60%),
+        radial-gradient(900px 400px at -10% 30%, rgba(245, 158, 11, 0.06), transparent 55%),
+        linear-gradient(180deg, #eef3fb 0%, #f4f7fc 100%);
+}
+
+/* ---------------------------------------
+   Top header bar
+   --------------------------------------- */
+.topbar {
+    background-color: var(--white);
+    border-bottom: 1px solid var(--gray-200);
+    /* Tri-color brand stripe (logo blue / red / amber) along the top */
+    border-top: 3px solid transparent;
+    border-image: linear-gradient(90deg,
+        var(--brand-blue) 0%, var(--brand-blue) 40%,
+        var(--brand-red) 40%, var(--brand-red) 75%,
+        var(--brand-amber) 75%, var(--brand-amber) 100%) 1;
+    padding: 0 var(--space-6);
+    height: var(--header-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    position: sticky;
+    top: 0;
+    z-index: var(--z-header);
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.topbar-toggle {
+    padding: var(--space-2);
+    color: var(--gray-600);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.topbar-toggle:hover {
+    background-color: var(--gray-100);
+    color: var(--gray-800);
+}
+
+.topbar-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+/* Notification bell */
+.topbar-icon-btn {
+    position: relative;
+    padding: var(--space-2);
+    color: var(--gray-600);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.topbar-icon-btn:hover {
+    background-color: var(--gray-100);
+    color: var(--gray-800);
+}
+
+.topbar-icon-btn .notification-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--brand-red);
+    border-radius: 50%;
+    border: 2px solid var(--white);
+}
+
+/* ---------------------------------------
+   Content area (holds page-specific stuff)
+   --------------------------------------- */
+.page-content {
+    flex: 1;
+    padding: var(--space-6);
+    max-width: var(--container-max);
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Page header with title + primary action */
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-6);
+}
+
+.page-header-info h1 {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--brand-blue);
+    margin: 0;
+    position: relative;
+    display: inline-block;
+    padding-bottom: var(--space-2);
+}
+
+/* Short amber underline echoing the sun in the logo */
+.page-header-info h1::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 42px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--brand-amber), var(--brand-red));
+}
+
+.page-header-info p {
+    font-size: var(--text-sm);
+    color: var(--gray-500);
+    margin-top: var(--space-1);
+}
+
+/* Breadcrumbs above title */
+.breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--gray-500);
+    margin-bottom: var(--space-2);
+}
+
+.breadcrumbs a {
+    color: var(--gray-500);
+    transition: color var(--transition-fast);
+}
+
+.breadcrumbs a:hover {
+    color: var(--brand-blue);
+}
+
+.breadcrumbs-separator {
+    color: var(--gray-300);
+}
+
+/* ================================================================
+   RESPONSIVE - Mobile sidebar collapses
+   ================================================================ */
+
+/* ================================================================
+   MOBILE SIDEBAR OVERLAY - hidden by default on ALL screen sizes.
+   Without this global rule the empty overlay div would join the
+   desktop grid as an extra item and push the content area below
+   the sidebar. It only becomes visible on mobile when the
+   .sidebar-open class is applied.
+   ================================================================ */
+.sidebar-overlay {
+    display: none;
+}
+
+@media (max-width: 1024px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: var(--sidebar-width);
+        transform: translateX(-100%);
+        transition: transform var(--transition-base);
+        box-shadow: var(--shadow-xl);
+    }
+
+    .app-shell.sidebar-open .sidebar {
+        transform: translateX(0);
+    }
+
+    /* Overlay behind sidebar on mobile when open */
+    .sidebar-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: calc(var(--z-sidebar) - 1);
+    }
+
+    .app-shell.sidebar-open .sidebar-overlay {
+        display: block;
+    }
+}
+
+@media (max-width: 640px) {
+    .page-content {
+        padding: var(--space-4);
+    }
+
+    .topbar {
+        padding: 0 var(--space-4);
+    }
+}

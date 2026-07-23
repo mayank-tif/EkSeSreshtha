@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Center Attendance - Ek Se Sreshtha</title>
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets: tokens -> base -> components -> layout -> page -->
+    <link rel="stylesheet" href="../../css/variables.css">
+    <link rel="stylesheet" href="../../css/base.css">
+    <link rel="stylesheet" href="../../css/components.css">
+    <link rel="stylesheet" href="../../css/layout.css">
+    <link rel="stylesheet" href="../../css/attendance.css">
+</head>
+<body>
+
+    <!-- ============================================================
+         APP SHELL
+         ============================================================ -->
+    <div id="app-shell">
+
+        <!-- ============================================================
+             PAGE HEADER
+             ============================================================ -->
+        <div class="page-header">
+            <div class="page-header-info">
+                <h1>Center Attendance</h1>
+                <p>Attendance is captured on the teacher's mobile app.
+                   Click any centre row to view its full attendance record.</p>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             TOP ROW: SEARCH (left) + LOCATION FILTERS (right) + COUNT
+             District -> Vidhan Sabha -> Panchayat -> Village cascade.
+             ============================================================ -->
+        <div class="card filter-card">
+            <div class="card-body">
+                <div class="toolbar-row">
+                    <!-- Left: free-text search -->
+                    <div class="toolbar-search">
+                        <svg class="toolbar-search-icon" width="16" height="16" viewBox="0 0 24 24"
+                             fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                        </svg>
+                        <input type="text" class="form-input" id="centre-search"
+                               placeholder="Search centre / teacher / admin..."
+                               oninput="renderCentreTable()">
+                    </div>
+
+                    <!-- Right: cascading location filters + live count -->
+                    <div class="toolbar-filters">
+                        <select class="form-select" id="filter-district" title="District"></select>
+                        <select class="form-select" id="filter-vs" title="Vidhan Sabha"></select>
+                        <select class="form-select" id="filter-panchayat" title="Panchayat"></select>
+                        <select class="form-select" id="filter-village" title="Village"></select>
+                        <span class="count-badge" id="centre-count">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             CENTRES TABLE
+             One row per centre. The centre cell also shows the
+             location chain District > VS > Panchayat > Village.
+             Clicking a row opens the 4-tab detail page.
+             ============================================================ -->
+        <div class="card">
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table class="table centre-table">
+                        <thead>
+                            <tr>
+                                <th>Center Name</th>
+                                <th>Assigned Teacher</th>
+                                <th>Assigned Regional Admin</th>
+                                <th style="width:130px;">Total Students</th>
+                                <th style="width:190px;">Avg Attendance</th>
+                                <th style="width:90px;">View</th>
+                            </tr>
+                        </thead>
+                        <tbody id="centre-table-body">
+                            <!-- Rows injected by center-attendance.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================================
+         SCRIPTS
+         ============================================================ -->
+    <script src="../../js/common.js"></script>
+    <script src="../../js/sidebar.js"></script>
+    <script src="../../js/location-filter.js"></script>
+    <script src="../../js/center-attendance.js"></script>
+</body>
+</html>

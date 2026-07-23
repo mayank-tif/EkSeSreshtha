@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Ek Se Sreshtha</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Global styles -->
+    <link rel="stylesheet" href="../css/variables.css">
+    <link rel="stylesheet" href="../css/base.css">
+    <link rel="stylesheet" href="../css/components.css">
+    <link rel="stylesheet" href="../css/layout.css">
+
+    <!-- Dashboard-specific styles -->
+    <link rel="stylesheet" href="../css/dashboard.css">
+</head>
+<body>
+
+    <!-- ============================================================
+         APP SHELL
+         The sidebar.js script will inject the sidebar and topbar
+         around whatever content lives inside this div.
+         ============================================================ -->
+    <div id="app-shell">
+
+        <!-- =====================================================
+             STATS OVERVIEW - Top-line KPIs
+             ===================================================== -->
+        <section class="dashboard-stats">
+            <!-- Stat card - Total Centres -->
+            <div class="stat-card">
+                <div class="stat-card-icon" style="background: var(--info-light); color: var(--brand-blue);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>
+                </div>
+                <div class="stat-card-info">
+                    <div class="stat-card-label">Educational Centres</div>
+                    <div class="stat-card-value" id="stat-centres">0</div>
+                    <div class="stat-card-trend positive">+3 this month</div>
+                </div>
+            </div>
+
+            <!-- Stat card - Total Students -->
+            <div class="stat-card">
+                <div class="stat-card-icon" style="background: #ede9fe; color: #7c3aed;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                </div>
+                <div class="stat-card-info">
+                    <div class="stat-card-label">Enrolled Students</div>
+                    <div class="stat-card-value" id="stat-students">0</div>
+                    <div class="stat-card-trend positive">+128 this month</div>
+                </div>
+            </div>
+
+            <!-- Stat card - Teachers -->
+            <div class="stat-card">
+                <div class="stat-card-icon" style="background: var(--success-light); color: var(--success);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                </div>
+                <div class="stat-card-info">
+                    <div class="stat-card-label">Active Teachers</div>
+                    <div class="stat-card-value" id="stat-teachers">0</div>
+                    <div class="stat-card-trend positive">+2 this month</div>
+                </div>
+            </div>
+
+            <!-- Stat card - Districts -->
+            <div class="stat-card">
+                <div class="stat-card-icon" style="background: var(--brand-red-light); color: var(--brand-red);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                </div>
+                <div class="stat-card-info">
+                    <div class="stat-card-label">Districts Covered</div>
+                    <div class="stat-card-value" id="stat-districts">0</div>
+                    <div class="stat-card-trend neutral">Across state</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =====================================================
+             MAIN CONTENT GRID
+             Left: attendance chart. Right: recent activity feed.
+             ===================================================== -->
+        <section class="dashboard-grid">
+
+            <!-- Attendance overview panel -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Attendance Overview</h2>
+                        <p class="card-subtitle">Average daily attendance across all centres</p>
+                    </div>
+                    <select class="form-select" style="max-width: 140px;">
+                        <option>Last 7 days</option>
+                        <option>Last 30 days</option>
+                        <option>This year</option>
+                    </select>
+                </div>
+                <div class="card-body">
+                    <!-- Simple SVG bar chart. Rendered by dashboard.js -->
+                    <div id="attendance-chart" class="attendance-chart"></div>
+                </div>
+            </div>
+
+            <!-- Recent activity -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Recent Activity</h2>
+                        <p class="card-subtitle">Latest actions across the platform</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="activity-feed" class="activity-feed">
+                        <!-- Rendered by dashboard.js -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =====================================================
+             QUICK LINKS - Fast access to main modules
+             ===================================================== -->
+        <section class="quick-links">
+            <h2 class="section-heading">Quick Actions</h2>
+            <div class="quick-links-grid">
+                <a href="students/student-registration.html" class="quick-link-card">
+                    <div class="quick-link-icon">➕</div>
+                    <div class="quick-link-label">Register Student</div>
+                </a>
+                <a href="centres/educational-centre.html" class="quick-link-card">
+                    <div class="quick-link-icon">🏫</div>
+                    <div class="quick-link-label">Add Centre</div>
+                </a>
+                <a href="users/teacher.html" class="quick-link-card">
+                    <div class="quick-link-icon">👨‍🏫</div>
+                    <div class="quick-link-label">Add Teacher</div>
+                </a>
+                <a href="attendance/center-attendance.html" class="quick-link-card">
+                    <div class="quick-link-icon">📊</div>
+                    <div class="quick-link-label">View Attendance</div>
+                </a>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="../js/common.js"></script>
+    <script src="../js/sidebar.js"></script>
+    <script src="../js/dashboard.js"></script>
+</body>
+</html>

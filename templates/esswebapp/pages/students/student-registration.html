@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Registration - Ek Se Sreshtha</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="../../css/variables.css">
+    <link rel="stylesheet" href="../../css/base.css">
+    <link rel="stylesheet" href="../../css/components.css">
+    <link rel="stylesheet" href="../../css/layout.css">
+    <link rel="stylesheet" href="../../css/students.css">
+</head>
+<body>
+
+    <div id="app-shell">
+
+        <div class="page-header">
+            <div class="page-header-info">
+                <h1>Student Registration</h1>
+                <p>Enroll new students into an educational centre.</p>
+            </div>
+            <a href="student-list.html" class="btn btn-secondary">
+                &larr; All Students
+            </a>
+        </div>
+
+        <!-- ============================================================
+             REGISTRATION FORM CARD
+             All student fields organized in logical sections.
+             ============================================================ -->
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title" id="student-form-title">Register Student</h2>
+                    <p class="card-subtitle">All fields marked with an asterisk are required.</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="student-form">
+
+                    <!-- ==================================================
+                         SECTION: Student photo upload
+                         ================================================== -->
+                    <div class="avatar-upload">
+                        <div class="avatar-upload-preview" id="student-image-preview">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        </div>
+                        <div class="avatar-upload-info">
+                            <h4>Student photo</h4>
+                            <p>Used on their ID card. PNG or JPG, up to 2 MB.</p>
+                            <label for="student-image" class="avatar-upload-btn">Choose file</label>
+                            <input type="file" id="student-image" accept="image/png,image/jpeg">
+                        </div>
+                    </div>
+
+                    <!-- ==================================================
+                         SECTION: Basic identity
+                         ================================================== -->
+                    <h3 class="section-title">Identity</h3>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-roll">Roll number <span class="required">*</span></label>
+                            <input type="text" id="student-roll" class="form-input" placeholder="e.g. 10850" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-name">Full name <span class="required">*</span></label>
+                            <input type="text" id="student-name" class="form-input" placeholder="e.g. Aarav Kumar" required>
+                        </div>
+                    </div>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-age">Age <span class="required">*</span></label>
+                            <input type="number" id="student-age" class="form-input" placeholder="e.g. 8" min="3" max="18" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-gender">Gender</label>
+                            <select id="student-gender" class="form-select">
+                                <option value="">Select gender</option>
+                                <option>Male</option>
+                                <option>Female</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-dob">Date of birth</label>
+                            <input type="date" id="student-dob" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-joining">Joining date <span class="required">*</span></label>
+                            <input type="date" id="student-joining" class="form-input" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="student-class">Active class <span class="required">*</span></label>
+                        <select id="student-class" class="form-select" required>
+                            <option value="">Select class</option>
+                            <option>Nursery</option>
+                            <option>LKG</option>
+                            <option>UKG</option>
+                            <option>Class 1</option>
+                            <option>Class 2</option>
+                            <option>Class 3</option>
+                            <option>Class 4</option>
+                            <option>Class 5</option>
+                            <option>Class 6</option>
+                            <option>Class 7</option>
+                            <option>Class 8</option>
+                        </select>
+                    </div>
+
+                    <!-- ==================================================
+                         SECTION: Family details
+                         ================================================== -->
+                    <h3 class="section-title">Family</h3>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-father">Father's name</label>
+                            <input type="text" id="student-father" class="form-input" placeholder="e.g. Suresh Kumar">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-mother">Mother's name</label>
+                            <input type="text" id="student-mother" class="form-input" placeholder="e.g. Sunita Devi">
+                        </div>
+                    </div>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-father-mobile">Father's mobile</label>
+                            <input type="tel" id="student-father-mobile" class="form-input" placeholder="10-digit number">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-mother-mobile">Mother's mobile</label>
+                            <input type="tel" id="student-mother-mobile" class="form-input" placeholder="10-digit number">
+                        </div>
+                    </div>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-father-occ">Father's occupation</label>
+                            <input type="text" id="student-father-occ" class="form-input" placeholder="e.g. Farmer">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-mother-occ">Mother's occupation</label>
+                            <input type="text" id="student-mother-occ" class="form-input" placeholder="e.g. Homemaker">
+                        </div>
+                    </div>
+
+                    <!-- ==================================================
+                         SECTION: Contact
+                         ================================================== -->
+                    <h3 class="section-title">Contact</h3>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-contact">Contact number <span class="required">*</span></label>
+                            <input type="tel" id="student-contact" class="form-input" placeholder="10-digit number" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-whatsapp">WhatsApp number</label>
+                            <input type="tel" id="student-whatsapp" class="form-input" placeholder="If different from contact">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="student-address">Address</label>
+                        <textarea id="student-address" class="form-textarea" placeholder="Full residential address"></textarea>
+                    </div>
+
+                    <!-- ==================================================
+                         SECTION: Categorization
+                         ================================================== -->
+                    <h3 class="section-title">Categorization</h3>
+
+                    <div class="form-grid-2">
+                        <div class="form-group">
+                            <label class="form-label" for="student-category">Category <span class="required">*</span></label>
+                            <select id="student-category" class="form-select" required>
+                                <option value="">Select category</option>
+                                <option>General</option>
+                                <option>OBC</option>
+                                <option>SC</option>
+                                <option>ST</option>
+                                <option>EWS</option>
+                                <option>Others</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-bpl">BPL card holder?</label>
+                            <select id="student-bpl" class="form-select">
+                                <option value="">Select</option>
+                                <option>Yes</option>
+                                <option>No</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- ==================================================
+                         SECTION: School enrollment
+                         ================================================== -->
+                    <h3 class="section-title">School enrollment</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="student-school">Select school</label>
+                        <select id="student-school" class="form-select">
+                            <option value="">Select school</option>
+                        </select>
+                        <span class="form-hint">Which government/private school does the student officially attend?</span>
+                    </div>
+
+                    <!-- ==================================================
+                         SECTION: Centre assignment
+                         ================================================== -->
+                    <h3 class="section-title">Educational Centre</h3>
+
+                    <div class="form-group">
+                        <label class="form-label" for="student-centre">Assign educational centre <span class="required">*</span></label>
+                        <!-- Custom searchable dropdown -->
+                        <div class="searchable-select" id="centre-searchable">
+                            <input
+                                type="text"
+                                class="form-input"
+                                id="centre-search-input"
+                                placeholder="Search and select a centre..."
+                                autocomplete="off"
+                                readonly
+                                onclick="toggleCentreDropdown()"
+                            >
+                            <div class="searchable-select-dropdown" id="centre-dropdown" hidden>
+                                <input
+                                    type="text"
+                                    class="searchable-select-search"
+                                    id="centre-filter"
+                                    placeholder="Search centres..."
+                                    oninput="filterCentres()"
+                                >
+                                <div class="searchable-select-options" id="centre-options">
+                                    <!-- Populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="student-centre" required>
+                    </div>
+
+                    <!-- Selected centre information panel (hidden until a centre is picked) -->
+                    <div class="centre-info-panel" id="centre-info-panel" hidden>
+                        <h4>Selected Centre Details</h4>
+                        <div class="centre-info-grid" id="centre-info-grid"></div>
+                    </div>
+
+                    <input type="hidden" id="student-editing-id">
+                    <input type="hidden" id="student-image-data">
+
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" onclick="resetStudentForm()">Reset</button>
+                        <button type="submit" class="btn btn-primary">Save Student</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../js/common.js"></script>
+    <script src="../../js/sidebar.js"></script>
+    <script src="../../js/student-registration.js"></script>
+</body>
+</html>

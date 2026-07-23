@@ -1,0 +1,308 @@
+/* ================================================================
+   EK SE SRESHTHA - LOGIN PAGE STYLES
+   ----------------------------------------------------------------
+   Two-column split screen layout. Brand imagery on the left,
+   authentication form on the right. Collapses to single column
+   on mobile devices.
+   ================================================================ */
+
+/* ================================================================
+   PAGE CONTAINER
+   Fills the entire viewport with a two-column grid.
+   ================================================================ */
+
+.login-page {
+    display: grid;
+    grid-template-columns: 5fr 6fr;
+    min-height: 100vh;
+    background-color: var(--white);
+}
+
+/* ================================================================
+   LEFT PANEL - Brand & visual identity
+   Deep navy background with the logo and tagline.
+   ================================================================ */
+
+.login-brand-panel {
+    background: linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-blue-dark) 100%);
+    padding: var(--space-12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Subtle decorative circles in background for depth */
+.login-brand-panel::before,
+.login-brand-panel::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    pointer-events: none;
+}
+
+.login-brand-panel::before {
+    width: 400px;
+    height: 400px;
+    top: -100px;
+    left: -100px;
+    /* Amber glow referencing the sun in the logo */
+    background: radial-gradient(circle, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.02) 70%);
+}
+
+.login-brand-panel::after {
+    width: 300px;
+    height: 300px;
+    bottom: -80px;
+    right: -80px;
+}
+
+.login-brand-content {
+    max-width: 460px;
+    color: var(--white);
+    position: relative;
+    z-index: 1;
+    text-align: left;
+}
+
+/* Logo image displayed on white pill background for contrast */
+.login-brand-logo {
+    background-color: var(--white);
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-8);
+    max-width: 260px;
+    box-shadow: var(--shadow-lg);
+}
+
+/* Marketing message */
+.login-brand-message h2 {
+    color: var(--white);
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: var(--space-4);
+}
+
+.login-brand-message p {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    margin-bottom: var(--space-8);
+}
+
+/* Stats row at the bottom of the brand panel */
+.login-brand-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+    padding-top: var(--space-6);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.stat-number {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.1;
+}
+
+.stat-label {
+    font-size: var(--text-xs);
+    color: rgba(255, 255, 255, 0.7);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: var(--space-1);
+}
+
+/* ================================================================
+   RIGHT PANEL - Login form
+   ================================================================ */
+
+.login-form-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-8);
+    /* Soft warm wash echoing the sidebar treatment, plus a
+       tri-color brand stripe along the top edge */
+    background:
+        radial-gradient(700px 300px at 90% 0%, rgba(245, 158, 11, 0.07), transparent 60%),
+        linear-gradient(180deg, #f6f9ff 0%, var(--white) 40%);
+    border-top: 4px solid transparent;
+    border-image: linear-gradient(90deg,
+        var(--brand-blue) 0%, var(--brand-blue) 40%,
+        var(--brand-red) 40%, var(--brand-red) 75%,
+        var(--brand-amber) 75%, var(--brand-amber) 100%) 1;
+}
+
+.login-form-wrap {
+    width: 100%;
+    max-width: 420px;
+}
+
+/* ---------------------------------------
+   Header block above the form
+   --------------------------------------- */
+.login-header {
+    margin-bottom: var(--space-8);
+}
+
+.login-header h1 {
+    font-size: var(--text-3xl);
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: var(--space-2);
+}
+
+.login-header p {
+    color: var(--gray-500);
+    font-size: var(--text-base);
+}
+
+/* ---------------------------------------
+   Form itself
+   --------------------------------------- */
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+/* Row above password field with label + forgot link */
+.login-password-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.login-forgot {
+    font-size: var(--text-xs);
+    color: var(--brand-blue);
+    font-weight: 500;
+}
+
+/* Password field with toggle icon */
+.login-password-wrap {
+    position: relative;
+}
+
+.login-password-wrap .form-input {
+    padding-right: var(--space-10);
+}
+
+.login-password-toggle {
+    position: absolute;
+    right: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+}
+
+.login-password-toggle:hover {
+    color: var(--gray-600);
+}
+
+/* Remember-me checkbox row */
+.login-remember {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+    color: var(--gray-600);
+    cursor: pointer;
+    user-select: none;
+}
+
+.login-remember input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--brand-blue);
+    cursor: pointer;
+}
+
+/* Error message box - hidden until validation fails */
+.login-error-box {
+    background-color: var(--danger-light);
+    color: var(--brand-red-dark);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    border-left: 3px solid var(--danger);
+}
+
+/* Submit button - full width */
+.login-submit {
+    width: 100%;
+    justify-content: center;
+    margin-top: var(--space-2);
+}
+
+/* Demo credentials hint box */
+.login-demo-hint {
+    background-color: var(--gray-50);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    font-size: var(--text-xs);
+    color: var(--gray-600);
+    border: 1px dashed var(--gray-300);
+    text-align: center;
+}
+
+.login-demo-hint strong {
+    color: var(--gray-800);
+    display: block;
+    margin-bottom: 2px;
+}
+
+/* Footer at bottom of login form */
+.login-footer {
+    margin-top: var(--space-8);
+    text-align: center;
+    font-size: var(--text-xs);
+    color: var(--gray-400);
+}
+
+/* ================================================================
+   RESPONSIVE
+   Below 900px, stack the panels vertically.
+   ================================================================ */
+
+@media (max-width: 900px) {
+    .login-page {
+        grid-template-columns: 1fr;
+    }
+
+    .login-brand-panel {
+        min-height: 260px;
+        padding: var(--space-6);
+    }
+
+    .login-brand-message h2 {
+        font-size: var(--text-2xl);
+    }
+
+    .login-brand-message p,
+    .login-brand-stats {
+        display: none;
+    }
+
+    .login-brand-logo {
+        max-width: 200px;
+        margin-bottom: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .login-form-panel {
+        padding: var(--space-6) var(--space-4);
+    }
+
+    .login-header h1 {
+        font-size: var(--text-2xl);
+    }
+}

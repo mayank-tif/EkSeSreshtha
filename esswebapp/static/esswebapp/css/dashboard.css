@@ -1,0 +1,290 @@
+/* ================================================================
+   EK SE SRESHTHA - DASHBOARD PAGE STYLES
+   ----------------------------------------------------------------
+   The dashboard is the landing page after login.
+   Layout: stat cards row, then a two-column grid of chart +
+   activity feed, then a quick actions row.
+   ================================================================ */
+
+/* ================================================================
+   STATS ROW
+   Four cards showing top-line KPIs.
+   ================================================================ */
+
+.dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-5);
+    margin-bottom: var(--space-6);
+}
+
+/* Individual stat card - each carries a colored top accent bar
+   drawn from the brand palette (blue / red / amber / green). */
+.stat-card {
+    background-color: var(--white);
+    border: 1px solid rgba(30, 58, 138, 0.1);
+    border-top: 4px solid var(--brand-blue);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    box-shadow: 0 1px 3px rgba(30, 58, 138, 0.06), 0 4px 14px rgba(30, 58, 138, 0.05);
+    transition: all var(--transition-fast);
+}
+
+/* Rotate accent colors card-by-card for a lively KPI row */
+.stat-card:nth-child(2) { border-top-color: var(--brand-red); }
+.stat-card:nth-child(3) { border-top-color: var(--brand-amber); }
+.stat-card:nth-child(4) { border-top-color: var(--success); }
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Icon container - colored based on stat type */
+.stat-card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.stat-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.stat-card-label {
+    font-size: var(--text-xs);
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+    margin-bottom: var(--space-1);
+}
+
+.stat-card-value {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--gray-900);
+    line-height: 1.1;
+    margin-bottom: var(--space-2);
+}
+
+/* Trend indicator (positive/negative/neutral) */
+.stat-card-trend {
+    font-size: var(--text-xs);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-weight: 500;
+}
+
+.stat-card-trend.positive {
+    color: var(--success);
+}
+
+.stat-card-trend.negative {
+    color: var(--danger);
+}
+
+.stat-card-trend.neutral {
+    color: var(--gray-500);
+}
+
+/* ================================================================
+   MAIN CONTENT GRID
+   Chart on left (2/3 width), activity feed on right (1/3).
+   ================================================================ */
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: var(--space-6);
+    margin-bottom: var(--space-6);
+}
+
+@media (max-width: 900px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ================================================================
+   ATTENDANCE CHART
+   Simple pure-CSS/SVG bar chart. Bars scale via percentage height.
+   ================================================================ */
+
+.attendance-chart {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-2);
+    height: 240px;
+    padding: var(--space-4) 0;
+}
+
+.chart-bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.chart-bar {
+    width: 100%;
+    max-width: 40px;
+    background: linear-gradient(to top, var(--brand-blue), var(--brand-blue-light));
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    transition: all var(--transition-base);
+    position: relative;
+    cursor: pointer;
+    min-height: 4px;
+}
+
+.chart-bar:hover {
+    filter: brightness(1.1);
+}
+
+/* Tooltip that shows on bar hover */
+.chart-bar-value {
+    position: absolute;
+    top: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--gray-900);
+    color: var(--white);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    pointer-events: none;
+}
+
+.chart-bar:hover .chart-bar-value {
+    opacity: 1;
+}
+
+.chart-bar-label {
+    font-size: var(--text-xs);
+    color: var(--gray-500);
+    font-weight: 500;
+}
+
+/* ================================================================
+   ACTIVITY FEED
+   Vertical list of recent events with timestamp.
+   ================================================================ */
+
+.activity-feed {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.activity-item {
+    display: flex;
+    gap: var(--space-3);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--gray-100);
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+/* Dot marker on the left */
+.activity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--brand-blue);
+    margin-top: 6px;
+    flex-shrink: 0;
+}
+
+.activity-dot.success { background-color: var(--success); }
+.activity-dot.warning { background-color: var(--warning); }
+.activity-dot.danger { background-color: var(--danger); }
+
+.activity-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-text {
+    font-size: var(--text-sm);
+    color: var(--gray-700);
+    line-height: 1.4;
+}
+
+.activity-text strong {
+    color: var(--gray-900);
+    font-weight: 600;
+}
+
+.activity-time {
+    font-size: var(--text-xs);
+    color: var(--gray-400);
+    margin-top: var(--space-1);
+}
+
+/* ================================================================
+   QUICK LINKS SECTION
+   ================================================================ */
+
+.section-heading {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: var(--space-4);
+}
+
+.quick-links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-4);
+}
+
+.quick-link-card {
+    background-color: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--space-3);
+    transition: all var(--transition-fast);
+    color: var(--gray-700);
+    text-decoration: none;
+}
+
+.quick-link-card:hover {
+    border-color: var(--brand-blue);
+    background-color: var(--info-light);
+    color: var(--brand-blue);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.quick-link-icon {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.quick-link-label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+}

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centre Detail - Ek Se Sreshtha</title>
+
+    <!-- Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets: tokens -> base -> components -> layout -> page -->
+    <link rel="stylesheet" href="../../css/variables.css">
+    <link rel="stylesheet" href="../../css/base.css">
+    <link rel="stylesheet" href="../../css/components.css">
+    <link rel="stylesheet" href="../../css/layout.css">
+    <link rel="stylesheet" href="../../css/attendance.css">
+</head>
+<body>
+
+    <!-- ============================================================
+         APP SHELL
+         ============================================================ -->
+    <div id="app-shell">
+
+        <!-- ============================================================
+             CENTRE HERO BANNER
+             Shows the centre name, location, and a back link.
+             Filled in by center-detail.js.
+             ============================================================ -->
+        <div class="detail-hero" id="detail-hero">
+            <div class="detail-hero-icon">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 21h18M4 21V10l8-6 8 6v11M9 21v-6h6v6"/>
+                </svg>
+            </div>
+            <div class="detail-hero-info">
+                <h2 id="detail-hero-title">Loading...</h2>
+                <p id="detail-hero-subtitle"></p>
+            </div>
+            <a class="detail-hero-back" href="center-attendance.html">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+                All Centres
+            </a>
+        </div>
+
+        <!-- ============================================================
+             TAB BAR
+             Four tabs. Content panels below are toggled by JS.
+             ============================================================ -->
+        <div class="tabs" role="tablist">
+            <button class="tab active" data-tab="info" onclick="switchTab('info')">
+                Centre Info
+            </button>
+            <button class="tab" data-tab="staff" onclick="switchTab('staff')">
+                Staff
+            </button>
+            <button class="tab" data-tab="students" onclick="switchTab('students')">
+                Students
+            </button>
+            <button class="tab" data-tab="analytics" onclick="switchTab('analytics')">
+                Analytics
+            </button>
+        </div>
+
+        <!-- ============================================================
+             TAB 1 - CENTRE INFO
+             Displays every field of the centre.
+             ============================================================ -->
+        <div class="tab-content active tab-panel" id="tab-info">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Centre Information</h2>
+                        <p class="card-subtitle">Details about this educational centre.</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="info-grid" id="info-grid"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             TAB 2 - STAFF (Teacher + Regional Admin cards)
+             ============================================================ -->
+        <div class="tab-content tab-panel" id="tab-staff">
+            <div class="staff-grid" id="staff-grid"></div>
+        </div>
+
+        <!-- ============================================================
+             TAB 3 - STUDENTS
+             Search bar + table of assigned students.
+             ============================================================ -->
+        <div class="tab-content tab-panel" id="tab-students">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Students Enrolled</h2>
+                        <p class="card-subtitle">
+                            <span class="record-count" id="student-count">0 students</span>
+                        </p>
+                    </div>
+                    <div class="search-bar">
+                        <input type="text" class="form-input" id="student-search"
+                               placeholder="Search students..." oninput="renderStudentTable()">
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="table-wrapper">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width:120px;">Roll No</th>
+                                    <th>Name</th>
+                                    <th style="width:180px;">Avg Attendance</th>
+                                    <th style="width:130px;">Joining Date</th>
+                                    <th style="width:130px;">Status</th>
+                                    <th style="width:160px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="student-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             TAB 4 - ANALYTICS
+             View mode toggle + date filter + CSS bar chart.
+             ============================================================ -->
+        <div class="tab-content tab-panel" id="tab-analytics">
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">Attendance Analytics</h2>
+                        <p class="card-subtitle">Track attendance trends for this centre over time.</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Filter row -->
+                    <div class="analytics-toolbar">
+                        <div class="form-group">
+                            <label class="form-label" for="analytics-mode">View</label>
+                            <select id="analytics-mode" class="form-select" onchange="renderAnalytics()">
+                                <option value="day">Day-wise</option>
+                                <option value="month">Month-wise</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="analytics-date-group">
+                            <label class="form-label" for="analytics-date">Reference Date</label>
+                            <input type="date" id="analytics-date" class="form-input"
+                                   onchange="renderAnalytics()">
+                        </div>
+                    </div>
+
+                    <!-- Chart -->
+                    <div class="analytics-chart">
+                        <div class="analytics-chart-title" id="analytics-chart-title">
+                            Attendance Trend
+                        </div>
+                        <div class="analytics-chart-subtitle" id="analytics-chart-subtitle">
+                            Loading...
+                        </div>
+                        <div class="analytics-bars" id="analytics-bars"></div>
+                        <div class="analytics-labels" id="analytics-labels"></div>
+                        <div class="analytics-legend">
+                            <div class="analytics-legend-item">
+                                <span class="analytics-legend-swatch"></span>
+                                Attendance %
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================================
+         STUDENT ATTENDANCE MODAL (day-wise / month-wise)
+         Reached via the calendar icon on a student row.
+         ============================================================ -->
+    <div class="modal-backdrop" id="attendance-modal" onclick="closeAttendanceModal(event)">
+        <div class="modal modal-lg" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div>
+                    <h3 class="modal-title" id="attendance-modal-title">Attendance</h3>
+                    <p class="card-subtitle" id="attendance-modal-subtitle"></p>
+                </div>
+                <button type="button" class="modal-close" onclick="closeAttendanceModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+
+                <!-- Filter toolbar -->
+                <div class="attendance-toolbar">
+                    <div class="form-group">
+                        <label class="form-label" for="att-mode">View Attendance</label>
+                        <select id="att-mode" class="form-select" onchange="renderAttendanceData()">
+                            <option value="day">Day-wise</option>
+                            <option value="month">Month-wise</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="att-month-group">
+                        <label class="form-label" for="att-month">Month</label>
+                        <input type="month" id="att-month" class="form-input" onchange="renderAttendanceData()">
+                    </div>
+                </div>
+
+                <!-- Summary tiles: Present / Absent / % -->
+                <div class="attendance-summary" id="att-summary"></div>
+
+                <!-- Day/Month table -->
+                <div class="table-wrapper">
+                    <table class="table attendance-day-table">
+                        <thead>
+                            <tr>
+                                <th id="att-col-1">Date</th>
+                                <th id="att-col-2">Attendance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="att-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeAttendanceModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         STUDENT DETAIL MODAL (eye icon)
+         Rich popup with all info + View / Download ID Card buttons.
+         ============================================================ -->
+    <div class="modal-backdrop" id="student-modal" onclick="closeStudentModal(event)">
+        <div class="modal modal-lg" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 class="modal-title">Student Profile</h3>
+                <button type="button" class="modal-close" onclick="closeStudentModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="student-modal-body">
+                <!-- Content injected by openStudentModal() -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeStudentModal()">Close</button>
+                <button type="button" class="btn btn-secondary" onclick="openIdCardModal()">View ID Card</button>
+                <button type="button" class="btn btn-primary" onclick="downloadIdCard()">Download ID Card</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         ID CARD MODAL
+         Shows the printable credential card in full size.
+         ============================================================ -->
+    <div class="modal-backdrop" id="idcard-modal" onclick="closeIdCardModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 class="modal-title">Student ID Card</h3>
+                <button type="button" class="modal-close" onclick="closeIdCardModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="id-card-wrap" id="idcard-wrap"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeIdCardModal()">Close</button>
+                <button type="button" class="btn btn-primary" onclick="downloadIdCard()">Download</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         SCRIPTS
+         ============================================================ -->
+    <script src="../../js/common.js"></script>
+    <script src="../../js/sidebar.js"></script>
+    <script src="../../js/center-detail.js"></script>
+</body>
+</html>

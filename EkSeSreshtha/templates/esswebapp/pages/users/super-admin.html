@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Admin - Ek Se Sreshtha</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="../../css/variables.css">
+    <link rel="stylesheet" href="../../css/base.css">
+    <link rel="stylesheet" href="../../css/components.css">
+    <link rel="stylesheet" href="../../css/layout.css">
+    <link rel="stylesheet" href="../../css/users.css">
+</head>
+<body>
+
+    <div id="app-shell">
+
+        <!-- Page header -->
+        <div class="page-header">
+            <div class="page-header-info">
+                <h1>Super Admin</h1>
+                <p>Users with unrestricted access to the entire platform.</p>
+            </div>
+        </div>
+
+        <!-- Two-column layout: registration form + existing users list -->
+        <div class="users-layout">
+
+            <!-- ==================================================
+                 LEFT: REGISTRATION FORM CARD
+                 ================================================== -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title" id="sa-form-title">Register Super Admin</h2>
+                        <p class="card-subtitle">Fill in the details to create a new Super Admin account.</p>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form id="sa-form">
+
+                        <!-- ==========================================
+                             SECTION: Profile image upload
+                             ========================================== -->
+                        <div class="avatar-upload">
+                            <div class="avatar-upload-preview" id="sa-image-preview">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            <div class="avatar-upload-info">
+                                <h4>Profile photo</h4>
+                                <p>PNG or JPG, up to 2 MB.</p>
+                                <label for="sa-image" class="avatar-upload-btn">Choose file</label>
+                                <input type="file" id="sa-image" accept="image/png,image/jpeg">
+                            </div>
+                        </div>
+
+                        <!-- ==========================================
+                             SECTION: Personal information
+                             ========================================== -->
+                        <h3 class="section-title">Personal information</h3>
+
+                        <div class="form-group">
+                            <label class="form-label" for="sa-name">Full name <span class="required">*</span></label>
+                            <input type="text" id="sa-name" class="form-input" placeholder="e.g. Ravi Malhotra" required>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="sa-email">Email <span class="required">*</span></label>
+                                <input type="email" id="sa-email" class="form-input" placeholder="name@example.com" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="sa-age">Age</label>
+                                <input type="number" id="sa-age" class="form-input" placeholder="e.g. 34" min="18" max="99">
+                            </div>
+                        </div>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="sa-gender">Gender</label>
+                                <select id="sa-gender" class="form-select">
+                                    <option value="">Select gender</option>
+                                    <option>Male</option>
+                                    <option>Female</option>
+                                    <option>Other</option>
+                                    <option>Prefer not to say</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="sa-dob">Date of birth</label>
+                                <input type="date" id="sa-dob" class="form-input">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="sa-enrollment">Enrollment date</label>
+                            <input type="date" id="sa-enrollment" class="form-input">
+                        </div>
+
+                        <!-- ==========================================
+                             SECTION: Contact
+                             ========================================== -->
+                        <h3 class="section-title">Contact</h3>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="sa-phone">Phone number <span class="required">*</span></label>
+                                <input type="tel" id="sa-phone" class="form-input" placeholder="10-digit mobile number" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="sa-whatsapp">WhatsApp number</label>
+                                <input type="tel" id="sa-whatsapp" class="form-input" placeholder="If different from phone">
+                            </div>
+                        </div>
+
+                        <!-- ==========================================
+                             SECTION: Security
+                             ========================================== -->
+                        <h3 class="section-title">Security</h3>
+
+                        <div class="form-grid-2">
+                            <div class="form-group">
+                                <label class="form-label" for="sa-password">Password <span class="required">*</span></label>
+                                <input type="password" id="sa-password" class="form-input" placeholder="At least 8 characters" required minlength="8">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="sa-confirm-password">Confirm password <span class="required">*</span></label>
+                                <input type="password" id="sa-confirm-password" class="form-input" placeholder="Repeat the password" required minlength="8">
+                            </div>
+                        </div>
+
+                        <input type="hidden" id="sa-editing-id">
+                        <input type="hidden" id="sa-image-data">
+
+                        <!-- Actions -->
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="resetSuperAdminForm()">
+                                Reset
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                Save Super Admin
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ==================================================
+                 RIGHT: EXISTING SUPER ADMINS LIST
+                 ================================================== -->
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">All Super Admins</h2>
+                        <p class="card-subtitle">Registered accounts on the platform.</p>
+                    </div>
+                    <div class="search-bar">
+                        <input type="text" class="form-input" id="sa-search"
+                               placeholder="Search..." oninput="renderSuperAdminList()">
+                    </div>
+                </div>
+                <div class="card-body" style="padding: 0;">
+                    <div class="user-list" id="sa-list">
+                        <!-- Rendered by super-admin.js -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../../js/common.js"></script>
+    <script src="../../js/sidebar.js"></script>
+    <script src="../../js/super-admin.js"></script>
+</body>
+</html>

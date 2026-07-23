@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>School List - Ek Se Sreshtha</title>
+
+    <!-- Google Font: Inter (matches the rest of the app) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Stylesheets loaded in dependency order: tokens -> base -> components -> layout -> page -->
+    <link rel="stylesheet" href="../../css/variables.css">
+    <link rel="stylesheet" href="../../css/base.css">
+    <link rel="stylesheet" href="../../css/components.css">
+    <link rel="stylesheet" href="../../css/layout.css">
+    <link rel="stylesheet" href="../../css/students.css">
+</head>
+<body>
+
+    <!-- ============================================================
+         APP SHELL
+         Populated by sidebar.js with the shared sidebar and topbar.
+         ============================================================ -->
+    <div id="app-shell">
+
+        <!-- ============================================================
+             PAGE HEADER
+             ============================================================ -->
+        <div class="page-header">
+            <div class="page-header-info">
+                <h1>School List</h1>
+                <p>Maintain the master list of partner schools.</p>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             ADD SCHOOL CARD
+             Single input field with an Add button as requested.
+             ============================================================ -->
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title" id="school-form-title">Add School</h2>
+                    <p class="card-subtitle">Enter the school name and press Add.</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="school-form" class="school-add-form" autocomplete="off">
+                    <input type="hidden" id="school-editing-id">
+                    <div class="form-group school-add-input">
+                        <label class="form-label" for="school-name">School Name *</label>
+                        <input type="text" class="form-input" id="school-name" required
+                               placeholder="e.g. Government Primary School, Panipat">
+                    </div>
+                    <div class="school-add-actions">
+                        <button type="button" class="btn btn-secondary" id="school-cancel-btn"
+                                onclick="resetSchoolForm()" hidden>Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="school-submit-btn">Add School</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             SCHOOL TABLE CARD
+             Search bar + table listing every registered school.
+             ============================================================ -->
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">All Schools</h2>
+                    <p class="card-subtitle">
+                        <span class="record-count" id="school-count">0 schools</span>
+                    </p>
+                </div>
+                <div class="search-bar">
+                    <input type="text" class="form-input" id="school-search"
+                           placeholder="Search schools..." oninput="renderSchoolTable()">
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th style="width:60px;">#</th>
+                                <th>School Name</th>
+                                <th style="width:180px;">Added On</th>
+                                <th style="width:140px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="school-table-body">
+                            <!-- Rows injected by school-list.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================================
+         SCRIPTS
+         Load order: common utilities -> shell/sidebar -> page logic.
+         ============================================================ -->
+    <script src="../../js/common.js"></script>
+    <script src="../../js/sidebar.js"></script>
+    <script src="../../js/school-list.js"></script>
+</body>
+</html>
