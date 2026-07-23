@@ -335,6 +335,11 @@ class AllCenterStatusDtoSerializer(serializers.Serializer):
     teacherName = serializers.CharField(source="teacher_name", allow_null=True, required=False)
     assignedRegionalAdmin = serializers.IntegerField(source="assigned_regional_admin", allow_null=True, required=False)
     regionalAdminName = serializers.CharField(source="regional_admin_name", allow_null=True, required=False)
+    location_status = serializers.CharField(allow_null=True, required=False)
+    latitude = serializers.DecimalField(max_digits=100, decimal_places=7, required=False, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=100, decimal_places=7, required=False, allow_null=True)
+    location_verified_at = serializers.DateTimeField(allow_null=True, required=False)
+    location_verified_by = serializers.IntegerField(allow_null=True, required=False)
 
 
 class CenterSaveCenterRequestSerializer(RequestSerializer):

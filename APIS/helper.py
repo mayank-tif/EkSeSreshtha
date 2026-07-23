@@ -1,19 +1,18 @@
 from decimal import Decimal
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
+from django.utils import timezone
 from django.db.models import OuterRef, Subquery, Count
 from .models import *
 from django.db import IntegrityError, connection, transaction
 from .utils import *
 from rest_framework_simplejwt.tokens import AccessToken
-from datetime import timedelta
 import os
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from .utils import *
-
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +34,6 @@ CLASS_STATUS_ACTIVE = 1
 CLASS_STATUS_COMPLETED = 2
 CLASS_STATUS_CANCEL = 3
 
-
 def save_profile_image(image_file, user_id):
     """Save profile image and return the relative path for ImageField"""
     if not image_file:
@@ -55,7 +53,6 @@ def save_profile_image(image_file, user_id):
     except Exception as e:
         logger.error(f"Error saving profile image: {str(e)}")
         return None
-
 
 def get_user_type(user_id):
     """Get user type by user ID"""
@@ -122,6 +119,11 @@ def build_center_data(center):
         'teacher_name': teacher_name,
         'assigned_regional_admin': center.assigned_regional_admin,
         'regional_admin_name': regional_admin_name,
+        'location_status': center.location_status,
+        'latitude': center.latitude,
+        'longitude': center.longitude,
+        'location_verified_at': center.location_verified_at,
+        'location_verified_by': center.location_verified_by_id
     }
 
 def get_centers_for_admin(status_param, today):
@@ -141,7 +143,7 @@ def get_centers_for_admin(status_param, today):
         
         centers = Center.objects.filter(
             id__in=center_ids
-        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
+        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
             center_data = build_center_data(item)
@@ -168,28 +170,31 @@ def get_centers_for_admin(status_param, today):
         
         centers = Center.objects.filter(
             id__in=center_ids
-        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
+        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
             center_data = build_center_data(item)
             all_centers.append(center_data)
             
     else:
-        # Upcoming classes
+        # Upcoming classes (status_param not in [1, 2, 3])
+        
         classes = ClassModel.objects.filter(
-            started_date__date=today
+            started_date__date=today,
+            active_status=True
         ).select_related('center')
         
         center_ids = [cls.center_id for cls in classes if cls.center_id]
         
         centers = Center.objects.exclude(
             id__in=center_ids
-        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
+        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
+        
         
         for item in centers:
             center_data = build_center_data(item)
             all_centers.append(center_data)
-    
+        
     return all_centers
 
 def get_centers_for_regional_admin(status_param, user_id, today):
@@ -208,7 +213,7 @@ def get_centers_for_regional_admin(status_param, user_id, today):
         centers = Center.objects.filter(
             id__in=center_ids,
             assigned_regional_admin=user_id
-        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
+        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
             center_data = build_center_data(item)
@@ -236,7 +241,7 @@ def get_centers_for_regional_admin(status_param, user_id, today):
         centers = Center.objects.filter(
             id__in=center_ids,
             assigned_regional_admin=user_id
-        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
+        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
             center_data = build_center_data(item)
@@ -254,14 +259,13 @@ def get_centers_for_regional_admin(status_param, user_id, today):
             id__in=center_ids
         ).filter(
             assigned_regional_admin=user_id
-        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village')
+        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
             center_data = build_center_data(item)
             all_centers.append(center_data)
     
     return all_centers
-
 
 # ========== ROLE HELPERS ==========
 def get_role_by_code(role_code):
@@ -271,14 +275,12 @@ def get_role_by_code(role_code):
     except Role.DoesNotExist:
         return None
 
-
 def get_role_by_id(role_id):
     """Get role by ID"""
     try:
         return Role.objects.get(id=role_id, status=True)
     except Role.DoesNotExist:
         return None
-
 
 # CENTER SECTION ---------------------------------------------------------
 
@@ -893,7 +895,7 @@ def save_center(center_data, request):
                 # Update existing center - preserve Status and ClassStatus (matches .NET)
                 try:
                     center = Center.objects.get(id=center_id, status=True)
-                    print("data", center_data)
+                    
                     latitude = center_data.get('Latitude') if 'Latitude' in center_data else None
                     longitude = center_data.get('Longitude') if 'Longitude' in center_data else None
 
@@ -1056,7 +1058,7 @@ def save_center(center_data, request):
                     status=True,
                     class_status=False,
                     created_date=created_date,
-                    created_on=datetime.now(),
+                    created_on=timezone.now(),
                     created_by=current_user_id,
                     latitude=Decimal(str(latitude)) if latitude else None,
                     longitude=Decimal(str(longitude)) if longitude else None,
@@ -1123,7 +1125,6 @@ def save_center(center_data, request):
         logger.error(f"CenterHelper : SaveCenter : {str(e)}")
         raise e
 
-
 def verify_center_location(center_data, request):
     """Verify center location by coordinator on-site visit.
     Updates center location status to VERIFIED and saves verification log.
@@ -1185,7 +1186,6 @@ def verify_center_location(center_data, request):
         logger.error(f"CenterHelper : VerifyCenterLocation : {str(e)}")
         raise e
 
-
 def verify_attendance_location(center_id, student_latitude, student_longitude):
     """Verify if student GPS location is within 100m radius of center for attendance marking.
     Returns tuple: (is_valid: bool, distance_m: float, center_lat: float, center_lng: float, center_status: str)"""
@@ -1229,7 +1229,6 @@ def verify_attendance_location(center_id, student_latitude, student_longitude):
         logger.error(f"StudentHelper : VerifyAttendanceLocation : {str(e)}")
         return False, 999999, 0, 0, "ERROR"
 
-
 def check_manual_attendance_limit(student_id):
     """Check if student has reached monthly manual attendance limit (3/month).
     Returns tuple: (allowed: bool, current_count: int, remaining: int, limit: int)"""
@@ -1259,7 +1258,6 @@ def check_manual_attendance_limit(student_id):
     except Exception as e:
         logger.error(f"StudentHelper : CheckManualAttendanceLimit : {str(e)}")
         raise e
-
 
 def increment_manual_attendance(student_id):
     """Increment the manual attendance counter for the current month."""
@@ -1297,7 +1295,6 @@ def increment_manual_attendance(student_id):
         logger.error(f"StudentHelper : IncrementManualAttendance : {str(e)}")
         raise e
 
-
 # TECHERS SECTION ----------------------------------------------------------
 def get_all_teachers(user_id):
     """Get all teachers with optional filtering by userId"""
@@ -1332,7 +1329,6 @@ def get_all_teachers(user_id):
     except Exception as e:
         logger.error(f"UserHelper : GetRegisteredTeachers : {str(e)}")
         raise e
-
 
 # USER SECTION---------------------------------------------------------
 
@@ -1511,11 +1507,11 @@ def login_user(mobile_number, password):
                     })
                     
             elif role_code == 'TEACHER':
-                print(user.id)
+                
                 teacher = Teacher.objects.filter(user=user).first()
                 if teacher:
                     # Get center data - build full center details array
-                    print(user.id)
+                    
                     teacher_center = Center.objects.filter(assigned_teachers=user.id, status=True).first()
                     centers = []
                     if teacher_center:
@@ -1574,7 +1570,6 @@ def login_user(mobile_number, password):
         logger.error(f"UserRepository : LoginUser : {str(e)}")
         raise e
     
-        
 # helper.py - Updated save_user function with RoleId fix
 
 def save_user(user_data):
@@ -1583,7 +1578,6 @@ def save_user(user_data):
     
     try:
         user_id = int(user_data.get('Id', 0))
-        print(f"Saving user with ID: {user_id}")
         
         # Wrap everything in atomic transaction
         with transaction.atomic():
@@ -1714,7 +1708,7 @@ def save_user(user_data):
                                         regional_admin=regional_admin
                                     ).update(
                                         status=False,
-                                        updated_on=datetime.now(),
+                                        updated_on=timezone.now(),
                                         updated_by=user_data.get('CreatedBy') or user_id
                                     )
                                     
@@ -1727,7 +1721,7 @@ def save_user(user_data):
                                                 panchayat_id=panchayat_id,
                                                 panchayat_name=panchayat.name,
                                                 status=True,
-                                                created_on=datetime.now(),
+                                                created_on=timezone.now(),
                                                 created_by=user_data.get('CreatedBy') or user_id
                                             )
                 
@@ -1815,7 +1809,7 @@ def save_user(user_data):
                     device_id=user_data.get('DeviceId'),
                     token=user_data.get('Token'),
                     role=role,
-                    created_on=datetime.now(),
+                    created_on=timezone.now(),
                     created_by=user_data.get('CreatedBy') or 1
                 )
                 user.save()
@@ -1838,7 +1832,7 @@ def save_user(user_data):
                         super_admin_guid_id=str(uuid.uuid4()),
                         user=user,
                         status=True,
-                        created_on=datetime.now(),
+                        created_on=timezone.now(),
                         created_by=user_data.get('CreatedBy') or 1
                     )
                 
@@ -1862,7 +1856,7 @@ def save_user(user_data):
                         panchayat_id=user_data.get('PanchayatId'),
                         village_id=user_data.get('VillageId'),
                         status=True,
-                        created_on=datetime.now(),
+                        created_on=timezone.now(),
                         created_by=user_data.get('CreatedBy') or 1
                     )
                     regional_admin.save()
@@ -1883,7 +1877,7 @@ def save_user(user_data):
                                     panchayat_id=panchayat_id,
                                     panchayat_name=panchayat.name,
                                     status=True,
-                                    created_on=datetime.now(),
+                                    created_on=timezone.now(),
                                     created_by=user_data.get('CreatedBy') or 1
                                 )
                 
@@ -1909,7 +1903,7 @@ def save_user(user_data):
                         village_id=user_data.get('VillageId'),
                         center_id=user_data.get('CenterId'),
                         status=True,
-                        created_on=datetime.now(),
+                        created_on=timezone.now(),
                         created_by=user_data.get('CreatedBy') or 1
                     )
                     teacher.save()
@@ -2137,7 +2131,6 @@ def get_user_by_id(user_id):
         logger.error(f"UserHelper : GetUserById : {str(e)}")
         raise e
 
-
 def update_user_device_id(user_id, device_id):
     """Update user device ID"""
     logger.info(f"UserHelper : UpdateDeviceId : Started")
@@ -2262,70 +2255,53 @@ def update_super_admin_user(user_data):
 #---------------------------------------------------------
 # Class APIs Helper Functions
 #---------------------------------------------------------
-
 def save_class(class_data, request):
-    """Save a new class"""
-    logger.info(f"ClassHelper : SaveClass : Started")
+    """Save a new class using Django ORM"""
+    logger.info("ClassHelper : SaveClass : Started")
     current_user_id = get_user_id_from_token(request)
-    
+
     try:
-        class_enrolment_id = class_data.get('classEnrolmentId')
-        center_id = class_data.get('centerId')
-        today = datetime.now().date()
-        
-        # Check if class already exists
-        check_sql = """
-            SELECT Id FROM Class 
-            WHERE ClassEnrolmentId = %s 
-            AND DATE(StartedDate) = %s 
-            AND CenterId = %s
-            AND Status = 1
-        """
-        with connection.cursor() as cursor:
-            cursor.execute(check_sql, [class_enrolment_id, today, center_id])
-            existing = cursor.fetchone()
-            
+        class_enrolment_id = class_data.get("classEnrolmentId")
+        center_id = class_data.get("centerId")
+        today = timezone.now().date()
+
+        with transaction.atomic():
+            # Check if class already exists for today
+            existing = ClassModel.objects.filter(
+                class_enrolment_id=class_enrolment_id,
+                started_date__date=today,
+                center_id=center_id,
+                status=1
+            ).exists()
+
             if existing:
                 return None
-            
-            # Insert new class - FIX: Added missing Status parameter and active_status
-            insert_sql = """
-                INSERT INTO Class (
-                    ClassEnrolmentId, Name, CenterId, UsersId, 
-                    TotalStudents, AvilableStudents, StartedDate, 
-                    Status, SubStatus, CreatedOn, CreatedBy,
-                    active_status
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """
-            cursor.execute(insert_sql, [
-                class_enrolment_id,
-                class_data.get('name'),
-                center_id,
-                class_data.get('userId'),
-                class_data.get('totalStudents'),
-                class_data.get('avilableStudents'),
-                datetime.now(),
-                1,  # Active status (Status field)
-                0,   # SubStatus
-                datetime.now(),
-                current_user_id,  # CreatedBy
-                1  # active_status = True
-            ])
-            
-            # Get the inserted ID
-            cursor.execute("SELECT LAST_INSERT_ID()")
-            class_id = cursor.fetchone()[0]
-            
-            # Update center class status
+
+            # Create new class using Django ORM
+            new_class = ClassModel.objects.create(
+                class_enrolment_id=class_enrolment_id,
+                name=class_data.get("name"),
+                center_id=center_id,
+                users_id=class_data.get("userId"),
+                total_students=class_data.get("totalStudents"),
+                avilable_students=class_data.get("avilableStudents"),
+                started_date=timezone.now(),
+                status=1,              # Active
+                sub_status=0,
+                created_on=timezone.now(),
+                created_by=current_user_id,
+                active_status=True
+            )
+
+            # Update center class status using ORM
             Center.objects.filter(id=center_id).update(
-                class_status=1,  # Active status
-                updated_on=datetime.now(),
+                class_status=1,
+                updated_on=timezone.now(),
                 updated_by=current_user_id
             )
-        
-        # Get the saved class
-        return get_class_by_id(class_id)
-        
+
+        return get_class_by_id(new_class.id)
+
     except Exception as e:
         logger.error(f"ClassHelper : SaveClass : {str(e)}")
         raise e
@@ -2508,7 +2484,7 @@ def cancel_class_by_teacher(class_cancel_data, request):
             ending_date=class_cancel_data.get('EndingDate'),
             reason=class_cancel_data.get('Reason'),
             created_by=current_user_id,
-            created_on=datetime.now(),
+            created_on=timezone.now(),
             status=True
         )
         cancel.save()
@@ -2519,7 +2495,7 @@ def cancel_class_by_teacher(class_cancel_data, request):
             started_date__date=datetime.now().date()
         ).update(
             status=3,  # Cancel status
-            updated_on=datetime.now(),
+            updated_on=timezone.now(),
             updated_by=current_user_id
         )
         
@@ -2693,7 +2669,6 @@ def get_live_class_detail(class_id):
         logger.error(f"ClassHelper : GetLiveClassDetail : {str(e)}")
         raise e
 
-
 #---------------------------------------------------------
 # District APIs Helper Functions
 #---------------------------------------------------------
@@ -2763,7 +2738,7 @@ def save_district(district_data):
                 district_guid_id=district_guid,
                 name=district_data.get('Name'),
                 status=district_data.get('Status'),
-                created_on=datetime.now(),
+                created_on=timezone.now(),
                 created_by=district_data.get('CreatedBy')
             )
             district.save()
@@ -3734,7 +3709,7 @@ def save_holidays(holidays_data):
             if center_ids_to_remove:
                 Holidays.objects.filter(name=name, center_id__in=center_ids_to_remove).update(
                     status=False,
-                    updated_on=datetime.now(),
+                    updated_on=timezone.now(),
                     updated_by=created_by
                 )
             
@@ -3922,7 +3897,6 @@ def delete_holiday_by_id(holiday_id):
         logger.error(f"HolidaysHelper : DeleteHolidayById : {str(e)}")
         raise e
 
-
 #---------------------------------------------------------
 # Panchayat APIs Helper Functions
 #---------------------------------------------------------
@@ -4002,7 +3976,7 @@ def save_panchayat(panchayat_data):
                 status=panchayat_data.get('Status'),
                 district_id=panchayat_data.get('DistrictId'),
                 vidhan_sabha_id=panchayat_data.get('VidhanSabhaId'),
-                created_on=datetime.now(),
+                created_on=timezone.now(),
                 created_by=panchayat_data.get('CreatedBy')
             )
             panchayat.save()
@@ -4069,7 +4043,6 @@ def check_panchayat_name(name):
     except Exception as e:
         logger.error(f"PanchayatHelper : CheckPanchayatName : {str(e)}")
         raise e
-    
     
 #---------------------------------------------------------
 # Student APIs Helper Functions
@@ -4202,7 +4175,7 @@ def save_student(student_data):
                 bpl=student_data.get('Bpl') or False,
                 school_id=student_data.get('SchoolId'),
                 status=True,
-                created_on=datetime.now(),
+                created_on=timezone.now(),
                 active_class_status=False,
                 manual_attendance=0
             )
@@ -4478,7 +4451,6 @@ def get_all_students(user_id, district_id=0, vidhan_sabha_id=0, panchayat_id=0, 
         logger.error(f"StudentHelper : GetAllStudents : {str(e)}")
         raise e
     
-    
 #---------------------------------------------------------
 # School APIs Helper Functions
 #---------------------------------------------------------
@@ -4513,7 +4485,7 @@ def save_school(school_data):
             # Insert new school
             school = School(
                 school_name=school_data.get('SchoolName'),
-                created_on=datetime.now(),
+                created_on=timezone.now(),
                 created_by=school_data.get('CreatedBy'),
                 status=True
             )
@@ -4922,7 +4894,6 @@ def get_all_student_attendance_by_month(center_id, student_id, month, year):
         logger.error(f"StudentAttendanceHelper : GetAllStudentAttendancByMonth : {str(e)}")
         raise e
     
-    
 #---------------------------------------------------------
 # Teacher APIs Helper Functions
 #---------------------------------------------------------
@@ -5125,7 +5096,6 @@ def get_teacher_by_id(teacher_id):
         logger.error(f"TeacherHelper : get_teacher_by_id : {str(e)}")
         raise e
     
-    
 #---------------------------------------------------------
 # VidhanSabha APIs Helper Functions
 #---------------------------------------------------------
@@ -5200,7 +5170,7 @@ def save_vidhan_sabha(vidhan_sabha_data):
                 name=vidhan_sabha_data.get('Name'),
                 status=vidhan_sabha_data.get('Status'),
                 district_id=vidhan_sabha_data.get('DistrictId'),
-                created_on=datetime.now(),
+                created_on=timezone.now(),
                 created_by=vidhan_sabha_data.get('CreatedBy')
             )
             vidhan_sabha.save()
@@ -5264,7 +5234,6 @@ def check_vidhan_sabha_name(name):
     except Exception as e:
         logger.error(f"VidhanSabhaHelper : CheckVidhanSabhaName : {str(e)}")
         raise e
-    
     
 #---------------------------------------------------------
 # Village APIs Helper Functions
@@ -5350,7 +5319,7 @@ def save_village(village_data):
                 district_id=village_data.get('DistrictId'),
                 vidhan_sabha_id=village_data.get('VidhanSabhaId'),
                 panchayat_id=village_data.get('PanchayatId'),
-                created_on=datetime.now(),
+                created_on=timezone.now(),
                 created_by=village_data.get('CreatedBy')
             )
             village.save()
@@ -5809,8 +5778,6 @@ def get_user_id_from_token(request):
     except (TokenError, InvalidToken, Exception) as e:
         logger.error(f"Error extracting user ID from token: {str(e)}")
         return None
-
-
 
 def end_class_session(class_id, photo_url, class_obj, teacher_id=0):
     """End class session with attendance counts calculated from records.

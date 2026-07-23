@@ -1,7 +1,7 @@
 import hashlib
 import logging
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
@@ -537,7 +537,7 @@ class CenterGetAllCentersByStatusView(APIView):
             serializer = api_serializers.CenterGetAllCentersByStatusQuerySerializer(data=request.query_params)
             if not serializer.is_valid():
                 return Response(
-                    {"error": "Invalid parameters", "details": serializer.errors},
+                    {"error": serializer.errors},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
@@ -552,7 +552,7 @@ class CenterGetAllCentersByStatusView(APIView):
             TODAY = datetime.now().date()
             all_centers = []
             
-            print(f"User ID: {user_id}, User Type: {user_type}, Status Param: {status_param}, Today: {TODAY}")
+            logger.info(f"User ID: {user_id}, User Type: {user_type}, Status Param: {status_param}, Today: {TODAY}")
 
             # Admin user (Type == 1)
             if user_type and user_type == 1:
@@ -560,9 +560,26 @@ class CenterGetAllCentersByStatusView(APIView):
             else:
                 # Regional admin
                 all_centers = get_centers_for_regional_admin(status_param, user_id, TODAY)
-
+            
+            # Debug: print first center data
+            if all_centers:
+                first_center = all_centers[0]
+                logger.info(f"First center keys: {list(first_center.keys())}")
+                for k, v in first_center.items():
+                    if v is not None:
+                        logger.info(f"  {k}: {v} ({type(v).__name__})")
+                    else:
+                        logger.info(f"  {k}: None")
+            
             # Serialize response
-            response_serializer = api_serializers.AllCenterStatusDtoSerializer(all_centers, many=True)
+            try:
+                response_serializer = api_serializers.AllCenterStatusDtoSerializer(all_centers, many=True)
+                serializer_data = response_serializer.data
+            except Exception as ser_e:
+                import traceback
+                logger.error(f"Serialization error: {ser_e}")
+                logger.error(f"Serialization traceback: {traceback.format_exc()}")
+                raise
 
             # Log activity for viewing
             logged_user_id = get_user_id_from_token(request)
@@ -579,9 +596,11 @@ class CenterGetAllCentersByStatusView(APIView):
             return Response(response_serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
+            import traceback
             logger.error(f"CenterGetAllCentersByStatusView : GetStudentAttendanceOfCenter : {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return Response(
-                {"error": "An error occurred while processing your request"},
+                {"error": "An error occurred while processing your request", "detail": str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -3592,8 +3611,7 @@ class StudentSaveManualAttendanceView(APIView):
                     "code": status.HTTP_404_NOT_FOUND
                 }, status=status.HTTP_404_NOT_FOUND)
                 
-            print(center.location_status)
-            
+                        
             if center.location_status != 'VERIFIED':
                 return Response({
                     "status": False,
@@ -4127,7 +4145,6 @@ class UserLoginView(APIView):
         logger.info("UserView : LoginUser : Started")
         try:
             validate_app_and_device_with_token(request)
-            print("request.data", request.data)
             mobile_number = request.data.get('mobileNumber')
             password = request.data.get('password')
             
@@ -4396,8 +4413,7 @@ class UserSaveUserView(APIView):
             
             # Get the raw data for processing
             data = request.data.copy()
-            print("data", data)
-            
+                        
             # Handle ListOfPanchayatIds from form data
             if 'ListOfPanchayatIds' in data:
                 if isinstance(data['ListOfPanchayatIds'], list):

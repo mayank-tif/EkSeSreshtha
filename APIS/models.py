@@ -1231,6 +1231,7 @@ class ActivityLog(models.Model):
 
 
 class StudentManualAttendanceLimit(models.Model):
+    id = models.AutoField(db_column="Id", primary_key=True)
     student = models.ForeignKey(
         Student, on_delete=models.CASCADE, db_column="StudentId"
     )
@@ -1249,6 +1250,7 @@ class StudentManualAttendanceLimit(models.Model):
 
 
 class CenterLocationVerification(models.Model):
+    id = models.AutoField(db_column="Id", primary_key=True)
     center = models.ForeignKey(
         Center, on_delete=models.CASCADE, db_column="CenterId"
     )
