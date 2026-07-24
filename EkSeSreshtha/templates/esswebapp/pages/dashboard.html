@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,13 +12,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Global styles -->
-    <link rel="stylesheet" href="../css/variables.css">
-    <link rel="stylesheet" href="../css/base.css">
-    <link rel="stylesheet" href="../css/components.css">
-    <link rel="stylesheet" href="../css/layout.css">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/variables.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/layout.css' %}">
 
     <!-- Dashboard-specific styles -->
-    <link rel="stylesheet" href="../css/dashboard.css">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/dashboard.css' %}">
 </head>
 <body>
 
@@ -128,19 +129,19 @@
         <section class="quick-links">
             <h2 class="section-heading">Quick Actions</h2>
             <div class="quick-links-grid">
-                <a href="students/student-registration.html" class="quick-link-card">
-                    <div class="quick-link-icon">➕</div>
-                    <div class="quick-link-label">Register Student</div>
-                </a>
-                <a href="centres/educational-centre.html" class="quick-link-card">
+                <a href="{% url 'esswebapp:centres' %}centres/educational-centre.html" class="quick-link-card">
                     <div class="quick-link-icon">🏫</div>
                     <div class="quick-link-label">Add Centre</div>
                 </a>
-                <a href="users/teacher.html" class="quick-link-card">
+                <a href="{% url 'esswebapp:students' %}students/student-registration.html" class="quick-link-card">
+                    <div class="quick-link-icon">➕</div>
+                    <div class="quick-link-label">Register Student</div>
+                </a>
+                <a href="{% url 'esswebapp:users' %}users/teacher.html" class="quick-link-card">
                     <div class="quick-link-icon">👨‍🏫</div>
                     <div class="quick-link-label">Add Teacher</div>
                 </a>
-                <a href="attendance/center-attendance.html" class="quick-link-card">
+                <a href="{% url 'esswebapp:attendance' %}attendance/center-attendance.html" class="quick-link-card">
                     <div class="quick-link-icon">📊</div>
                     <div class="quick-link-label">View Attendance</div>
                 </a>
@@ -150,8 +151,8 @@
     </div>
 
     <!-- Scripts -->
-    <script src="../js/common.js"></script>
-    <script src="../js/sidebar.js"></script>
-    <script src="../js/dashboard.js"></script>
+    <script src="{% static 'esswebapp/js/common.js' %}"></script>
+    <script src="{% static 'esswebapp/js/sidebar.js' %}"></script>
+    <script src="{% static 'esswebapp/js/dashboard.js' %}"></script>
 </body>
 </html>
