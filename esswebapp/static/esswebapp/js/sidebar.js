@@ -7,13 +7,13 @@
 
    Usage in each page:
        <div id="app-shell"></div>
-       <script src="../js/common.js"></script>
-       <script src="../js/sidebar.js"></script>
+       <script src="{% static 'esswebapp/js/common.js' %}"></script>
+       <script src="{% static 'esswebapp/js/sidebar.js' %}"></script>
        <script>
            renderShell({
                title: 'Page Title',
-               active: 'district',   // matches nav item id
-               breadcrumbs: [{label: 'Constituency'}, {label: 'District'}]
+               active: 'dashboard',   // matches nav item id
+               breadcrumbs: [{label: 'Dashboard'}]
            });
        </script>
    ================================================================ */
@@ -23,6 +23,7 @@
    ----------------------------------------------------------------
    Central definition of the whole navigation tree.
    Add/remove menu items here and they'll appear on every page.
+   Uses Django URL names (resolved at runtime via data attributes)
    ================================================================ */
 
 const NAV_ITEMS = [
@@ -30,17 +31,17 @@ const NAV_ITEMS = [
         id: 'dashboard',
         label: 'Dashboard',
         icon: 'grid',
-        href: '/pages/dashboard.html'
+        urlName: 'dashboard'
     },
     {
         id: 'constituency',
         label: 'Constituency',
         icon: 'map',
         children: [
-            { id: 'district', label: 'District', href: '/pages/constituency/district.html' },
-            { id: 'vidhan-sabha', label: 'Vidhan Sabha', href: '/pages/constituency/vidhan-sabha.html' },
-            { id: 'panchayat', label: 'Panchayat', href: '/pages/constituency/panchayat.html' },
-            { id: 'village', label: 'Village', href: '/pages/constituency/village.html' }
+            { id: 'district', label: 'District', urlName: 'district' },
+            { id: 'vidhan-sabha', label: 'Vidhan Sabha', urlName: 'vidhan-sabha' },
+            { id: 'panchayat', label: 'Panchayat', urlName: 'panchayat' },
+            { id: 'village', label: 'Village', urlName: 'village' }
         ]
     },
     {
@@ -48,39 +49,38 @@ const NAV_ITEMS = [
         label: 'Users',
         icon: 'users',
         children: [
-            { id: 'super-admin', label: 'Super Admin', href: '/pages/users/super-admin.html' },
-            { id: 'regional-admin', label: 'Regional Admin', href: '/pages/users/regional-admin.html' },
-            { id: 'teacher', label: 'Teacher', href: '/pages/users/teacher.html' }
+            { id: 'super-admin', label: 'Super Admin', urlName: 'super-admin' },
+            { id: 'regional-admin', label: 'Regional Admin', urlName: 'regional-admin' },
+            { id: 'teacher', label: 'Teacher', urlName: 'teacher' }
         ]
     },
     {
         id: 'centres',
         label: 'Educational Centre',
         icon: 'building',
-        href: '/pages/centres/educational-centre.html'
+        urlName: 'centres'
     },
     {
         id: 'students',
         label: 'Students',
         icon: 'user-graduate',
         children: [
-            { id: 'student-registration', label: 'Student Registration', href: '/pages/students/student-list.html' },
-            { id: 'school-list', label: 'School List', href: '/pages/students/school-list.html' }
+            { id: 'student-registration', label: 'Student Registration', urlName: 'student-registration' },
+            { id: 'school-list', label: 'School List', urlName: 'school-list' }
         ]
     },
     {
         id: 'attendance',
         label: 'Center Attendance',
         icon: 'clipboard',
-        href: '/pages/attendance/center-attendance.html'
+        urlName: 'attendance'
     }
 ];
 
 /* ================================================================
    ICON LIBRARY
    ----------------------------------------------------------------
-   Inline SVG icons used in the sidebar. Keeping them here avoids
-   depending on an icon font.
+   Inline SVG icons used in the sidebar.
    ================================================================ */
 
 const ICONS = {
@@ -97,23 +97,19 @@ const ICONS = {
 };
 
 /* ================================================================
-   PATH RESOLUTION
+   URL RESOLUTION
    ----------------------------------------------------------------
-   Convert absolute paths like "/pages/foo.html" to relative paths
-   that work regardless of hosting depth.
+   URLs are resolved from data attributes set by Django templates.
+   Each page should include: <body data-url-dashboard="/dashboard/" data-url-logout="/logout/" ...>
    ================================================================ */
 
 /**
- * Rewrites a leading "/" path so it resolves from the current page.
- * When the site is served from a subfolder or opened via file://,
- * absolute paths break. This converts them to relative.
+ * Get URL from data attribute on body
+ * @param {string} urlName - The URL name (matches data-url-{name})
  */
-function resolvePath(path) {
-    // Detect how many levels deep the current page is
-    const pathname = window.location.pathname;
-    const depth = (pathname.match(/\//g) || []).length - 1;
-    const prefix = depth > 0 ? '../'.repeat(depth) : './';
-    return prefix + path.replace(/^\//, '');
+function getUrl(urlName) {
+    const attr = `data-url-${urlName}`;
+    return document.body.getAttribute(attr) || `/${urlName}/`;
 }
 
 /* ================================================================
@@ -139,9 +135,10 @@ function buildSidebar(activeId) {
         // Simple item (no submenu)
         if (!item.children) {
             const isActive = item.id === activeId;
+            const href = getUrl(item.urlName);
             return `
                 <div class="sidebar-item">
-                    <a href="${resolvePath(item.href)}" class="sidebar-link ${isActive ? 'active' : ''}">
+                    <a href="${href}" class="sidebar-link ${isActive ? 'active' : ''}">
                         <span class="sidebar-link-icon">${ICONS[item.icon] || ''}</span>
                         <span>${item.label}</span>
                     </a>
@@ -153,8 +150,9 @@ function buildSidebar(activeId) {
         const isOpen = activeParent && activeParent.id === item.id;
         const subItems = item.children.map(child => {
             const isChildActive = child.id === activeId;
+            const href = getUrl(child.urlName);
             return `
-                <a href="${resolvePath(child.href)}" class="sidebar-sublink ${isChildActive ? 'active' : ''}">
+                <a href="${href}" class="sidebar-sublink ${isChildActive ? 'active' : ''}">
                     ${child.label}
                 </a>
             `;
@@ -174,11 +172,12 @@ function buildSidebar(activeId) {
         `;
     }).join('');
 
-    // Grab current user session for the profile at the bottom
-    const session = JSON.parse(localStorage.getItem('ess_session') || '{}');
+    // Grab current user session from data attribute on body (set by Django template)
+    const session = JSON.parse(document.body.dataset.userSession || '{}');
     const userName = session.name || 'Admin User';
-    const userRole = session.role === 'super_admin' ? 'Super Admin' : 'Admin';
+    const userRole = session.role_code === 'SUPER_ADMIN' ? 'Super Admin' : 'Regional Admin';
     const userInitials = getInitials(userName);
+    const logoutUrl = getUrl('logout');
 
     // Full sidebar markup
     return `
@@ -188,7 +187,7 @@ function buildSidebar(activeId) {
                 <!-- White rounded card keeps the colorful logo readable
                      against the dark blue sidebar background -->
                 <div class="sidebar-brand-logo-card">
-                    <img src="${resolvePath('/assets/logo.png')}" alt="Ek Se Sreshtha">
+                    <img src="${getUrl('logo')}" alt="Ek Se Sreshtha">
                 </div>
             </div>
 
@@ -205,7 +204,7 @@ function buildSidebar(activeId) {
                     <div class="sidebar-user-name">${escapeHtml(userName)}</div>
                     <div class="sidebar-user-role">${escapeHtml(userRole)}</div>
                 </div>
-                <button class="btn-ghost btn-icon" onclick="logout()" title="Log out">
+                <button class="btn-ghost btn-icon" onclick="window.location.href='${logoutUrl}'" title="Log out">
                     ${ICONS.logout}
                 </button>
             </div>
@@ -229,8 +228,8 @@ function buildSidebar(activeId) {
 function buildTopbar({ title, breadcrumbs = [] }) {
     const crumbsHtml = breadcrumbs.map((crumb, idx) => {
         const isLast = idx === breadcrumbs.length - 1;
-        const linkOrText = crumb.href && !isLast
-            ? `<a href="${resolvePath(crumb.href)}">${escapeHtml(crumb.label)}</a>`
+        const linkOrText = crumb.urlName && !isLast
+            ? `<a href="${getUrl(crumb.urlName)}">${escapeHtml(crumb.label)}</a>`
             : `<span>${escapeHtml(crumb.label)}</span>`;
         const separator = isLast ? '' : '<span class="breadcrumbs-separator">/</span>';
         return `${linkOrText}${separator}`;
@@ -272,11 +271,11 @@ function buildTopbar({ title, breadcrumbs = [] }) {
  * @param {Object} config
  * @param {string} config.title - Page title shown in topbar
  * @param {string} config.active - Nav item ID to highlight
- * @param {Array}  config.breadcrumbs - Optional breadcrumb trail
+ * @param {Array}  config.breadcrumbs - Optional breadcrumb trail [{label, urlName?}]
  */
 function renderShell({ title, active, breadcrumbs = [] }) {
-    // Ensure a user is logged in
-    requireAuth();
+    // Auth is handled server-side via Django sessions
+    // If not authenticated, server redirects to login page
 
     // The root element the page provides
     const root = document.getElementById('app-shell');

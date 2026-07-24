@@ -1,25 +1,17 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Ek Se Sreshtha Admin</title>
+{% extends "esswebapp/base.html" %}
+{% load static %}
 
-    <!-- Fonts: Inter for a clean, modern feel -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+{% block title %}Login - Ek Se Sreshtha Admin{% endblock %}
 
-    <!-- Global tokens & base styles -->
-    <link rel="stylesheet" href="css/variables.css">
-    <link rel="stylesheet" href="css/base.css">
-    <link rel="stylesheet" href="css/components.css">
+{% block extra-css %}
+    <link rel="stylesheet" href="{% static 'esswebapp/css/login.css' %}">
+{% endblock %}
 
-    <!-- Page-specific styles -->
-    <link rel="stylesheet" href="css/login.css">
-</head>
-<body>
+{% block body-attributes %}
+    data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
+{% endblock %}
 
+{% block page-content %}
     <!-- ============================================================
          LOGIN PAGE LAYOUT
          Two-panel design: left is the brand/marketing area,
@@ -33,7 +25,7 @@
              ======================================================== -->
         <aside class="login-brand-panel">
             <div class="login-brand-content">
-                <img src="assets/logo.png" alt="Ek Se Sreshtha" class="login-brand-logo">
+                <img src="{% static 'esswebapp/assets/logo.png' %}" alt="Ek Se Sreshtha" class="login-brand-logo">
 
                 <!-- Marketing tagline block -->
                 <div class="login-brand-message">
@@ -75,7 +67,8 @@
                 </div>
 
                 <!-- Login form -->
-                <form id="login-form" class="login-form" novalidate>
+                <form id="login-form" class="login-form" novalidate action="{% url 'esswebapp:login' %}" method="post">
+                    {% csrf_token %}
 
                     <!-- Email field -->
                     <div class="form-group">
@@ -83,6 +76,7 @@
                         <input
                             type="email"
                             id="login-email"
+                            name="email"
                             class="form-input"
                             placeholder="you@ekseshreshtha.org"
                             autocomplete="email"
@@ -100,6 +94,7 @@
                             <input
                                 type="password"
                                 id="login-password"
+                                name="password"
                                 class="form-input"
                                 placeholder="Enter your password"
                                 autocomplete="current-password"
@@ -118,7 +113,7 @@
 
                     <!-- Remember me checkbox -->
                     <label class="login-remember">
-                        <input type="checkbox" id="login-remember">
+                        <input type="checkbox" id="login-remember" name="remember">
                         <span>Keep me signed in</span>
                     </label>
 
@@ -131,22 +126,21 @@
                     </button>
 
                     <!-- Demo credential hint (for evaluation only) -->
-                    <div class="login-demo-hint">
+                    {% comment %} <div class="login-demo-hint">
                         <strong>Demo credentials:</strong>
                         admin@ekseshreshtha.org / admin123
-                    </div>
+                    </div> {% endcomment %}
                 </form>
 
                 <!-- Footer for compliance / support -->
                 <div class="login-footer">
-                    <p>© 2026 Ek Se Sreshtha. All rights reserved.</p>
+                    <p>© 2026 Ek Se Sreshth. All rights reserved.</p>
                 </div>
             </div>
         </main>
     </div>
+{% endblock %}
 
-    <!-- Scripts -->
-    <script src="js/common.js"></script>
-    <script src="js/login.js"></script>
-</body>
-</html>
+{% block extra-js %}
+    <script src="{% static 'esswebapp/js/login.js' %}"></script>
+{% endblock %}

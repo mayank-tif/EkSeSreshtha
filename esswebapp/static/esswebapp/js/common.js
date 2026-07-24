@@ -4,9 +4,7 @@
    Shared helper functions used across all pages:
    - Toast notifications
    - Modal open/close
-   - Local storage helpers (simulated data layer)
    - Formatters
-   - Authentication guards
    ================================================================ */
 
 /* ================================================================
@@ -96,97 +94,6 @@ function closeModal(modalId) {
 }
 
 /* ================================================================
-   LOCAL STORAGE DATA LAYER
-   ----------------------------------------------------------------
-   Since this is a frontend demo, we simulate a database using
-   localStorage. Each "table" is a JSON array under a specific key.
-   In production, replace these with real API calls.
-   ================================================================ */
-
-/**
- * Fetches records from a simulated table.
- * @param {string} table - Table name (e.g., 'districts', 'students')
- * @returns {Array} - Array of records
- */
-function getRecords(table) {
-    try {
-        const data = localStorage.getItem(`ess_${table}`);
-        return data ? JSON.parse(data) : [];
-    } catch (err) {
-        console.error(`Failed to read ${table}:`, err);
-        return [];
-    }
-}
-
-/**
- * Saves the full record array back to storage.
- * @param {string} table - Table name
- * @param {Array} records - Full array to persist
- */
-function saveRecords(table, records) {
-    try {
-        localStorage.setItem(`ess_${table}`, JSON.stringify(records));
-    } catch (err) {
-        console.error(`Failed to write ${table}:`, err);
-        showToast('Storage error. Please try again.', 'danger');
-    }
-}
-
-/**
- * Adds a new record with an auto-generated ID and timestamp.
- * @param {string} table - Table name
- * @param {Object} record - The record object to add
- * @returns {Object} - The saved record with id + createdAt
- */
-function addRecord(table, record) {
-    const records = getRecords(table);
-    const newRecord = {
-        id: Date.now().toString(),
-        createdAt: new Date().toISOString(),
-        ...record
-    };
-    records.push(newRecord);
-    saveRecords(table, records);
-    return newRecord;
-}
-
-/**
- * Updates a record by ID.
- * @param {string} table - Table name
- * @param {string} id - Record ID
- * @param {Object} updates - Fields to merge in
- */
-function updateRecord(table, id, updates) {
-    const records = getRecords(table);
-    const index = records.findIndex(r => r.id === id);
-    if (index !== -1) {
-        records[index] = { ...records[index], ...updates };
-        saveRecords(table, records);
-        return records[index];
-    }
-    return null;
-}
-
-/**
- * Deletes a record by ID.
- * @param {string} table - Table name
- * @param {string} id - Record ID
- */
-function deleteRecord(table, id) {
-    const records = getRecords(table).filter(r => r.id !== id);
-    saveRecords(table, records);
-}
-
-/**
- * Finds a single record by ID.
- * @param {string} table - Table name
- * @param {string} id - Record ID
- */
-function findRecord(table, id) {
-    return getRecords(table).find(r => r.id === id) || null;
-}
-
-/* ================================================================
    FORMATTERS
    ----------------------------------------------------------------
    Pure functions to format dates, numbers, etc. for display.
@@ -238,235 +145,197 @@ function escapeHtml(str) {
 }
 
 /* ================================================================
-   AUTHENTICATION GUARD
-   ----------------------------------------------------------------
-   Redirect to login if the user isn't authenticated.
+   DATE FORMATTING FOR INPUTS
    ================================================================ */
 
 /**
- * Checks if a user session exists. Redirects to login otherwise.
- * Call this at the top of every protected page's script.
+ * Formats date for HTML input[type="date"] (YYYY-MM-DD)
+ * @param {string|Date} date - Date to format
  */
-function requireAuth() {
-    const session = localStorage.getItem('ess_session');
-    if (!session) {
-        window.location.href = '/index.html';
-    }
-    return session ? JSON.parse(session) : null;
+function formatDateForInput(date) {
+    if (!date) return '';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 /**
- * Ends the user session and returns to login.
+ * Parses a date from various formats
+ * @param {string} dateStr - Date string
  */
-function logout() {
-    localStorage.removeItem('ess_session');
-    window.location.href = '/index.html';
+function parseDate(dateStr) {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    return isNaN(date.getTime()) ? null : date;
 }
 
 /* ================================================================
-   SEED DEMO DATA
-   ----------------------------------------------------------------
-   On first load, populate localStorage with sample records so the
-   UI has content to display right away.
+   NUMBER FORMATTERS
    ================================================================ */
 
 /**
- * Loads sample data on first run. Idempotent - won't overwrite.
+ * Formats number with Indian numbering system (lakhs, crores)
+ * @param {number} num - Number to format
  */
-function seedDemoData() {
-    /* --------------------------------------------------------------
-       SELF-HEALING SEED
-       Instead of a single one-shot flag, each table is seeded
-       individually and ONLY if its storage key is completely
-       missing. This repairs partial/corrupted storage (e.g. from
-       older builds) without ever overwriting user-entered data or
-       resurrecting records the user deliberately deleted (a
-       deleted-out table still exists as an empty array "[]").
-       -------------------------------------------------------------- */
-    function seedTable(key, records) {
-        if (localStorage.getItem(key) === null) {
-            localStorage.setItem(key, JSON.stringify(records));
-        }
-    }
-
-    // Districts
-    const districts = [
-        { id: 'd1', name: 'Panipat', createdAt: new Date().toISOString() },
-        { id: 'd2', name: 'Karnal', createdAt: new Date().toISOString() },
-        { id: 'd3', name: 'Sonipat', createdAt: new Date().toISOString() }
-    ];
-    seedTable('ess_districts', districts);
-
-    // Vidhan Sabha constituencies
-    const vidhanSabhas = [
-        { id: 'v1', name: 'Panipat Rural', districtId: 'd1', createdAt: new Date().toISOString() },
-        { id: 'v2', name: 'Panipat City', districtId: 'd1', createdAt: new Date().toISOString() },
-        { id: 'v3', name: 'Karnal', districtId: 'd2', createdAt: new Date().toISOString() },
-        { id: 'v4', name: 'Sonipat', districtId: 'd3', createdAt: new Date().toISOString() }
-    ];
-    seedTable('ess_vidhanSabhas', vidhanSabhas);
-
-    // Panchayats
-    const panchayats = [
-        { id: 'p1', name: 'Bapoli', districtId: 'd1', vidhanSabhaId: 'v1', createdAt: new Date().toISOString() },
-        { id: 'p2', name: 'Nara', districtId: 'd1', vidhanSabhaId: 'v1', createdAt: new Date().toISOString() },
-        { id: 'p3', name: 'Sanoli', districtId: 'd1', vidhanSabhaId: 'v2', createdAt: new Date().toISOString() },
-        { id: 'p4', name: 'Nilokheri', districtId: 'd2', vidhanSabhaId: 'v3', createdAt: new Date().toISOString() }
-    ];
-    seedTable('ess_panchayats', panchayats);
-
-    // Villages
-    const villages = [
-        { id: 'vl1', name: 'Ugra Kheri', districtId: 'd1', vidhanSabhaId: 'v1', panchayatId: 'p1', createdAt: new Date().toISOString() },
-        { id: 'vl2', name: 'Bhalor', districtId: 'd1', vidhanSabhaId: 'v1', panchayatId: 'p2', createdAt: new Date().toISOString() },
-        { id: 'vl3', name: 'Diwana', districtId: 'd1', vidhanSabhaId: 'v2', panchayatId: 'p3', createdAt: new Date().toISOString() }
-    ];
-    seedTable('ess_villages', villages);
-
-    // Sample schools
-    const schools = [
-        { id: 's1', name: 'Govt. Primary School, Ugra Kheri', createdAt: new Date().toISOString() },
-        { id: 's2', name: 'Govt. Middle School, Bhalor', createdAt: new Date().toISOString() },
-        { id: 's3', name: 'Govt. High School, Diwana', createdAt: new Date().toISOString() }
-    ];
-    seedTable('ess_schools', schools);
-
-    // Sample regional admin
-    const regionalAdmins = [
-        {
-            id: 'ra1',
-            name: 'Rajesh Kumar',
-            email: 'rajesh@ekseshreshtha.org',
-            phone: '9876543210',
-            whatsapp: '9876543210',
-            age: 34,
-            gender: 'Male',
-            dob: '1990-05-15',
-            enrollmentDate: '2024-01-10',
-            districtId: 'd1',
-            vidhanSabhaId: 'v1',
-            panchayatId: 'p1',
-            createdAt: new Date().toISOString()
-        }
-    ];
-    seedTable('ess_regionalAdmins', regionalAdmins);
-
-    // Sample teacher
-    const teachers = [
-        {
-            id: 't1',
-            name: 'Priya Sharma',
-            email: 'priya@ekseshreshtha.org',
-            phone: '9876543211',
-            whatsapp: '9876543211',
-            age: 28,
-            gender: 'Female',
-            dob: '1996-08-22',
-            enrollmentDate: '2024-03-15',
-            qualification: 'B.Ed, M.A. Hindi',
-            districtId: 'd1',
-            vidhanSabhaId: 'v1',
-            panchayatId: 'p1',
-            villageId: 'vl1',
-            guardianName: 'Ramesh Sharma',
-            guardianNo: '9876543212',
-            address: 'Village Ugra Kheri, Panipat',
-            createdAt: new Date().toISOString()
-        }
-    ];
-    seedTable('ess_teachers', teachers);
-
-    // Sample educational centre
-    const centres = [
-        {
-            id: 'c1',
-            name: 'Ek Se Sreshtha Centre - Ugra Kheri',
-            startDate: '2024-04-01',
-            districtId: 'd1',
-            vidhanSabhaId: 'v1',
-            panchayatId: 'p1',
-            villageId: 'vl1',
-            regionalAdminId: 'ra1',
-            teacherId: 't1',
-            latitude: 29.3909,
-            longitude: 76.9635,
-            createdAt: new Date().toISOString()
-        }
-    ];
-    seedTable('ess_centres', centres);
-
-    // Sample students
-    const students = [
-        {
-            id: 'st1',
-            rollNo: '10850',
-            name: 'Aarav Kumar',
-            age: 8,
-            gender: 'Male',
-            dob: '2017-06-12',
-            joiningDate: '2024-04-15',
-            activeClass: 'Class 3',
-            fatherName: 'Suresh Kumar',
-            motherName: 'Sunita Devi',
-            fatherMobile: '9812345670',
-            motherMobile: '9812345671',
-            fatherOccupation: 'Farmer',
-            motherOccupation: 'Homemaker',
-            contactNumber: '9812345670',
-            whatsapp: '9812345670',
-            category: 'OBC',
-            bpl: 'Yes',
-            address: 'Village Ugra Kheri, Panipat',
-            schoolId: 's1',
-            centreId: 'c1',
-            active: true,
-            createdAt: new Date().toISOString()
-        },
-        {
-            id: 'st2',
-            rollNo: '10851',
-            name: 'Diya Verma',
-            age: 7,
-            gender: 'Female',
-            dob: '2018-02-05',
-            joiningDate: '2024-04-15',
-            activeClass: 'Class 2',
-            fatherName: 'Vinod Verma',
-            motherName: 'Anita Verma',
-            fatherMobile: '9812345672',
-            motherMobile: '9812345673',
-            fatherOccupation: 'Shopkeeper',
-            motherOccupation: 'Homemaker',
-            contactNumber: '9812345672',
-            whatsapp: '9812345672',
-            category: 'General',
-            bpl: 'No',
-            address: 'Village Ugra Kheri, Panipat',
-            schoolId: 's1',
-            centreId: 'c1',
-            active: true,
-            createdAt: new Date().toISOString()
-        }
-    ];
-    seedTable('ess_students', students);
-
-    // Default super admin login
-    const superAdmins = [
-        {
-            id: 'sa1',
-            name: 'Admin',
-            email: 'admin@ekseshreshtha.org',
-            password: 'admin123',
-            age: 35,
-            gender: 'Male',
-            role: 'super_admin',
-            createdAt: new Date().toISOString()
-        }
-    ];
-    seedTable('ess_superAdmins', superAdmins);
-
-    localStorage.setItem('ess_seeded', 'true');
+function formatIndianNumber(num) {
+    if (num == null) return '—';
+    return new Intl.NumberFormat('en-IN').format(num);
 }
 
-// Seed data as soon as this script loads
-seedDemoData();
+/**
+ * Formats currency in INR
+ * @param {number} amount - Amount
+ */
+function formatCurrency(amount) {
+    if (amount == null) return '—';
+    return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(amount);
+}
+
+/* ================================================================
+   DEBOUNCE HELPER
+   ================================================================ */
+
+/**
+ * Debounce function to limit rate of execution
+ * @param {Function} fn - Function to debounce
+ * @param {number} delay - Delay in ms
+ */
+function debounce(fn, delay) {
+    let timeoutId;
+    return function(...args) {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn.apply(this, args), delay);
+    };
+}
+
+/* ================================================================
+   CLASS NAME HELPERS
+   ================================================================ */
+
+/**
+ * Conditionally join class names
+ * @param {...(string|Object|Array)} args - Class names or objects
+ */
+function classNames(...args) {
+    return args
+        .flat()
+        .filter(Boolean)
+        .map(arg => {
+            if (typeof arg === 'string') return arg;
+            if (Array.isArray(arg)) return classNames(...arg);
+            if (typeof arg === 'object') {
+                return Object.entries(arg)
+                    .filter(([, v]) => v)
+                    .map(([k]) => k)
+                    .join(' ');
+            }
+            return '';
+        })
+        .join(' ');
+}
+
+/* ================================================================
+   DASHBOARD RECORD HELPERS
+   ----------------------------------------------------------------
+   Returns mock/demo data for demonstration purposes.
+   In production, these would fetch from the API.
+   ================================================================ */
+
+/**
+ * Get records based on page type and user role.
+ * Returns appropriate data structure for demo/testing.
+ * @param {string} type - Record type: 'centres', 'students', 'teachers', etc.
+ * @returns {Array} - Array of record objects
+ */
+function getRecords(type) {
+    // Get user session from body attribute
+    const session = JSON.parse(document.body.dataset.userSession || '{}');
+    const isSuperAdmin = session.is_super_admin || false;
+    const isRegionalAdmin = session.is_regional_admin || false;
+    const districtId = session.district_id;
+    
+    // Base mock records
+    const mockRecords = {
+        centres: [
+            { id: 1, name: 'Rural School Centre', status: 'Active', studentCount: 150, attendancePercent: 85 },
+            { id: 2, name: 'Urban Learning Hub', status: 'Active', studentCount: 200, attendancePercent: 92 },
+            { id: 3, name: 'District HQ Centre', status: 'Active', studentCount: 350, attendancePercent: 78 }
+        ],
+        students: [
+            { id: 1, name: 'Rahul Sharma', class: '5', section: 'A', attendance: 95 },
+            { id: 2, name: 'Priya Patel', class: '6', section: 'B', attendance: 88 },
+            { id: 3, name: 'Amit Kumar', class: '5', section: 'A', attendance: 92 },
+            { id: 4, name: 'Sneha Das', class: '7', section: 'C', attendance: 78 },
+            { id: 5, name: 'Rohit Verma', class: '6', section: 'B', attendance: 96 }
+        ],
+        teachers: [
+            { id: 1, name: 'Sarita Devi', subject: 'Mathematics', experience: 8 },
+            { id: 2, name: 'Mahesh Prasad', subject: 'Science', experience: 12 },
+            { id: 3, name: 'Lakshmi Naidu', subject: 'English', experience: 6 }
+        ],
+        districts: [
+            { id: 1, name: 'Patna', code: 'PAT' },
+            { id: 2, name: 'Varanasi', code: 'VAR' },
+            { id: 3, name: 'Gaya', code: 'GAY' }
+        ],
+        vidhanSabhas: [
+            { id: 1, name: 'Patna Sagul', code: 'PS-1' },
+            { id: 2, name: 'Varanasi Nagar', code: 'VN-1' }
+        ],
+        panchayats: [
+            { id: 1, name: 'Bara Bara', code: 'BB-001' },
+            { id: 2, name: 'Dhumarpur', code: 'DP-002' }
+        ],
+        villages: [
+            { id: 1, name: 'Khusraupur', code: 'KHS-01' },
+            { id: 2, name: 'Bhagwanpur', code: 'BHG-02' }
+        ],
+        regionalAdmins: [
+            { id: 1, name: 'Regional Admin 1', district: 'Patna' }
+        ],
+        attendance: [
+            { date: '2026-07-20', percentage: 85 },
+            { date: '2026-07-21', percentage: 88 },
+            { date: '2026-07-22', percentage: 92 },
+            { date: '2026-07-23', percentage: 87 },
+            { date: '2026-07-24', percentage: 91 }
+        ]
+    };
+    
+    // Return records or filtered based on role
+    const records = mockRecords[type] || [];
+    
+    // Filter for regional admin - only show records for their district
+    if (isRegionalAdmin && type === 'students') {
+        return records.filter(s => s.districtId === districtId);
+    }
+    
+    return records;
+}
+
+// Export for module systems (optional)
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        showToast,
+        openModal,
+        closeModal,
+        formatDate,
+        getInitials,
+        escapeHtml,
+        formatDateForInput,
+        parseDate,
+        formatIndianNumber,
+        formatCurrency,
+        debounce,
+        classNames,
+        getRecords
+    };
+}

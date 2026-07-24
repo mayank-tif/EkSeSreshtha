@@ -1,9 +1,10 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Registration - Ek Se Sreshtha</title>
+    <title>Student List - Ek Se Sreshtha</title>
 
     <!-- Google Font -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -11,14 +12,32 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Stylesheets: tokens -> base -> components -> layout -> page -->
-    <link rel="stylesheet" href="../../css/variables.css">
-    <link rel="stylesheet" href="../../css/base.css">
-    <link rel="stylesheet" href="../../css/components.css">
-    <link rel="stylesheet" href="../../css/layout.css">
-    <link rel="stylesheet" href="../../css/students.css">
-    <link rel="stylesheet" href="../../css/attendance.css">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/variables.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/layout.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/students.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/attendance.css' %}">
 </head>
-<body>
+<body
+    data-user-session='{{ user|default:"{}"|safe }}'
+    data-url-dashboard="{% url 'esswebapp:dashboard' %}"
+    data-url-centres="{% url 'esswebapp:centres' %}"
+    data-url-attendance="{% url 'esswebapp:attendance' %}"
+    data-url-students="{% url 'esswebapp:students' %}"
+    data-url-users="{% url 'esswebapp:users' %}"
+    data-url-logout="{% url 'esswebapp:logout' %}"
+    data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
+    data-url-district="{% url 'esswebapp:district' %}"
+    data-url-vidhan-sabha="{% url 'esswebapp:vidhan-sabha' %}"
+    data-url-panchayat="{% url 'esswebapp:panchayat' %}"
+    data-url-village="{% url 'esswebapp:village' %}"
+    data-url-super-admin="{% url 'esswebapp:super-admin' %}"
+    data-url-regional-admin="{% url 'esswebapp:regional-admin' %}"
+    data-url-teacher="{% url 'esswebapp:teacher' %}"
+    data-url-student-registration="{% url 'esswebapp:student-registration' %}"
+    data-url-school-list="{% url 'esswebapp:school-list' %}"
+>
 
     <!-- ============================================================
          APP SHELL
@@ -35,7 +54,7 @@
                 <h1>Student Registration</h1>
                 <p>All registered students. Use filters to narrow down by area.</p>
             </div>
-            <a href="student-registration.html" class="btn btn-primary">
+            <a href="{% url 'esswebapp:student-registration' %}" class="btn btn-primary">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round">
@@ -126,9 +145,16 @@
     <!-- ============================================================
          SCRIPTS
          ============================================================ -->
-    <script src="../../js/common.js"></script>
-    <script src="../../js/sidebar.js"></script>
-    <script src="../../js/location-filter.js"></script>
-    <script src="../../js/student-list.js"></script>
+    <script src="{% static 'esswebapp/js/common.js' %}"></script>
+    <script src="{% static 'esswebapp/js/sidebar.js' %}"></script>
+    <script src="{% static 'esswebapp/js/location-filter.js' %}"></script>
+    <script src="{% static 'esswebapp/js/student-list.js' %}"></script>
+    <script>
+        renderShell({
+            title: 'Student List',
+            active: 'student-list',
+            breadcrumbs: [{label: 'Students'}, {label: 'Student List'}]
+        });
+    </script>
 </body>
 </html>

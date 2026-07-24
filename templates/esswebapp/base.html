@@ -1,0 +1,42 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Ek Se Sreshtha{% endblock %}</title>
+
+    <!-- Fonts: Inter for a clean, modern feel -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Global styling -->
+    <link rel="stylesheet" href="{% static 'esswebapp/css/variables.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/components.css' %}">
+    
+    {% block extra-css %}{% endblock %}
+</head>
+<body{% block body-attributes %}{% endblock %}>
+
+    {% block content %}
+        <!-- ============================================================
+          APP SHELL
+          The sidebar.js script will inject the sidebar and topbar
+          around whatever content lives inside this div.
+          ============================================================ -->
+        <div id="app-shell">
+            {% block page-content %}
+                <!-- Page-specific content goes here -->
+            {% endblock %}
+        </div>
+
+        <!-- Scripts -->
+        <script src="{% static 'esswebapp/js/common.js' %}"></script>
+        <script src="{% static 'esswebapp/js/sidebar.js' %}"></script>
+        {% block extra-js %}{% endblock %}
+    {% endblock %}
+    
+</body>
+</html>

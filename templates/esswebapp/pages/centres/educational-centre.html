@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,13 +10,31 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="../../css/variables.css">
-    <link rel="stylesheet" href="../../css/base.css">
-    <link rel="stylesheet" href="../../css/components.css">
-    <link rel="stylesheet" href="../../css/layout.css">
-    <link rel="stylesheet" href="../../css/centres.css">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/variables.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/layout.css' %}">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/centres.css' %}">
 </head>
-<body>
+<body
+    data-user-session='{{ user|default:"{}"|safe }}'
+    data-url-dashboard="{% url 'esswebapp:dashboard' %}"
+    data-url-centres="{% url 'esswebapp:centres' %}"
+    data-url-attendance="{% url 'esswebapp:attendance' %}"
+    data-url-students="{% url 'esswebapp:students' %}"
+    data-url-users="{% url 'esswebapp:users' %}"
+    data-url-logout="{% url 'esswebapp:logout' %}"
+    data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
+    data-url-district="{% url 'esswebapp:district' %}"
+    data-url-vidhan-sabha="{% url 'esswebapp:vidhan-sabha' %}"
+    data-url-panchayat="{% url 'esswebapp:panchayat' %}"
+    data-url-village="{% url 'esswebapp:village' %}"
+    data-url-super-admin="{% url 'esswebapp:super-admin' %}"
+    data-url-regional-admin="{% url 'esswebapp:regional-admin' %}"
+    data-url-teacher="{% url 'esswebapp:teacher' %}"
+    data-url-student-registration="{% url 'esswebapp:student-registration' %}"
+    data-url-school-list="{% url 'esswebapp:school-list' %}"
+>
 
     <div id="app-shell">
 
@@ -193,8 +212,15 @@
         </div>
     </div>
 
-    <script src="../../js/common.js"></script>
-    <script src="../../js/sidebar.js"></script>
-    <script src="../../js/educational-centre.js"></script>
+    <script src="{% static 'esswebapp/js/common.js' %}"></script>
+    <script src="{% static 'esswebapp/js/sidebar.js' %}"></script>
+    <script src="{% static 'esswebapp/js/educational-centre.js' %}"></script>
+    <script>
+        renderShell({
+            title: 'Educational Centres',
+            active: 'centres',
+            breadcrumbs: [{label: 'Centres'}]
+        });
+    </script>
 </body>
 </html>
