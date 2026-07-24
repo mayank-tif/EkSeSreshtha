@@ -671,7 +671,7 @@ def get_all_center_attendance(user_id, date, offset, limit):
         # Get user type
         try:
             user = User.objects.get(id=user_id)
-            user_type = user.type
+            user_type = user.role_id
         except User.DoesNotExist:
             logger.error(f"User not found with ID: {user_id}")
             return []
@@ -783,7 +783,7 @@ def get_total_attendance_count_of_center(user_id, date):
         # Get user type
         try:
             user = User.objects.get(id=user_id)
-            user_type = user.type
+            user_type = user.role_id
         except User.DoesNotExist:
             logger.error(f"User not found with ID: {user_id}")
             return {
@@ -5054,7 +5054,7 @@ def get_teacher_by_id(teacher_id):
             'user', 'district', 'vidhan_sabha', 'panchayat', 'center', 'village'
         ).first()
         
-        if teacher and teacher.user and teacher.user.type == 3:
+        if teacher and teacher.user and teacher.user.role_id == 3:
             user = teacher.user
             return {
                 'Id': user.id,
@@ -5614,7 +5614,7 @@ def get_regional_admin_by_id(regional_admin_id):
                 'LastLoginTime': user.last_login_time,
                 'Password': user.password,
                 'FullAddress': regional_admin.full_address,
-                'Type': user.type,
+                'Type': user.role_id,
                 'Token': user.token,
                 'VidhanSabhaId': regional_admin.vidhan_sabha_id,
                 'DistrictId': regional_admin.district_id,
