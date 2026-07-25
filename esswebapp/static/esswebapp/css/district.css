@@ -1,0 +1,198 @@
+/* ================================================================
+   EK SE SRESHTHA - DISTRICT PAGE SPECIFIC STYLES
+   ----------------------------------------------------------------
+   Only page-specific overrides that aren't in components.css
+   ================================================================ */
+
+/* --- Page Header --- */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+    flex-wrap: wrap;
+}
+
+.page-header-info h1 {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: var(--space-1);
+}
+
+.page-header-info p {
+    font-size: var(--text-base);
+    color: var(--gray-500);
+}
+
+/* --- Search Bar --- */
+.search-bar {
+    position: relative;
+    max-width: 300px;
+    width: 100%;
+}
+
+.search-bar-icon {
+    position: absolute;
+    left: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    pointer-events: none;
+}
+
+.search-bar input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-10);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    background: var(--white);
+    transition: all var(--transition-fast);
+}
+
+.search-bar input:focus {
+    outline: none;
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px var(--brand-blue-light);
+}
+
+/* --- Record Count --- */
+.record-count {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+    color: var(--gray-500);
+}
+
+.record-count span {
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+/* --- Modal Form --- */
+#district-modal .modal-body {
+    padding: var(--space-6);
+}
+
+#district-modal .form-group {
+    margin-bottom: var(--space-5);
+}
+
+#district-modal .form-label {
+    display: block;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--gray-700);
+    margin-bottom: var(--space-2);
+}
+
+#district-modal .form-label .required {
+    color: var(--brand-red);
+    margin-left: 2px;
+}
+
+#district-modal .form-input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    font-size: var(--text-base);
+    background: var(--white);
+    transition: all var(--transition-fast);
+    box-sizing: border-box;
+}
+
+#district-modal .form-input:focus {
+    outline: none;
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px var(--brand-blue-light);
+}
+
+#district-modal .form-hint {
+    display: block;
+    font-size: var(--text-xs);
+    color: var(--gray-500);
+    margin-top: var(--space-1);
+}
+
+/* --- Modal Footer --- */
+#district-modal .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--gray-100);
+    background: var(--gray-50);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+#district-modal .modal-footer .btn {
+    height: 40px;
+    padding: 0 var(--space-5);
+}
+
+/* --- Responsive --- */
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .page-header .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .pagination-wrapper {
+        justify-content: center;
+    }
+
+    .pagination-info {
+        margin-right: 0;
+        width: 100%;
+        text-align: center;
+        margin-bottom: var(--space-2);
+    }
+
+    .modal {
+        margin: var(--space-4);
+        max-width: none;
+    }
+}
+
+/* --- Table Row Hover --- */
+.table tbody tr:hover td {
+    background: var(--gray-50);
+}
+
+/* --- Action Buttons --- */
+.action-buttons {
+    display: flex;
+    gap: var(--space-1);
+}
+
+.action-buttons .btn-icon {
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+    color: var(--gray-500);
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.action-buttons .btn-icon:hover {
+    background-color: var(--gray-100);
+    color: var(--brand-blue);
+}
+
+.action-buttons .btn-icon.danger:hover {
+    background-color: var(--brand-red-light);
+    color: var(--brand-red-dark);
+}

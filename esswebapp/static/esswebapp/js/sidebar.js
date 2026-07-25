@@ -112,6 +112,9 @@ function getUrl(urlName) {
     return document.body.getAttribute(attr) || `/${urlName}/`;
 }
 
+// Alias for other scripts to avoid naming conflicts
+window.sidebarGetUrl = getUrl;
+
 /* ================================================================
    SIDEBAR RENDERER
    ----------------------------------------------------------------

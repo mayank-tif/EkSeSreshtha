@@ -5,6 +5,10 @@
    - Toast notifications
    - Modal open/close
    - Formatters
+   - Global loader
+   - Pagination helper
+   - URL helper
+   - Dashboard record helpers (mock data)
    ================================================================ */
 
 /* ================================================================
@@ -42,14 +46,14 @@ function showToast(message, type = 'info', duration = 3000) {
 
     // Icon prefix based on type
     const iconMap = {
-        success: '✓',
-        danger: '✕',
-        warning: '⚠',
-        info: 'ℹ'
+        success: '\u2713',
+        danger: '\u2715',
+        warning: '\u26a0',
+        info: '\u2139'
     };
 
     toast.innerHTML = `
-        <span class="toast-icon">${iconMap[type] || 'ℹ'}</span>
+        <span class="toast-icon">${iconMap[type] || '\u2139'}</span>
         <span class="toast-message">${message}</span>
     `;
 
@@ -104,9 +108,9 @@ function closeModal(modalId) {
  * @param {string} isoDate - ISO date string
  */
 function formatDate(isoDate) {
-    if (!isoDate) return '—';
+    if (!isoDate) return '\u2014';
     const date = new Date(isoDate);
-    if (isNaN(date.getTime())) return '—';
+    if (isNaN(date.getTime())) return '\u2014';
     return date.toLocaleDateString('en-IN', {
         day: '2-digit',
         month: 'short',
@@ -137,11 +141,11 @@ function getInitials(name) {
 function escapeHtml(str) {
     if (str == null) return '';
     return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>')
+        .replace(/"/g, '"')
+        .replace(/'/g, '&apos;');
 }
 
 /* ================================================================
@@ -181,7 +185,7 @@ function parseDate(dateStr) {
  * @param {number} num - Number to format
  */
 function formatIndianNumber(num) {
-    if (num == null) return '—';
+    if (num == null) return '\u2014';
     return new Intl.NumberFormat('en-IN').format(num);
 }
 
@@ -190,7 +194,7 @@ function formatIndianNumber(num) {
  * @param {number} amount - Amount
  */
 function formatCurrency(amount) {
-    if (amount == null) return '—';
+    if (amount == null) return '\u2014';
     return new Intl.NumberFormat('en-IN', {
         style: 'currency',
         currency: 'INR',
@@ -243,6 +247,204 @@ function classNames(...args) {
 }
 
 /* ================================================================
+   GLOBAL LOADER
+   ----------------------------------------------------------------
+   Show/hide full-page loading overlay.
+   ================================================================ */
+
+/**
+ * Show global loading overlay
+ * @param {string} text - Loading message
+ */
+function showGlobalLoader(text = 'Loading...') {
+    let loader = document.getElementById('global-loader');
+    if (!loader) {
+        loader = createGlobalLoader();
+        document.body.appendChild(loader);
+    }
+    loader.querySelector('.loader-text').textContent = text;
+    loader.style.display = 'flex';
+}
+
+/**
+ * Hide global loading overlay
+ */
+function hideGlobalLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) loader.style.display = 'none';
+}
+
+/**
+ * Create the global loader DOM element
+ */
+function createGlobalLoader() {
+    const loader = document.createElement('div');
+    loader.id = 'global-loader';
+    loader.className = 'global-loader-overlay';
+    loader.style.display = 'none';
+    loader.innerHTML = `
+        <div class="loader-content">
+            <svg class="spinner" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+            </svg>
+            <span class="loader-text">Loading...</span>
+        </div>
+    `;
+    return loader;
+}
+
+/* ================================================================
+   PAGINATION HELPER
+   ----------------------------------------------------------------
+   Generic pagination renderer for tables/lists.
+   ================================================================ */
+
+/**
+ * Render pagination controls
+ * @param {Object} options
+ * @param {number} options.currentPage - Current page (1-based)
+ * @param {number} options.pageSize - Items per page
+ * @param {number} options.totalItems - Total number of items
+ * @param {string} options.containerSelector - Selector for container element
+ * @param {Function} options.onPageChange - Callback(pageNumber) when page changes
+ * @param {number} options.maxVisiblePages - Max page buttons to show (default 5)
+ */
+function renderPagination({
+    currentPage = 1,
+    pageSize = 50,
+    totalItems = 0,
+    containerSelector,
+    onPageChange,
+    maxVisiblePages = 5
+}) {
+    const container = document.querySelector(containerSelector);
+    if (!container) return;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const start = totalItems ? (currentPage - 1) * pageSize + 1 : 0;
+    const end = Math.min(currentPage * pageSize, totalItems);
+
+    // Update info text
+    const infoEl = container.querySelector('.pagination-info');
+    if (infoEl) {
+        infoEl.innerHTML = `Showing <span>${start}</span> to <span>${end}</span> of <span>${totalItems}</span>`;
+    }
+
+    // Update start/end/total elements if they exist
+    const startEl = container.querySelector('#pagination-start');
+    const endEl = container.querySelector('#pagination-end');
+    const totalEl = container.querySelector('#pagination-total');
+    if (startEl) startEl.textContent = start;
+    if (endEl) endEl.textContent = end;
+    if (totalEl) totalEl.textContent = totalItems;
+
+    // Build page buttons
+    const pageNumbersEl = container.querySelector('.page-numbers, #page-numbers');
+    if (!pageNumbersEl) return;
+
+    pageNumbersEl.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+
+    // Previous button
+    const prevBtn = container.querySelector('#prev-page, .pagination-prev');
+    if (prevBtn) {
+        prevBtn.disabled = currentPage === 1;
+        prevBtn.onclick = () => currentPage > 1 && onPageChange(currentPage - 1);
+    }
+
+    // Next button
+    const nextBtn = container.querySelector('#next-page, .pagination-next');
+    if (nextBtn) {
+        nextBtn.disabled = currentPage === totalPages;
+        nextBtn.onclick = () => currentPage < totalPages && onPageChange(currentPage + 1);
+    }
+
+    // First page
+    if (startPage > 1) {
+        addPageBtn(1);
+        if (startPage > 2) addEllipsis();
+    }
+
+    for (let p = startPage; p <= endPage; p++) {
+        addPageBtn(p);
+    }
+
+    // Last page
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) addEllipsis();
+        addPageBtn(totalPages);
+    }
+
+    function addPageBtn(page) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `page-btn ${page === currentPage ? 'active' : ''}`;
+        btn.textContent = page;
+        btn.onclick = () => onPageChange(page);
+        pageNumbersEl.appendChild(btn);
+    }
+
+    function addEllipsis() {
+        const span = document.createElement('span');
+        span.className = 'page-ellipsis';
+        span.textContent = '\u2026';
+        pageNumbersEl.appendChild(span);
+    }
+}
+
+/* ================================================================
+   URL HELPER
+   ----------------------------------------------------------------
+   Get URL from data attributes on body.
+   ================================================================ */
+
+/**
+ * Get URL from data-url-{name} attribute on body
+ * @param {string} name - URL name
+ * @returns {string} - Resolved URL
+ */
+function getUrl(name) {
+    return document.body.getAttribute(`data-url-${name}`) || `/${name}/`;
+}
+
+/* ================================================================
+   CSRF TOKEN HELPER
+   ----------------------------------------------------------------
+   Get CSRF token from cookie or meta tag.
+   ================================================================ */
+
+/**
+ * Get CSRF token for AJAX requests
+ * Tries cookie first (set by Django when {% csrf_token %} used in forms)
+ * Falls back to meta tag (set in base.html)
+ * @returns {string} - CSRF token
+ */
+function getCsrfToken() {
+    // First try the cookie (set by Django when {% csrf_token %} is used in a form)
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; csrftoken=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    
+    // Fallback: get from meta tag (set in base.html)
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta) return meta.getAttribute('content');
+    
+    return '';
+}
+
+/* ================================================================
    DASHBOARD RECORD HELPERS
    ----------------------------------------------------------------
    Returns mock/demo data for demonstration purposes.
@@ -261,7 +463,7 @@ function getRecords(type) {
     const isSuperAdmin = session.is_super_admin || false;
     const isRegionalAdmin = session.is_regional_admin || false;
     const districtId = session.district_id;
-    
+
     // Base mock records
     const mockRecords = {
         centres: [
@@ -309,15 +511,15 @@ function getRecords(type) {
             { date: '2026-07-24', percentage: 91 }
         ]
     };
-    
+
     // Return records or filtered based on role
     const records = mockRecords[type] || [];
-    
+
     // Filter for regional admin - only show records for their district
     if (isRegionalAdmin && type === 'students') {
         return records.filter(s => s.districtId === districtId);
     }
-    
+
     return records;
 }
 
@@ -336,6 +538,10 @@ if (typeof module !== 'undefined' && module.exports) {
         formatCurrency,
         debounce,
         classNames,
-        getRecords
+        getRecords,
+        showGlobalLoader,
+        hideGlobalLoader,
+        renderPagination,
+        getUrl
     };
 }

@@ -1,209 +1,389 @@
 /* ================================================================
-   EK SE SRESHTHA - DISTRICT MANAGEMENT SCRIPT
+   EK SE SRESHTHA - DISTRICT PAGE SCRIPT
    ----------------------------------------------------------------
-   CRUD operations for the District entity.
-   - Lists all districts in a searchable table
-   - Add new district via modal
-   - Edit existing district
-   - Delete with confirmation
+   Manages the district list: fetch, search, pagination,
+   and CRUD via modal forms. Uses common.js utilities.
    ================================================================ */
 
-// Render the sidebar + top header around the page content
+// ------------------------------------------------------------------
+// PAGE INITIALISATION
+// ------------------------------------------------------------------
 renderShell({
     title: 'Districts',
     active: 'district',
     breadcrumbs: [
+        { label: 'Home', urlName: 'dashboard' },
         { label: 'Constituency' },
         { label: 'District' }
     ]
 });
 
-/* ================================================================
-   INITIALIZATION
-   ================================================================ */
+// ------------------------------------------------------------------
+// STATE
+// ------------------------------------------------------------------
+let currentPage = 1;
+const pageSize = 50;
+let isLoading = false;
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Do the initial render of the table
-    renderDistrictTable();
+// ------------------------------------------------------------------
+// DOM REFERENCES
+// ------------------------------------------------------------------
+const $ = (sel) => document.querySelector(sel);
 
-    // Wire up the add/edit form submission
-    document.getElementById('district-form').addEventListener('submit', handleDistrictSubmit);
+const tbody = $('#district-tbody');
+const searchInput = $('#district-search');
+const prevBtn = $('#prev-page');
+const nextBtn = $('#next-page');
+const pageNumbers = $('#page-numbers');
+const totalEl = $('#total-districts');
+const paginationStart = $('#pagination-start');
+const paginationEnd = $('#pagination-end');
+const paginationTotal = $('#pagination-total');
+const modal = $('#district-modal');
+const form = $('#district-form');
+const editingId = $('#district-editing-id');
+const modalTitle = $('#district-modal-title');
+const submitBtn = $('#district-submit-btn');
+const btnText = submitBtn.querySelector('.btn-text');
+const btnLoader = submitBtn.querySelector('.btn-loader');
+const districtNameInput = $('#district-name');
+const addDistrictBtn = $('#add-district-btn');
 
-    // Wire up live search
-    document.getElementById('district-search').addEventListener('input', renderDistrictTable);
-});
+// ------------------------------------------------------------------
+// API CALLS
+// ------------------------------------------------------------------
+async function fetchDistricts() {
+    if (isLoading) return;
+    isLoading = true;
+    showGlobalLoader('Fetching districts...');
+    tbody.classList.add('loading');
 
-/* ================================================================
-   RENDER THE DISTRICT TABLE
-   ----------------------------------------------------------------
-   Reads all districts, applies the search filter, and injects
-   HTML into the table body. Also updates the count label.
-   ================================================================ */
+    try {
+        const params = new URLSearchParams({
+            page: currentPage,
+            page_size: pageSize,
+            search: searchInput.value.trim()
+        });
 
-function renderDistrictTable() {
-    const districts = getRecords('districts');
-    const vidhanSabhas = getRecords('vidhanSabhas');
-    const panchayats = getRecords('panchayats');
+        const res = await fetch(`${getUrl('district')}?${params}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
 
-    // Get current search query, normalized
-    const query = (document.getElementById('district-search').value || '').toLowerCase().trim();
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
 
-    // Apply the search filter
-    const filtered = districts.filter(d =>
-        !query || d.name.toLowerCase().includes(query)
-    );
-
-    // Update record count in header
-    document.getElementById('record-count').textContent = filtered.length;
-
-    const tbody = document.getElementById('district-tbody');
-
-    // Empty state
-    if (filtered.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="6">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🗺️</div>
-                        <div class="empty-state-title">No districts found</div>
-                        <div class="empty-state-text">
-                            ${query ? 'Try a different search term.' : 'Click "Add District" to get started.'}
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
+        renderTable(data.results);
+        updatePagination(data);
+        updateTotalCount(data.count);
+    } catch (err) {
+        console.error('fetchDistricts error:', err);
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Failed to load districts: ${err.message}</td></tr>`;
+    } finally {
+        isLoading = false;
+        tbody.classList.remove('loading');
+        hideGlobalLoader();
     }
-
-    // Build a row for each district
-    tbody.innerHTML = filtered.map((district, index) => {
-        // Count how many child records belong to this district
-        const vsCount = vidhanSabhas.filter(v => v.districtId === district.id).length;
-        const panchayatCount = panchayats.filter(p => p.districtId === district.id).length;
-
-        return `
-            <tr>
-                <td class="row-index">${index + 1}</td>
-                <td><strong>${escapeHtml(district.name)}</strong></td>
-                <td><span class="count-pill">${vsCount}</span></td>
-                <td><span class="count-pill">${panchayatCount}</span></td>
-                <td>${formatDate(district.createdAt)}</td>
-                <td>
-                    <div class="table-actions">
-                        <button class="row-action-btn" onclick="editDistrict('${district.id}')" title="Edit">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        </button>
-                        <button class="row-action-btn danger" onclick="deleteDistrict('${district.id}')" title="Delete">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                        </button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }).join('');
 }
 
-/* ================================================================
-   ADD / EDIT DISTRICT
-   ================================================================ */
+async function fetchDistrictById(id) {
+    const res = await fetch(`${getUrl('district')}?id=${id}`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+}
 
-/**
- * Handles the modal form submission for both create and edit.
- */
-function handleDistrictSubmit(event) {
-    event.preventDefault();
+async function saveDistrictApi(payload) {
+    const isEdit = !!payload.id;
+    const res = await fetch(getUrl('district'), {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCsrfToken()
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Request failed' }));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
 
-    const nameInput = document.getElementById('district-name');
-    const editingId = document.getElementById('district-editing-id').value;
-    const name = nameInput.value.trim();
+async function deleteDistrictApi(id) {
+    const res = await fetch(`${getUrl('district')}?id=${id}`, {
+        method: 'DELETE',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCsrfToken()
+        },
+        credentials: 'same-origin'
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Delete failed' }));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return true;
+}
 
-    // Basic validation
-    if (!name) {
-        showToast('Please enter a district name.', 'danger');
+// ------------------------------------------------------------------
+// RENDERING
+// ------------------------------------------------------------------
+function renderTable(districts) {
+    if (!districts || !districts.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No districts found${searchInput.value.trim() ? ' matching "' + escapeHtml(searchInput.value.trim()) + '"' : ''}.</td></tr>`;
         return;
     }
 
-    // Check for duplicate name (case insensitive), excluding self on edit
-    const existing = getRecords('districts').find(d =>
-        d.name.toLowerCase() === name.toLowerCase() && d.id !== editingId
-    );
-    if (existing) {
-        showToast('A district with this name already exists.', 'danger');
-        return;
+    tbody.innerHTML = districts.map((district, idx) => `
+        <tr data-id="${district.id}">
+            <td>${idx + 1}</td>
+            <td>${escapeHtml(district.name || '-')}</td>
+            <td>${district.vidhan_sabha_count || 0}</td>
+            <td>${district.panchayat_count || 0}</td>
+            <td>${formatDate(district.created_on)}</td>
+            <td>
+                <div class="action-buttons">
+                    <button type="button" class="btn-icon btn-edit" data-id="${district.id}" title="Edit">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button type="button" class="btn-icon btn-delete" data-id="${district.id}" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function updateTotalCount(count) {
+    if (totalEl) totalEl.textContent = count;
+}
+
+function updatePagination(data) {
+    const totalPages = data.total_pages || 1;
+    const page = data.page || currentPage;
+
+    if (paginationStart) paginationStart.textContent = data.count ? (page - 1) * pageSize + 1 : 0;
+    if (paginationEnd) paginationEnd.textContent = Math.min(page * pageSize, data.count || 0);
+    if (paginationTotal) paginationTotal.textContent = data.count || 0;
+
+    prevBtn.disabled = page === 1;
+    nextBtn.disabled = page === totalPages;
+
+    pageNumbers.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    let startPage = Math.max(1, page - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+
+    if (endPage - startPage + 1 < 5) {
+        startPage = Math.max(1, endPage - 4);
     }
 
-    // Save - either update or create
-    if (editingId) {
-        updateRecord('districts', editingId, { name });
-        showToast('District updated', 'success');
+    if (startPage > 1) {
+        addPageBtn(1);
+        if (startPage > 2) addEllipsis();
+    }
+
+    for (let p = startPage; p <= endPage; p++) {
+        addPageBtn(p);
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) addEllipsis();
+        addPageBtn(totalPages);
+    }
+
+    function addPageBtn(pageNum) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `page-btn ${pageNum === page ? 'active' : ''}`;
+        btn.textContent = pageNum;
+        btn.onclick = () => goToPage(pageNum);
+        pageNumbers.appendChild(btn);
+    }
+
+    function addEllipsis() {
+        const span = document.createElement('span');
+        span.className = 'page-ellipsis';
+        span.textContent = '…';
+        pageNumbers.appendChild(span);
+    }
+}
+
+function goToPage(page) {
+    currentPage = page;
+    fetchDistricts();
+}
+
+// ------------------------------------------------------------------
+// MODAL HANDLERS
+// ------------------------------------------------------------------
+function openDistrictModal() {
+    resetForm();
+    modalTitle.textContent = 'Add District';
+    btnText.textContent = 'Save District';
+    modal.classList.add('active');
+    districtNameInput.focus();
+}
+
+function closeDistrictModal() {
+    modal.classList.remove('active');
+    resetForm();
+}
+
+function resetForm() {
+    form.reset();
+    editingId.value = '';
+    districtNameInput.classList.remove('is-invalid');
+    setBtnLoading(false);
+}
+
+function setBtnLoading(loading) {
+    if (loading) {
+        submitBtn.disabled = true;
+        btnText.style.display = 'none';
+        btnLoader.style.display = 'inline-flex';
     } else {
-        addRecord('districts', { name });
-        showToast('District added', 'success');
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline';
+        btnLoader.style.display = 'none';
+    }
+}
+
+// ------------------------------------------------------------------
+// CRUD OPERATIONS
+// ------------------------------------------------------------------
+async function handleFormSubmit(e) {
+    e.preventDefault();
+    const name = districtNameInput.value.trim();
+    if (!name) {
+        districtNameInput.classList.add('is-invalid');
+        districtNameInput.focus();
+        return;
+    }
+    districtNameInput.classList.remove('is-invalid');
+
+    const id = editingId.value ? parseInt(editingId.value, 10) : null;
+    const payload = { name };
+    if (id) payload.id = id;
+
+    setBtnLoading(true);
+    showGlobalLoader(id ? 'Updating district...' : 'Creating district...');
+
+    try {
+        await saveDistrictApi(payload);
+        closeDistrictModal();
+        await fetchDistricts();
+    } catch (err) {
+        console.error('Save district error:', err);
+        alert(`Failed to ${id ? 'update' : 'create'} district: ${err.message}`);
+    } finally {
+        setBtnLoading(false);
+        hideGlobalLoader();
+    }
+}
+
+async function handleEditClick(id) {
+    showGlobalLoader('Loading district details...');
+    try {
+        const district = await fetchDistrictById(id);
+        editingId.value = district.id;
+        districtNameInput.value = district.name || '';
+        modalTitle.textContent = 'Edit District';
+        btnText.textContent = 'Update District';
+        modal.classList.add('active');
+        districtNameInput.focus();
+        districtNameInput.select();
+    } catch (err) {
+        console.error('Fetch district error:', err);
+        alert(`Failed to load district: ${err.message}`);
+    } finally {
+        hideGlobalLoader();
+    }
+}
+
+async function handleDeleteClick(id) {
+    if (!confirm('Are you sure you want to delete this district? This will set its status to inactive.')) {
+        return;
     }
 
-    // Reset UI
-    closeModal('district-modal');
-    resetDistrictForm();
-    renderDistrictTable();
-}
-
-/**
- * Opens the modal in edit mode, pre-filled with the district's data.
- */
-function editDistrict(id) {
-    const district = findRecord('districts', id);
-    if (!district) return;
-
-    document.getElementById('district-modal-title').textContent = 'Edit District';
-    document.getElementById('district-name').value = district.name;
-    document.getElementById('district-editing-id').value = id;
-
-    openModal('district-modal');
-}
-
-/**
- * Prompts to confirm, then deletes the district.
- * Warns about cascading impact on child records.
- */
-function deleteDistrict(id) {
-    const district = findRecord('districts', id);
-    if (!district) return;
-
-    // Warn if there are dependent records
-    const dependentVS = getRecords('vidhanSabhas').filter(v => v.districtId === id).length;
-    const dependentPanchayats = getRecords('panchayats').filter(p => p.districtId === id).length;
-
-    let confirmMessage = `Delete "${district.name}"?`;
-    if (dependentVS > 0 || dependentPanchayats > 0) {
-        confirmMessage += `\n\nThis district has ${dependentVS} Vidhan Sabha(s) and ${dependentPanchayats} Panchayat(s) linked to it. They will become orphaned.`;
+    showGlobalLoader('Deleting district...');
+    try {
+        await deleteDistrictApi(id);
+        await fetchDistricts();
+    } catch (err) {
+        console.error('Delete district error:', err);
+        alert(`Failed to delete district: ${err.message}`);
+    } finally {
+        hideGlobalLoader();
     }
-
-    if (!confirm(confirmMessage)) return;
-
-    deleteRecord('districts', id);
-    showToast('District deleted', 'success');
-    renderDistrictTable();
 }
 
-/**
- * Resets the modal form to the "add new" state.
- */
-function resetDistrictForm() {
-    document.getElementById('district-modal-title').textContent = 'Add District';
-    document.getElementById('district-name').value = '';
-    document.getElementById('district-editing-id').value = '';
+// ------------------------------------------------------------------
+// EVENT LISTENERS
+// ------------------------------------------------------------------
+// Search input - debounced
+let searchTimeout;
+searchInput.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        currentPage = 1;
+        fetchDistricts();
+    }, 200);
+});
+
+// Form submit
+form.addEventListener('submit', handleFormSubmit);
+
+// Add District button
+if (addDistrictBtn) {
+    addDistrictBtn.addEventListener('click', openDistrictModal);
 }
 
-/* ================================================================
-   Modal close behavior - clear the form when the user
-   dismisses without saving.
-   ================================================================ */
+// Event delegation for table action buttons (edit/delete)
+tbody.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.btn-edit');
+    const deleteBtn = e.target.closest('.btn-delete');
 
-document.getElementById('district-modal').addEventListener('click', (e) => {
-    // Close when clicking the backdrop (but not the modal itself)
-    if (e.target.id === 'district-modal') {
-        closeModal('district-modal');
-        resetDistrictForm();
+    if (editBtn) {
+        const id = parseInt(editBtn.dataset.id, 10);
+        if (!isNaN(id)) handleEditClick(id);
+    } else if (deleteBtn) {
+        const id = parseInt(deleteBtn.dataset.id, 10);
+        if (!isNaN(id)) handleDeleteClick(id);
     }
 });
+
+// Close modal on backdrop click
+modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeDistrictModal();
+});
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('active')) {
+        closeDistrictModal();
+    }
+});
+
+// Pagination buttons
+prevBtn.addEventListener('click', () => {
+    if (currentPage > 1) goToPage(currentPage - 1);
+});
+
+nextBtn.addEventListener('click', () => {
+    const totalPages = parseInt(nextBtn.dataset.totalPages) || 1;
+    if (currentPage < totalPages) goToPage(currentPage + 1);
+});
+
+// ------------------------------------------------------------------
+// INITIAL LOAD
+// ------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', fetchDistricts);

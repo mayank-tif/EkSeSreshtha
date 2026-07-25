@@ -25,7 +25,7 @@ urlpatterns = [
     path('users/teacher/', UsersView.as_view(), name='teacher'),
     
     # Constituency pages
-    path('constituency/district/', CentresView.as_view(), name='district'),
+    path('constituency/district/', DistrictView.as_view(), name='district'),
     path('constituency/vidhan-sabha/', CentresView.as_view(), name='vidhan-sabha'),
     path('constituency/panchayat/', CentresView.as_view(), name='panchayat'),
     path('constituency/village/', CentresView.as_view(), name='village'),
