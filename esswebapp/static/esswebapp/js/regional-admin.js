@@ -20,6 +20,11 @@ const els = {
     get search() { return document.getElementById('ra-search'); },
     get list() { return document.getElementById('ra-list'); },
     get countLabel() { return document.getElementById('ra-count-label'); },
+    get pagination() { return document.getElementById('ra-pagination'); },
+    get pageNumbers() { return document.getElementById('ra-page-numbers'); },
+    get total() { return document.getElementById('ra-total-regional-admins'); },
+    get start() { return document.getElementById('ra-pagination-start'); },
+    get end() { return document.getElementById('ra-pagination-end'); },
 
     get form() { return document.getElementById('ra-form'); },
     get formTitle() { return document.getElementById('ra-form-title'); },

@@ -7,6 +7,7 @@ from django.db import models
 from django.db.models import Count
 import json
 import uuid
+from datetime import datetime
 
 from APIS.models import *
 from APIS.utils import hash_password
@@ -518,7 +519,6 @@ class SuperAdminView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-
 class RegionalAdminView(LoginRequiredMixin, View):
     """Regional Admin management page + API endpoints"""
     template_name = 'esswebapp/pages/users/regional-admin.html'
@@ -1014,7 +1014,6 @@ class RegionalAdminView(LoginRequiredMixin, View):
             return JsonResponse({'message': 'Regional Admin deactivated successfully'})
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
-
 
 
 class DistrictView(LoginRequiredMixin, View):
