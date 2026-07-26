@@ -8,7 +8,7 @@ from django.db.models import Count
 import json
 import uuid
 
-from APIS.models import User, Role, District, VidhanSabha, Panchayat, Village
+from APIS.models import *
 from APIS.utils import hash_password
 from .forms import LoginForm
 
@@ -175,6 +175,347 @@ class UsersView(LoginRequiredMixin, View):
         if not request.web_user.get('is_super_admin'):
             return redirect('esswebapp:dashboard')
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+
+
+class SuperAdminView(LoginRequiredMixin, View):
+    """Super Admin management page + API endpoints"""
+    template_name = 'esswebapp/pages/users/super-admin.html'
+    
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._list_super_admins_api(request)
+        
+        # Only super admins can access
+        if not request.web_user.get('is_super_admin'):
+            return redirect('esswebapp:dashboard')
+        
+        # Render the HTML page
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def post(self, request):
+        # Create new super admin
+        return self._create_super_admin(request)
+    
+    def put(self, request):
+        # Update existing super admin
+        return self._update_super_admin(request)
+    
+    def delete(self, request):
+        # Soft delete (set status=0)
+        return self._delete_super_admin(request)
+    
+    def _get_super_admins_queryset(self):
+        """Get super admins from User model with SUPER_ADMIN role"""
+        return User.objects.filter(status=True, role__role_code='SUPER_ADMIN').select_related('role').order_by('-created_on')
+    
+    def _list_super_admins_api(self, request):
+        try:
+            sa_id = request.GET.get('id')
+            if sa_id:
+                try:
+                    user = self._get_super_admins_queryset().get(id=sa_id)
+                    
+                    # Get SuperAdmin profile if exists
+                    try:
+                        sa = SuperAdmin.objects.get(user=user, status=True)
+                        sa_guid = sa.super_admin_guid_id
+                        sa_created_by = sa.created_by
+                        sa_created_on = sa.created_on
+                        sa_updated_by = sa.updated_by
+                        sa_updated_on = sa.updated_on
+                    except SuperAdmin.DoesNotExist:
+                        sa_guid = None
+                        sa_created_by = user.created_by
+                        sa_created_on = user.created_on
+                        sa_updated_by = user.updated_by
+                        sa_updated_on = user.updated_on
+                    
+                    return JsonResponse({
+                        'id': user.id,
+                        'super_admin_guid_id': sa_guid,
+                        'user_id': user.id,
+                        'name': user.name,
+                        'email': user.email,
+                        'phone_number': user.phone_number,
+                        'whats_app': user.whats_app,
+                        'picture': user.picture.url if user.picture else None,
+                        'status': user.status,
+                        'enrolment_roll_id': user.enrolment_roll_id,
+                        'role_id': user.role_id,
+                        'role_code': user.role.role_code if user.role else None,
+                        'created_by': sa_created_by,
+                        'created_on': sa_created_on.isoformat() if sa_created_on else None,
+                        'updated_by': sa_updated_by,
+                        'updated_on': sa_updated_on.isoformat() if sa_updated_on else None
+                    })
+                except User.DoesNotExist:
+                    return JsonResponse({'detail': 'Super Admin not found'}, status=404)
+            
+            queryset = self._get_super_admins_queryset()
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 50))
+            search = request.GET.get('search', '').strip().lower()
+            
+            if search:
+                queryset = queryset.filter(
+                    models.Q(name__icontains=search) |
+                    models.Q(email__icontains=search) |
+                    models.Q(phone_number__icontains=search)
+                )
+            
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            items = []
+            for user in queryset[start:end]:
+                # Get SuperAdmin profile if exists
+                try:
+                    sa = SuperAdmin.objects.get(user=user, status=True)
+                    sa_guid = sa.super_admin_guid_id
+                    sa_created_by = sa.created_by
+                    sa_created_on = sa.created_on
+                    sa_updated_by = sa.updated_by
+                    sa_updated_on = sa.updated_on
+                except SuperAdmin.DoesNotExist:
+                    sa_guid = None
+                    sa_created_by = user.created_by
+                    sa_created_on = user.created_on
+                    sa_updated_by = user.updated_by
+                    sa_updated_on = user.updated_on
+                
+                items.append({
+                    'id': user.id,
+                    'super_admin_guid_id': sa_guid,
+                    'user_id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                    'phone_number': user.phone_number,
+                    'whats_app': user.whats_app,
+                    'picture': user.picture.url if user.picture else None,
+                    'status': user.status,
+                    'enrolment_roll_id': user.enrolment_roll_id,
+                    'role_id': user.role_id,
+                    'role_code': user.role.role_code if user.role else None,
+                    'created_by': sa_created_by,
+                    'created_on': sa_created_on.isoformat() if sa_created_on else None,
+                    'updated_by': sa_updated_by,
+                    'updated_on': sa_updated_on.isoformat() if sa_updated_on else None
+                })
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _create_super_admin(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            name = data.get('name', '').strip()
+            email = data.get('email', '').strip().lower()
+            phone = data.get('phone_number', '').strip()
+            whats_app = data.get('whats_app', '').strip()
+            password = data.get('password', '').strip()
+            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            
+            if not name:
+                return JsonResponse({'detail': 'Name is required'}, status=400)
+            if not email:
+                return JsonResponse({'detail': 'Email is required'}, status=400)
+            if not password:
+                return JsonResponse({'detail': 'Password is required'}, status=400)
+            
+            # Check for duplicates
+            if User.objects.filter(email=email).exists():
+                return JsonResponse({'detail': 'Email already exists'}, status=400)
+            if phone and User.objects.filter(phone_number=phone).exists():
+                return JsonResponse({'detail': 'Phone number already exists'}, status=400)
+            if enrolment_roll_id and User.objects.filter(enrolment_roll_id=enrolment_roll_id).exists():
+                return JsonResponse({'detail': 'Enrolment roll ID already exists'}, status=400)
+            
+            # Get SUPER_ADMIN role
+            super_admin_role = Role.objects.filter(role_code='SUPER_ADMIN', status=True).first()
+            if not super_admin_role:
+                return JsonResponse({'detail': 'SUPER_ADMIN role not configured'}, status=500)
+            
+            # Handle picture (base64 data URL)
+            picture_data = data.get('picture', '').strip()
+            picture_file = None
+            if picture_data and picture_data.startswith('data:'):
+                import base64
+                from django.core.files.base import ContentFile
+                format, imgstr = picture_data.split(';base64,')
+                ext = format.split('/')[-1]
+                picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
+            
+            # Create user
+            user = User.objects.create(
+                name=name,
+                email=email,
+                phone_number=phone if phone else None,
+                whats_app=whats_app if whats_app else None,
+                password=hash_password(password),  
+                enrolment_roll_id=enrolment_roll_id if enrolment_roll_id else None,
+                role=super_admin_role,
+                status=True,
+                created_by=request.web_user.get('user_id'),
+                created_on=timezone.now()
+            )
+            
+            # Save picture if provided
+            if picture_file:
+                user.picture.save(picture_file.name, picture_file, save=True)
+            
+            # Create SuperAdmin profile
+            sa = SuperAdmin.objects.create(
+                super_admin_guid_id=str(uuid.uuid4()),
+                user=user,
+                status=True,
+                created_by=request.web_user.get('user_id'),
+                created_on=timezone.now()
+            )
+            
+            return JsonResponse({
+                'id': user.id,  # Use user.id as the main ID
+                'super_admin_guid_id': sa.super_admin_guid_id,
+                'user_id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'whats_app': user.whats_app,
+                'status': user.status,
+                'enrolment_roll_id': user.enrolment_roll_id,
+                'role_code': user.role.role_code,
+                'created_by': sa.created_by,
+                'created_on': sa.created_on.isoformat() if sa.created_on else None,
+                'message': 'Super Admin created successfully'
+            }, status=201)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _update_super_admin(self, request):
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('id')  # This is now user_id
+            
+            if not user_id:
+                return JsonResponse({'detail': 'ID is required'}, status=400)
+            
+            try:
+                user = User.objects.get(id=user_id, role__role_code='SUPER_ADMIN', status=True)
+                sa = SuperAdmin.objects.get(user=user, status=True)
+            except (User.DoesNotExist, SuperAdmin.DoesNotExist):
+                return JsonResponse({'detail': 'Super Admin not found'}, status=404)
+            
+            name = data.get('name', '').strip()
+            email = data.get('email', '').strip().lower()
+            phone = data.get('phone_number', '').strip()
+            whats_app = data.get('whats_app', '').strip()
+            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            password = data.get('password', '').strip()  # Optional password update
+            
+            if not name:
+                return JsonResponse({'detail': 'Name is required'}, status=400)
+            if not email:
+                return JsonResponse({'detail': 'Email is required'}, status=400)
+            
+            # Check for duplicates (excluding current user)
+            if User.objects.filter(email=email).exclude(id=user_id).exists():
+                return JsonResponse({'detail': 'Email already exists'}, status=400)
+            if phone and User.objects.filter(phone_number=phone).exclude(id=user_id).exists():
+                return JsonResponse({'detail': 'Phone number already exists'}, status=400)
+            if enrolment_roll_id and User.objects.filter(enrolment_roll_id=enrolment_roll_id).exclude(id=user_id).exists():
+                return JsonResponse({'detail': 'Enrolment roll ID already exists'}, status=400)
+            
+            # Update user
+            user.name = name
+            user.email = email
+            user.phone_number = phone if phone else None
+            user.whats_app = whats_app if whats_app else None
+            if enrolment_roll_id:
+                user.enrolment_roll_id = enrolment_roll_id
+            
+            # Update password only if provided and not blank
+            if password:
+                user.password = hash_password(password)
+            
+            # Handle picture (base64 data URL)
+            picture_data = data.get('picture', '').strip()
+            if picture_data and picture_data.startswith('data:'):
+                import base64
+                from django.core.files.base import ContentFile
+                format, imgstr = picture_data.split(';base64,')
+                ext = format.split('/')[-1]
+                picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
+                user.picture.save(picture_file.name, picture_file, save=False)
+            
+            user.updated_by = request.web_user.get('user_id')
+            user.updated_on = timezone.now()
+            user.save()
+            
+            # Update super admin
+            sa.updated_by = request.web_user.get('user_id')
+            sa.updated_on = timezone.now()
+            sa.save()
+            
+            return JsonResponse({
+                'id': user.id,  # Use user.id as the main ID
+                'super_admin_guid_id': sa.super_admin_guid_id,
+                'user_id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'whats_app': user.whats_app,
+                'status': user.status,
+                'enrolment_roll_id': user.enrolment_roll_id,
+                'role_code': user.role.role_code if user.role else None,
+                'message': 'Super Admin updated successfully'
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _delete_super_admin(self, request):
+        try:
+            import json
+            data = json.loads(request.body)
+            user_id = data.get('id')  # This is now user_id
+            
+            if not user_id:
+                return JsonResponse({'detail': 'ID is required'}, status=400)
+            
+            try:
+                user = User.objects.get(id=user_id, role__role_code='SUPER_ADMIN')
+                sa = SuperAdmin.objects.get(user=user)
+            except (User.DoesNotExist, SuperAdmin.DoesNotExist):
+                return JsonResponse({'detail': 'Super Admin not found'}, status=404)
+            
+            # Soft delete - set status to False
+            sa.status = False
+            sa.updated_by = request.web_user.get('user_id')
+            sa.updated_on = timezone.now()
+            sa.save()
+            
+            # Also deactivate user
+            user.status = False
+            user.updated_by = request.web_user.get('user_id')
+            user.updated_on = timezone.now()
+            user.save()
+            
+            return JsonResponse({'message': 'Super Admin deactivated successfully'})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
 
 
 class DistrictView(LoginRequiredMixin, View):
