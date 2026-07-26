@@ -22,7 +22,7 @@ urlpatterns = [
     path('users/', UsersView.as_view(), name='users'),
     path('users/super-admin/', SuperAdminView.as_view(), name='super-admin'),
     path('users/regional-admin/', RegionalAdminView.as_view(), name='regional-admin'),
-    path('users/teacher/', UsersView.as_view(), name='teacher'),
+    path('users/teacher/', TeacherView.as_view(), name='teacher'),
     
     # Constituency pages
     path('constituency/district/', DistrictView.as_view(), name='district'),

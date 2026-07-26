@@ -1,42 +1,140 @@
 /* ================================================================
-   EK SE SRESHTHA - TEACHER REGISTRATION SCRIPT
-   ----------------------------------------------------------------
-   Full CRUD for Teacher entities. Teachers have the deepest area
-   assignment (District → Vidhan Sabha → Panchayat → Village),
-   plus guardian and qualification details.
+   EK SE SRESHTHA - TEACHER PAGE SCRIPT
+   ---------------------------------------------------------------
+   Manages Teacher accounts: fetch, search, pagination,
+   and CRUD via API calls. Uses common.js utilities.
+   Left form handles both Add and Edit. Cascading dropdowns:
+   District -> Vidhan Sabha -> Panchayat -> Village
    ================================================================ */
 
-renderShell({
-    title: 'Teachers',
-    active: 'teacher',
-    breadcrumbs: [
-        { label: 'Users' },
-        { label: 'Teacher' }
-    ]
-});
+// ── State ─────────────────────────────────────────────────────────
+const state = {
+    page: 1,
+    pageSize: AppConfig.pageSize,
+    search: '',
+    editingId: null
+};
 
-/* ================================================================
-   INITIALIZATION
-   ================================================================ */
+// ── DOM References ────────────────────────────────────────────────
+const els = {
+    get search() { return document.getElementById('teacher-search'); },
+    get list() { return document.getElementById('teacher-list'); },
+    get countLabel() { return document.getElementById('teacher-count-label'); },
+    get pagination() { return document.getElementById('teacher-pagination'); },
+    get pageNumbers() { return document.getElementById('teacher-page-numbers'); },
+    get total() { return document.getElementById('teacher-total-teachers'); },
+    get start() { return document.getElementById('teacher-pagination-start'); },
+    get end() { return document.getElementById('teacher-pagination-end'); },
 
-document.addEventListener('DOMContentLoaded', () => {
-    populateTeacherDistricts();
-    renderTeacherList();
+    get form() { return document.getElementById('teacher-form'); },
+    get formTitle() { return document.getElementById('teacher-form-title'); },
+    get name() { return document.getElementById('teacher-name'); },
+    get email() { return document.getElementById('teacher-email'); },
+    get age() { return document.getElementById('teacher-age'); },
+    get gender() { return document.getElementById('teacher-gender'); },
+    get dob() { return document.getElementById('teacher-dob'); },
+    get enrollment() { return document.getElementById('teacher-enrollment'); },
+    get qualification() { return document.getElementById('teacher-qualification'); },
+    get phone() { return document.getElementById('teacher-phone'); },
+    get whatsapp() { return document.getElementById('teacher-whatsapp'); },
+    get guardianName() { return document.getElementById('teacher-guardian-name'); },
+    get guardianNo() { return document.getElementById('teacher-guardian-no'); },
+    get address() { return document.getElementById('teacher-address'); },
 
-    document.getElementById('teacher-form').addEventListener('submit', handleTeacherSubmit);
-    document.getElementById('teacher-image').addEventListener('change', handleTeacherImageChange);
-});
+    get district() { return document.getElementById('teacher-district'); },
+    get vs() { return document.getElementById('teacher-vs'); },
+    get panchayat() { return document.getElementById('teacher-panchayat'); },
+    get village() { return document.getElementById('teacher-village'); },
 
-/* ================================================================
-   PROFILE IMAGE PREVIEW
-   ================================================================ */
+    get password() { return document.getElementById('teacher-password'); },
+    get confirmPassword() { return document.getElementById('teacher-confirm-password'); },
+    get image() { return document.getElementById('teacher-image'); },
+    get imagePreview() { return document.getElementById('teacher-image-preview'); },
+    get imageData() { return document.getElementById('teacher-image-data'); },
+    get editingId() { return document.getElementById('teacher-editing-id'); },
+    get resetBtn() { return document.getElementById('teacher-reset-btn'); }
+};
 
-function handleTeacherImageChange(event) {
+// ── Init ──────────────────────────────────────────────────────────
+async function init() {
+    await loadDistrictDropdown();
+    await fetchAndRender();
+    bindEvents();
+}
+
+// Handle case where DOMContentLoaded already fired
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init().catch(err => console.error('Init error:', err));
+}
+
+// ── Event Bindings ────────────────────────────────────────────────
+function bindEvents() {
+    // Search with debounce
+    if (els.search) {
+        let debounceTimer;
+        els.search.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                state.page = 1;
+                state.search = els.search.value.trim().toLowerCase();
+                fetchAndRender();
+            }, AppConfig.debounceDelay);
+        });
+    }
+
+    // Form submit
+    if (els.form) els.form.addEventListener('submit', handleFormSubmit);
+
+    // Reset button
+    if (els.resetBtn) els.resetBtn.addEventListener('click', resetForm);
+
+    // Image preview
+    if (els.image) els.image.addEventListener('change', handleImageChange);
+
+    // Cascading dropdowns
+    if (els.district) {
+        els.district.addEventListener('change', onDistrictChange);
+    }
+    if (els.vs) {
+        els.vs.addEventListener('change', onVsChange);
+    }
+    if (els.panchayat) {
+        els.panchayat.addEventListener('change', onPanchayatChange);
+    }
+
+    // Event delegation for edit/delete buttons
+    document.addEventListener('click', async (e) => {
+        // Edit button
+        const editBtn = e.target.closest('.btn-edit');
+        if (editBtn) {
+            const id = parseInt(editBtn.dataset.id, 10);
+            await openEditForm(id);
+            return;
+        }
+
+        // Delete button
+        const deleteBtn = e.target.closest('.btn-delete');
+        if (deleteBtn) {
+            const id = parseInt(deleteBtn.dataset.id, 10);
+            const name = deleteBtn.dataset.name;
+            if (confirm(`Deactivate teacher "${name}"? This will deactivate the account.`)) {
+                await deleteTeacher(id);
+            }
+            return;
+        }
+    });
+}
+
+// ── Image Preview ─────────────────────────────────────────────────
+function handleImageChange(event) {
     const file = event.target.files[0];
     if (!file) return;
 
+    // Guard against oversized uploads (2 MB)
     if (file.size > 2 * 1024 * 1024) {
-        showToast('Image must be under 2 MB.', 'danger');
+        showToast('Image must be under 2 MB.', 'error');
         event.target.value = '';
         return;
     }
@@ -44,147 +142,349 @@ function handleTeacherImageChange(event) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const dataUrl = e.target.result;
-        document.getElementById('teacher-image-data').value = dataUrl;
-        document.getElementById('teacher-image-preview').innerHTML =
-            `<img src="${dataUrl}" alt="Profile preview">`;
+        els.imageData.value = dataUrl;
+        if (els.imagePreview) {
+            els.imagePreview.innerHTML = `<img src="${dataUrl}" alt="Profile preview">`;
+        }
     };
     reader.readAsDataURL(file);
 }
 
-/* ================================================================
-   4-LEVEL CASCADING DROPDOWNS
-   District → Vidhan Sabha → Panchayat → Village
-   ================================================================ */
+// ── Cascading Dropdowns ───────────────────────────────────────────
+async function loadDistrictDropdown() {
+    showGlobalLoader();
+    try {
+        const url = getUrl('district') + '?page=1&page_size=1000';
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
 
-function populateTeacherDistricts() {
-    const districts = getRecords('districts');
-    const select = document.getElementById('teacher-district');
-    select.innerHTML = '<option value="">Select district</option>' +
-        districts.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+        if (!els.district) return;
+        els.district.innerHTML = '<option value="">Select district</option>' +
+            (data.results || []).map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+
+        // Initialize Select2 on district dropdown
+        if ($.fn.select2 && $(els.district).data('select2')) {
+            $(els.district).select2('destroy');
+        }
+        if ($.fn.select2) {
+            $(els.district).select2({
+                placeholder: 'Select district',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $(els.district).parent()
+            });
+            $(els.district).off('select2:select').on('select2:select', onDistrictChange);
+        }
+    } catch (e) {
+        console.error('Failed to load districts:', e);
+        showToast('Failed to load districts', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-function onTeacherDistrictChange() {
-    const districtId = document.getElementById('teacher-district').value;
-    const vsSelect = document.getElementById('teacher-vs');
-    const panchSelect = document.getElementById('teacher-panchayat');
-    const villageSelect = document.getElementById('teacher-village');
+async function onDistrictChange() {
+    const districtId = els.district?.value;
 
-    // Cascade reset
-    vsSelect.innerHTML = '<option value="">Select Vidhan Sabha</option>';
-    panchSelect.innerHTML = '<option value="">Select Panchayat</option>';
-    villageSelect.innerHTML = '<option value="">Select Village</option>';
-    panchSelect.disabled = true;
-    villageSelect.disabled = true;
-
-    if (!districtId) {
-        vsSelect.disabled = true;
-        return;
+    // Reset children
+    if (els.vs) {
+        els.vs.innerHTML = '<option value="">Select Vidhan Sabha</option>';
+        els.vs.disabled = true;
+        if ($.fn.select2 && $(els.vs).data('select2')) {
+            $(els.vs).select2('destroy');
+        }
+    }
+    if (els.panchayat) {
+        els.panchayat.innerHTML = '<option value="">Select Panchayat</option>';
+        els.panchayat.disabled = true;
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
+    }
+    if (els.village) {
+        els.village.innerHTML = '<option value="">Select Village</option>';
+        els.village.disabled = true;
+        if ($.fn.select2 && $(els.village).data('select2')) {
+            $(els.village).select2('destroy');
+        }
     }
 
-    const list = getRecords('vidhanSabhas').filter(v => v.districtId === districtId);
-    vsSelect.innerHTML += list.map(v =>
-        `<option value="${v.id}">${escapeHtml(v.name)}</option>`
-    ).join('');
-    vsSelect.disabled = false;
+    if (!districtId) return;
+
+    showGlobalLoader();
+    try {
+        const url = getUrl('vidhan-sabha') + '?district_id=' + districtId + '&page=1&page_size=1000';
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+        if (!els.vs) return;
+        els.vs.innerHTML += (data.results || []).map(v =>
+            `<option value="${v.id}">${escapeHtml(v.name)}</option>`
+        ).join('');
+        els.vs.disabled = false;
+
+        // Initialize Select2 on VS dropdown
+        if ($.fn.select2 && $(els.vs).data('select2')) {
+            $(els.vs).select2('destroy');
+        }
+        if ($.fn.select2) {
+            $(els.vs).select2({
+                placeholder: 'Select Vidhan Sabha',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $(els.vs).parent()
+            });
+            $(els.vs).off('select2:select').on('select2:select', onVsChange);
+        }
+    } catch (e) {
+        console.error('Failed to load Vidhan Sabhas:', e);
+        showToast('Failed to load Vidhan Sabhas', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-function onTeacherVsChange() {
-    const vsId = document.getElementById('teacher-vs').value;
-    const panchSelect = document.getElementById('teacher-panchayat');
-    const villageSelect = document.getElementById('teacher-village');
+async function onVsChange() {
+    const vsId = els.vs?.value;
 
-    panchSelect.innerHTML = '<option value="">Select Panchayat</option>';
-    villageSelect.innerHTML = '<option value="">Select Village</option>';
-    villageSelect.disabled = true;
-
-    if (!vsId) {
-        panchSelect.disabled = true;
-        return;
+    if (els.panchayat) {
+        els.panchayat.innerHTML = '<option value="">Select Panchayat</option>';
+        els.panchayat.disabled = true;
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
+    }
+    if (els.village) {
+        els.village.innerHTML = '<option value="">Select Village</option>';
+        els.village.disabled = true;
+        if ($.fn.select2 && $(els.village).data('select2')) {
+            $(els.village).select2('destroy');
+        }
     }
 
-    const list = getRecords('panchayats').filter(p => p.vidhanSabhaId === vsId);
-    panchSelect.innerHTML += list.map(p =>
-        `<option value="${p.id}">${escapeHtml(p.name)}</option>`
-    ).join('');
-    panchSelect.disabled = false;
+    if (!vsId) return;
+
+    showGlobalLoader();
+    try {
+        const url = getUrl('panchayat') + '?vidhan_sabha_id=' + vsId + '&page=1&page_size=1000';
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+        if (!els.panchayat) return;
+        els.panchayat.innerHTML += (data.results || []).map(p =>
+            `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+        ).join('');
+        els.panchayat.disabled = false;
+
+        // Initialize Select2 on Panchayat dropdown
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
+        if ($.fn.select2) {
+            $(els.panchayat).select2({
+                placeholder: 'Select Panchayat',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $(els.panchayat).parent()
+            });
+            $(els.panchayat).off('select2:select').on('select2:select', onPanchayatChange);
+        }
+    } catch (e) {
+        console.error('Failed to load Panchayats:', e);
+        showToast('Failed to load Panchayats', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-function onTeacherPanchayatChange() {
-    const panchayatId = document.getElementById('teacher-panchayat').value;
-    const villageSelect = document.getElementById('teacher-village');
+async function onPanchayatChange() {
+    const panchayatId = els.panchayat?.value;
 
-    villageSelect.innerHTML = '<option value="">Select Village</option>';
-
-    if (!panchayatId) {
-        villageSelect.disabled = true;
-        return;
+    if (els.village) {
+        els.village.innerHTML = '<option value="">Select Village</option>';
+        els.village.disabled = true;
+        if ($.fn.select2 && $(els.village).data('select2')) {
+            $(els.village).select2('destroy');
+        }
     }
 
-    const list = getRecords('villages').filter(v => v.panchayatId === panchayatId);
-    villageSelect.innerHTML += list.map(v =>
-        `<option value="${v.id}">${escapeHtml(v.name)}</option>`
-    ).join('');
-    villageSelect.disabled = false;
+    if (!panchayatId) return;
+
+    showGlobalLoader();
+    try {
+        const url = getUrl('village') + '?panchayat_id=' + panchayatId + '&page=1&page_size=1000';
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+        if (!els.village) return;
+        els.village.innerHTML += (data.results || []).map(v =>
+            `<option value="${v.id}">${escapeHtml(v.name)}</option>`
+        ).join('');
+        els.village.disabled = false;
+
+        // Initialize Select2 on Village dropdown
+        if ($.fn.select2 && $(els.village).data('select2')) {
+            $(els.village).select2('destroy');
+        }
+        if ($.fn.select2) {
+            $(els.village).select2({
+                placeholder: 'Select Village',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $(els.village).parent()
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load Villages:', e);
+        showToast('Failed to load Villages', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-/* ================================================================
-   LIST RENDERING
-   ================================================================ */
+// Load dropdowns for editing (populate with existing values)
+async function loadDropdownsForEdit(districtId, vsId, panchayatId, villageId) {
+    if (districtId) {
+        await loadDistrictDropdown();
+        // Set district and trigger VS load
+        els.district.value = districtId;
+        if ($.fn.select2) $(els.district).val(districtId).trigger('change');
+        await onDistrictChange();
 
-function renderTeacherList() {
-    let teachers = getRecords('teachers');
-    const villages = getRecords('villages');
-    const villageMap = Object.fromEntries(villages.map(v => [v.id, v.name]));
+        if (vsId) {
+            await new Promise(r => setTimeout(r, 100)); // Wait for Select2 init
+            els.vs.value = vsId;
+            if ($.fn.select2) $(els.vs).val(vsId).trigger('change');
+            await onVsChange();
 
-    document.getElementById('teacher-count-label').textContent =
-        `${teachers.length} teacher${teachers.length === 1 ? '' : 's'} registered.`;
+            if (panchayatId) {
+                await new Promise(r => setTimeout(r, 100));
+                els.panchayat.value = panchayatId;
+                if ($.fn.select2) $(els.panchayat).val(panchayatId).trigger('change');
+                await onPanchayatChange();
 
-    // Apply search filter (matches name / email / phone / village / qualification)
-    const searchEl = document.getElementById('teacher-search');
-    const term = searchEl ? searchEl.value.trim().toLowerCase() : '';
-    if (term) {
-        teachers = teachers.filter(t =>
-            (t.name && t.name.toLowerCase().includes(term)) ||
-            (t.email && t.email.toLowerCase().includes(term)) ||
-            (t.phone && String(t.phone).includes(term)) ||
-            (t.qualification && t.qualification.toLowerCase().includes(term)) ||
-            (villageMap[t.villageId] && villageMap[t.villageId].toLowerCase().includes(term))
-        );
+                if (villageId) {
+                    await new Promise(r => setTimeout(r, 100));
+                    els.village.value = villageId;
+                    if ($.fn.select2) $(els.village).val(villageId).trigger('change');
+                }
+            }
+        }
     }
+}
 
-    const list = document.getElementById('teacher-list');
+// Reset all dropdowns
+function resetDropdowns() {
+    if (els.district) {
+        els.district.value = '';
+        if ($.fn.select2 && $(els.district).data('select2')) {
+            $(els.district).val('').trigger('change');
+        }
+    }
+    if (els.vs) {
+        els.vs.innerHTML = '<option value="">Select Vidhan Sabha</option>';
+        els.vs.disabled = true;
+        if ($.fn.select2 && $(els.vs).data('select2')) {
+            $(els.vs).select2('destroy');
+        }
+    }
+    if (els.panchayat) {
+        els.panchayat.innerHTML = '<option value="">Select Panchayat</option>';
+        els.panchayat.disabled = true;
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
+    }
+    if (els.village) {
+        els.village.innerHTML = '<option value="">Select Village</option>';
+        els.village.disabled = true;
+        if ($.fn.select2 && $(els.village).data('select2')) {
+            $(els.village).select2('destroy');
+        }
+    }
+}
 
-    if (teachers.length === 0) {
-        list.innerHTML = `
+// ── Fetch & Render ────────────────────────────────────────────────
+async function fetchAndRender() {
+    showGlobalLoader();
+    try {
+        const params = new URLSearchParams({
+            page: state.page,
+            page_size: state.pageSize,
+            search: state.search
+        });
+        const url = getUrl('teacher') + '?' + params.toString();
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+        renderList(data.results || []);
+        renderPaginationEl(data);
+        if (els.total) els.total.textContent = data.count || 0;
+        if (els.start) els.start.textContent = ((state.page - 1) * state.pageSize) + 1;
+        if (els.end) els.end.textContent = Math.min(state.page * state.pageSize, data.count || 0);
+        if (els.countLabel) els.countLabel.textContent = `${data.count || 0} teacher${data.count === 1 ? '' : 's'} registered.`;
+    } catch (e) {
+        console.error('Fetch failed:', e);
+        showToast('Failed to load Teachers', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
+}
+
+function renderList(items) {
+    if (!els.list) return;
+    if (!items.length) {
+        els.list.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">👩‍🏫</div>
-                <div class="empty-state-title">No teachers yet</div>
-                <div class="empty-state-text">Register the first teacher using the form.</div>
+                <div class="empty-state-title">No Teachers found</div>
+                <div class="empty-state-text">Add one using the form on the left.</div>
             </div>
         `;
         return;
     }
+    els.list.innerHTML = items.map(t => {
+        const avatarHtml = t.picture
+            ? `<img src="${escapeHtml(t.picture)}" alt="${escapeHtml(t.name)}">`
+            : getInitials(t.name);
 
-    list.innerHTML = teachers.map(teacher => {
-        const avatarHtml = teacher.image
-            ? `<img src="${teacher.image}" alt="${escapeHtml(teacher.name)}">`
-            : getInitials(teacher.name);
-
-        const villageName = villageMap[teacher.villageId] || 'Unassigned';
+        const villageName = t.village_name || 'Unassigned';
 
         return `
             <div class="user-list-item">
                 <div class="avatar">${avatarHtml}</div>
                 <div class="user-list-info">
-                    <div class="user-list-name">${escapeHtml(teacher.name)}</div>
-                    <div class="user-list-meta">${escapeHtml(teacher.qualification || 'No qualification')} · ${escapeHtml(villageName)}</div>
+                    <div class="user-list-name">${escapeHtml(t.name || '')}</div>
+                    <div class="user-list-meta">${escapeHtml(t.education || 'No qualification')} · ${escapeHtml(villageName)}</div>
+                    <div class="user-list-meta">${escapeHtml(t.email || '')} · ${escapeHtml(t.phone_number || '')}</div>
                 </div>
                 <div class="user-list-actions">
-                    <button class="row-action-btn" onclick="editTeacher('${teacher.id}')" title="Edit">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <button class="row-action-btn btn-edit" data-id="${t.id}" title="Edit">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
                     </button>
-                    <button class="row-action-btn danger" onclick="deleteTeacher('${teacher.id}')" title="Delete">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                    <button class="row-action-btn btn-delete danger" data-id="${t.id}" data-name="${escapeHtml(t.name)}" title="Deactivate">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -192,165 +492,207 @@ function renderTeacherList() {
     }).join('');
 }
 
-/* ================================================================
-   FORM SUBMISSION
-   ================================================================ */
+function renderPaginationEl(data) {
+    if (!els.pagination) return;
+    renderPagination({
+        currentPage: data.page,
+        pageSize: data.page_size,
+        totalItems: data.count,
+        containerSelector: '#' + els.pagination.id,
+        onPageChange: (page) => {
+            state.page = page;
+            fetchAndRender();
+        }
+    });
+}
 
-function handleTeacherSubmit(event) {
-    event.preventDefault();
+// ── Form Submit (Create / Update) ─────────────────────────────────
+async function handleFormSubmit(e) {
+    e.preventDefault();
 
-    const editingId = document.getElementById('teacher-editing-id').value;
+    const editingId = els.editingId.value;
+    const isEdit = !!editingId;
 
     const payload = {
-        name: document.getElementById('teacher-name').value.trim(),
-        email: document.getElementById('teacher-email').value.trim(),
-        age: parseInt(document.getElementById('teacher-age').value) || null,
-        gender: document.getElementById('teacher-gender').value,
-        dob: document.getElementById('teacher-dob').value,
-        enrollmentDate: document.getElementById('teacher-enrollment').value,
-        qualification: document.getElementById('teacher-qualification').value.trim(),
-        phone: document.getElementById('teacher-phone').value.trim(),
-        whatsapp: document.getElementById('teacher-whatsapp').value.trim() ||
-                  document.getElementById('teacher-phone').value.trim(),
-        guardianName: document.getElementById('teacher-guardian-name').value.trim(),
-        guardianNo: document.getElementById('teacher-guardian-no').value.trim(),
-        address: document.getElementById('teacher-address').value.trim(),
-        districtId: document.getElementById('teacher-district').value,
-        vidhanSabhaId: document.getElementById('teacher-vs').value,
-        panchayatId: document.getElementById('teacher-panchayat').value,
-        villageId: document.getElementById('teacher-village').value,
-        image: document.getElementById('teacher-image-data').value || null,
-        role: 'teacher'
+        name: els.name.value.trim(),
+        email: els.email.value.trim().toLowerCase(),
+        age: els.age.value ? parseInt(els.age.value, 10) : null,
+        gender: els.gender.value || null,
+        date_of_birth: els.dob.value || null,
+        enrollment_date: els.enrollment.value || null,
+        education: els.qualification.value.trim() || null,
+        phone_number: els.phone.value.trim(),
+        whats_app: els.whatsapp.value.trim() || null,
+        guardian_name: els.guardianName.value.trim() || null,
+        guardian_number: els.guardianNo.value.trim() || null,
+        full_address: els.address.value.trim() || null,
+        password: els.password.value,
+        district_id: els.district.value ? parseInt(els.district.value, 10) : null,
+        vidhan_sabha_id: els.vs.value ? parseInt(els.vs.value, 10) : null,
+        panchayat_id: els.panchayat.value ? parseInt(els.panchayat.value, 10) : null,
+        village_id: els.village.value ? parseInt(els.village.value, 10) : null
     };
 
-    const password = document.getElementById('teacher-password').value;
-    const confirmPassword = document.getElementById('teacher-confirm-password').value;
-
     // Validation
-    if (!payload.name || !payload.email || !payload.phone ||
-        !payload.districtId || !payload.vidhanSabhaId ||
-        !payload.panchayatId || !payload.villageId) {
-        showToast('Please fill in all required fields.', 'danger');
+    if (!payload.name || !payload.email || !payload.phone_number) {
+        showToast('Please fill in all required fields.', 'error');
         return;
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
-        showToast('Please enter a valid email.', 'danger');
+        showToast('Please enter a valid email.', 'error');
+        return;
+    }
+    if (!isEdit && !payload.password) {
+        showToast('Password is required for new accounts.', 'error');
+        return;
+    }
+    if (payload.password && payload.password.length < 8) {
+        showToast('Password must be at least 8 characters.', 'error');
+        return;
+    }
+    if (payload.password && payload.password !== els.confirmPassword.value) {
+        showToast('Passwords do not match.', 'error');
+        return;
+    }
+    if (!payload.district_id || !payload.vidhan_sabha_id || !payload.panchayat_id || !payload.village_id) {
+        showToast('Please select District, Vidhan Sabha, Panchayat, and Village.', 'error');
         return;
     }
 
-    // Password rules - required for new, optional for edit
-    if (!editingId) {
-        if (!password || password.length < 8) {
-            showToast('Password must be at least 8 characters.', 'danger');
-            return;
-        }
-        if (password !== confirmPassword) {
-            showToast('Passwords do not match.', 'danger');
-            return;
-        }
-        payload.password = password;
-    } else if (password) {
-        if (password !== confirmPassword) {
-            showToast('Passwords do not match.', 'danger');
-            return;
-        }
-        payload.password = password;
+    if (els.imageData.value) {
+        payload.picture = els.imageData.value;
     }
 
-    if (editingId) {
-        updateRecord('teachers', editingId, payload);
-        showToast('Teacher updated', 'success');
-    } else {
-        addRecord('teachers', payload);
-        showToast('Teacher created', 'success');
-    }
+    showGlobalLoader();
+    try {
+        const url = getUrl('teacher');
+        const method = isEdit ? 'PUT' : 'POST';
+        const body = isEdit ? { ...payload, id: parseInt(editingId, 10) } : payload;
 
-    resetTeacherForm();
-    renderTeacherList();
+        const res = await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+
+        if (res.ok || res.status === 201) {
+            showToast(isEdit ? 'Teacher updated' : 'Teacher created', 'success');
+            resetForm();
+            fetchAndRender();
+        } else {
+            showToast(data.detail || 'Operation failed', 'error');
+        }
+    } catch (e) {
+        console.error('Submit error:', e);
+        showToast('Request failed', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-/* ================================================================
-   EDIT & DELETE
-   ================================================================ */
+// ── Edit / Delete ─────────────────────────────────────────────────
+async function openEditForm(id) {
+    showGlobalLoader();
+    try {
+        const url = getUrl('teacher') + '?id=' + id;
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to fetch');
 
-function editTeacher(id) {
-    const teacher = findRecord('teachers', id);
-    if (!teacher) return;
+        resetForm();
+        if (els.formTitle) els.formTitle.textContent = 'Edit Teacher';
+        els.editingId.value = data.id;
 
-    document.getElementById('teacher-form-title').textContent = 'Edit Teacher';
-    document.getElementById('teacher-editing-id').value = id;
+        els.name.value = data.name || '';
+        els.email.value = data.email || '';
+        els.age.value = data.age || '';
+        els.gender.value = data.gender || '';
+        els.dob.value = data.date_of_birth ? data.date_of_birth.split('T')[0] : '';
+        els.enrollment.value = data.enrollment_date ? data.enrollment_date.split('T')[0] : '';
+        els.qualification.value = data.education || '';
+        els.phone.value = data.phone_number || '';
+        els.whatsapp.value = data.whats_app || '';
+        els.guardianName.value = data.guardian_name || '';
+        els.guardianNo.value = data.guardian_number || '';
+        els.address.value = data.full_address || data.contact || '';
 
-    // Fill each field
-    document.getElementById('teacher-name').value = teacher.name || '';
-    document.getElementById('teacher-email').value = teacher.email || '';
-    document.getElementById('teacher-age').value = teacher.age || '';
-    document.getElementById('teacher-gender').value = teacher.gender || '';
-    document.getElementById('teacher-dob').value = teacher.dob || '';
-    document.getElementById('teacher-enrollment').value = teacher.enrollmentDate || '';
-    document.getElementById('teacher-qualification').value = teacher.qualification || '';
-    document.getElementById('teacher-phone').value = teacher.phone || '';
-    document.getElementById('teacher-whatsapp').value = teacher.whatsapp || '';
-    document.getElementById('teacher-guardian-name').value = teacher.guardianName || '';
-    document.getElementById('teacher-guardian-no').value = teacher.guardianNo || '';
-    document.getElementById('teacher-address').value = teacher.address || '';
-    document.getElementById('teacher-district').value = teacher.districtId || '';
+        // Load cascading dropdowns with pre-selected values
+        await loadDropdownsForEdit(data.district_id, data.vidhan_sabha_id, data.panchayat_id, data.village_id);
 
-    // Cascade dropdown states
-    onTeacherDistrictChange();
-    document.getElementById('teacher-vs').value = teacher.vidhanSabhaId || '';
-    onTeacherVsChange();
-    document.getElementById('teacher-panchayat').value = teacher.panchayatId || '';
-    onTeacherPanchayatChange();
-    document.getElementById('teacher-village').value = teacher.villageId || '';
+        // Passwords not loaded - user must retype to change
+        els.password.value = '';
+        els.confirmPassword.value = '';
+        els.password.required = false;
+        els.confirmPassword.required = false;
 
-    // Passwords empty on edit; user retypes to change
-    document.getElementById('teacher-password').value = '';
-    document.getElementById('teacher-confirm-password').value = '';
-    document.getElementById('teacher-password').required = false;
-    document.getElementById('teacher-confirm-password').required = false;
+        // Show existing profile image if any
+        if (data.picture) {
+            if (els.imagePreview) {
+                els.imagePreview.innerHTML = `<img src="${escapeHtml(data.picture)}" alt="Profile">`;
+            }
+            els.imageData.value = data.picture;
+        }
 
-    // Existing image preview
-    const preview = document.getElementById('teacher-image-preview');
-    if (teacher.image) {
-        preview.innerHTML = `<img src="${teacher.image}" alt="Profile">`;
-        document.getElementById('teacher-image-data').value = teacher.image;
-    } else {
-        preview.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
-        document.getElementById('teacher-image-data').value = '';
+        if (els.name) els.name.focus();
+    } catch (e) {
+        console.error('Edit fetch failed:', e);
+        showToast('Failed to load Teacher details', 'error');
+    } finally {
+        hideGlobalLoader();
     }
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function deleteTeacher(id) {
-    const teacher = findRecord('teachers', id);
-    if (!teacher) return;
+async function deleteTeacher(id) {
+    showGlobalLoader();
+    try {
+        const url = getUrl('teacher');
+        const res = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
 
-    // Warn about centres this teacher is assigned to
-    const assignedCentres = getRecords('centres').filter(c => c.teacherId === id).length;
-    let msg = `Delete teacher "${teacher.name}"?`;
-    if (assignedCentres > 0) {
-        msg += `\n\n${assignedCentres} centre(s) will lose their assigned teacher.`;
+        if (res.ok) {
+            showToast('Teacher deactivated', 'success');
+            fetchAndRender();
+        } else {
+            showToast(data.detail || 'Delete failed', 'error');
+        }
+    } catch (e) {
+        console.error('Delete error:', e);
+        showToast('Request failed', 'error');
+    } finally {
+        hideGlobalLoader();
     }
-
-    if (!confirm(msg)) return;
-
-    deleteRecord('teachers', id);
-    showToast('Teacher deleted', 'success');
-    renderTeacherList();
 }
 
-function resetTeacherForm() {
-    document.getElementById('teacher-form-title').textContent = 'Register Teacher';
-    document.getElementById('teacher-form').reset();
-    document.getElementById('teacher-editing-id').value = '';
-    document.getElementById('teacher-image-data').value = '';
-    document.getElementById('teacher-vs').disabled = true;
-    document.getElementById('teacher-panchayat').disabled = true;
-    document.getElementById('teacher-village').disabled = true;
-    document.getElementById('teacher-password').required = true;
-    document.getElementById('teacher-confirm-password').required = true;
-    document.getElementById('teacher-image-preview').innerHTML =
-        `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+// ── Reset Form ────────────────────────────────────────────────────
+function resetForm() {
+    if (els.formTitle) els.formTitle.textContent = 'Register Teacher';
+    if (els.form) els.form.reset();
+    if (els.editingId) els.editingId.value = '';
+    if (els.imageData) els.imageData.value = '';
+    resetDropdowns();
+
+    if (els.password) els.password.required = true;
+    if (els.confirmPassword) els.confirmPassword.required = true;
+
+    if (els.imagePreview) {
+        els.imagePreview.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    }
 }

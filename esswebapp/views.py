@@ -1957,3 +1957,504 @@ class VillageView(LoginRequiredMixin, View):
             
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
+                
+       
+class TeacherView(LoginRequiredMixin, View):
+    """Teacher management page + API endpoints"""
+    template_name = 'esswebapp/pages/users/teacher.html'
+    
+    def get(self, request):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._list_teachers_api(request)
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def post(self, request):
+        return self._create_teacher(request)
+    
+    def put(self, request):
+        return self._update_teacher(request)
+    
+    def delete(self, request):
+        return self._delete_teacher(request)
+    
+    def _get_teachers_queryset(self):
+        """Get teachers ordered by created_on desc"""
+        return User.objects.filter(
+            status=True, role__role_code='TEACHER'
+        ).select_related('role', 'teacher').order_by('-created_on')
+    
+    def _list_teachers_api(self, request):
+        try:
+            teacher_id = request.GET.get('id')
+            if teacher_id:
+                try:
+                    user = self._get_teachers_queryset().get(id=teacher_id)
+                    
+                    # Get Teacher profile
+                    try:
+                        teacher = Teacher.objects.select_related(
+                            'district', 'vidhan_sabha', 'panchayat', 'village'
+                        ).get(user=user, status=True)
+                        teacher_guid = teacher.teacher_guid_id
+                        teacher_district = teacher.district_id
+                        teacher_district_name = teacher.district.name if teacher.district else None
+                        teacher_vidhan_sabha = teacher.vidhan_sabha_id
+                        teacher_vidhan_sabha_name = teacher.vidhan_sabha.name if teacher.vidhan_sabha else None
+                        teacher_panchayat = teacher.panchayat_id
+                        teacher_panchayat_name = teacher.panchayat.name if teacher.panchayat else None
+                        teacher_village = teacher.village_id
+                        teacher_village_name = teacher.village.name if teacher.village else None
+                        teacher_age = teacher.age
+                        teacher_gender = teacher.gender
+                        teacher_dob = teacher.date_of_birth
+                        teacher_contact = teacher.contact
+                        teacher_full_address = teacher.full_address
+                        teacher_education = teacher.education
+                        teacher_guardian_name = teacher.guardian_name
+                        teacher_guardian_number = teacher.guardian_number
+                        teacher_enrollment = teacher.enrollment_date
+                        teacher_created_by = teacher.created_by
+                        teacher_created_on = teacher.created_on
+                        teacher_updated_by = teacher.updated_by
+                        teacher_updated_on = teacher.updated_on
+                    except Teacher.DoesNotExist:
+                        teacher_guid = None
+                        teacher_district = None
+                        teacher_district_name = None
+                        teacher_vidhan_sabha = None
+                        teacher_vidhan_sabha_name = None
+                        teacher_panchayat = None
+                        teacher_panchayat_name = None
+                        teacher_village = None
+                        teacher_village_name = None
+                        teacher_age = None
+                        teacher_gender = None
+                        teacher_dob = None
+                        teacher_contact = None
+                        teacher_full_address = None
+                        teacher_education = None
+                        teacher_guardian_name = None
+                        teacher_guardian_number = None
+                        teacher_enrollment = None
+                        teacher_created_by = user.created_by
+                        teacher_created_on = user.created_on
+                        teacher_updated_by = user.updated_by
+                        teacher_updated_on = user.updated_on
+                    
+                    return JsonResponse({
+                        'id': user.id,
+                        'teacher_guid_id': teacher_guid,
+                        'user_id': user.id,
+                        'name': user.name,
+                        'email': user.email,
+                        'phone_number': user.phone_number,
+                        'whats_app': user.whats_app,
+                        'picture': user.picture.url if user.picture else None,
+                        'status': user.status,
+                        'enrolment_roll_id': user.enrolment_roll_id,
+                        'role_id': user.role_id,
+                        'role_code': user.role.role_code if user.role else None,
+                        'district_id': teacher_district,
+                        'district_name': teacher_district_name,
+                        'vidhan_sabha_id': teacher_vidhan_sabha,
+                        'vidhan_sabha_name': teacher_vidhan_sabha_name,
+                        'panchayat_id': teacher_panchayat,
+                        'panchayat_name': teacher_panchayat_name,
+                        'village_id': teacher_village,
+                        'village_name': teacher_village_name,
+                        'age': teacher_age,
+                        'gender': teacher_gender,
+                        'date_of_birth': teacher_dob,
+                        'contact': teacher_contact,
+                        'full_address': teacher_full_address,
+                        'education': teacher_education,
+                        'guardian_name': teacher_guardian_name,
+                        'guardian_number': teacher_guardian_number,
+                        'enrollment_date': teacher_enrollment,
+                        'created_by': teacher_created_by,
+                        'created_on': teacher_created_on.isoformat() if teacher_created_on else None,
+                        'updated_by': teacher_updated_by,
+                        'updated_on': teacher_updated_on.isoformat() if teacher_updated_on else None
+                    })
+                except User.DoesNotExist:
+                    return JsonResponse({'detail': 'Teacher not found'}, status=404)
+            
+            queryset = self._get_teachers_queryset()
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', PAGE_SIZE))
+            search = request.GET.get('search', '').strip().lower()
+            
+            if search:
+                queryset = queryset.filter(
+                    models.Q(name__icontains=search) |
+                    models.Q(email__icontains=search) |
+                    models.Q(phone_number__icontains=search) |
+                    models.Q(enrolment_roll_id__icontains=search)
+                )
+            
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            items = []
+            for user in queryset[start:end]:
+                # Get teacher profile
+                try:
+                    teacher = Teacher.objects.select_related(
+                        'district', 'vidhan_sabha', 'panchayat', 'village'
+                    ).get(user=user, status=True)
+                    district_name = teacher.district.name if teacher.district else None
+                    vidhan_sabha_name = teacher.vidhan_sabha.name if teacher.vidhan_sabha else None
+                    panchayat_name = teacher.panchayat.name if teacher.panchayat else None
+                    village_name = teacher.village.name if teacher.village else None
+                except Teacher.DoesNotExist:
+                    district_name = None
+                    vidhan_sabha_name = None
+                    panchayat_name = None
+                    village_name = None
+                
+                items.append({
+                    'id': user.id,
+                    'teacher_guid_id': teacher.teacher_guid_id if hasattr(user, 'teacher') else None,
+                    'user_id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                    'phone_number': user.phone_number,
+                    'whats_app': user.whats_app,
+                    'picture': user.picture.url if user.picture else None,
+                    'status': user.status,
+                    'enrolment_roll_id': user.enrolment_roll_id,
+                    'role_code': user.role.role_code if user.role else None,
+                    'district_id': teacher.district_id if hasattr(user, 'teacher') else None,
+                    'district_name': district_name,
+                    'vidhan_sabha_id': teacher.vidhan_sabha_id if hasattr(user, 'teacher') else None,
+                    'vidhan_sabha_name': vidhan_sabha_name,
+                    'panchayat_id': teacher.panchayat_id if hasattr(user, 'teacher') else None,
+                    'panchayat_name': panchayat_name,
+                    'village_id': teacher.village_id if hasattr(user, 'teacher') else None,
+                    'village_name': village_name,
+                    'age': teacher.age if hasattr(user, 'teacher') else None,
+                    'gender': teacher.gender if hasattr(user, 'teacher') else None,
+                    'date_of_birth': teacher.date_of_birth if hasattr(user, 'teacher') else None,
+                    'contact': teacher.contact if hasattr(user, 'teacher') else None,
+                    'full_address': teacher.full_address if hasattr(user, 'teacher') else None,
+                    'education': teacher.education if hasattr(user, 'teacher') else None,
+                    'guardian_name': teacher.guardian_name if hasattr(user, 'teacher') else None,
+                    'guardian_number': teacher.guardian_number if hasattr(user, 'teacher') else None,
+                    'enrollment_date': teacher.enrollment_date.isoformat() if hasattr(user, 'teacher') and teacher.enrollment_date else None,
+                    'created_on': user.created_on.isoformat() if user.created_on else None,
+                    'updated_on': user.updated_on.isoformat() if user.updated_on else None
+                })
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _create_teacher(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            name = data.get('name', '').strip()
+            email = data.get('email', '').strip().lower()
+            phone = data.get('phone_number', '').strip()
+            whats_app = data.get('whats_app', '').strip()
+            password = data.get('password', '').strip()
+            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            district_id = data.get('district_id')
+            vidhan_sabha_id = data.get('vidhan_sabha_id')
+            panchayat_id = data.get('panchayat_id')
+            village_id = data.get('village_id')
+            age = data.get('age')
+            gender = data.get('gender', '').strip()
+            date_of_birth = data.get('date_of_birth', '').strip()
+            full_address = data.get('full_address', '').strip()
+            education = data.get('education', '').strip()
+            guardian_name = data.get('guardian_name', '').strip()
+            guardian_number = data.get('guardian_number', '').strip()
+            enrollment_date = data.get('enrollment_date', '').strip()
+            contact = data.get('contact', '').strip()
+            
+            if not name:
+                return JsonResponse({'detail': 'Name is required'}, status=400)
+            if not email:
+                return JsonResponse({'detail': 'Email is required'}, status=400)
+            if not password:
+                return JsonResponse({'detail': 'Password is required'}, status=400)
+            if not phone:
+                return JsonResponse({'detail': 'Phone number is required'}, status=400)
+            if not district_id:
+                return JsonResponse({'detail': 'District is required'}, status=400)
+            if not vidhan_sabha_id:
+                return JsonResponse({'detail': 'Vidhan Sabha is required'}, status=400)
+            if not panchayat_id:
+                return JsonResponse({'detail': 'Panchayat is required'}, status=400)
+            if not village_id:
+                return JsonResponse({'detail': 'Village is required'}, status=400)
+            
+            if User.objects.filter(email=email).exists():
+                return JsonResponse({'detail': 'Email already exists'}, status=400)
+            if User.objects.filter(phone_number=phone).exists():
+                return JsonResponse({'detail': 'Phone number already exists'}, status=400)
+            if enrolment_roll_id and User.objects.filter(enrolment_roll_id=enrolment_roll_id).exists():
+                return JsonResponse({'detail': 'Enrolment roll ID already exists'}, status=400)
+            
+            # Get TEACHER role
+            teacher_role = Role.objects.filter(role_code='TEACHER', status=True).first()
+            if not teacher_role:
+                return JsonResponse({'detail': 'TEACHER role not configured'}, status=500)
+            
+            # Handle picture (base64 data URL)
+            picture_data = data.get('picture', '').strip()
+            picture_file = None
+            if picture_data and picture_data.startswith('data:'):
+                format, imgstr = picture_data.split(';base64,')
+                ext = format.split('/')[-1]
+                picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
+            
+            # Create user
+            user = User.objects.create(
+                name=name,
+                email=email,
+                phone_number=phone if phone else None,
+                whats_app=whats_app if whats_app else None,
+                password=hash_password(password),
+                enrolment_roll_id=enrolment_roll_id if enrolment_roll_id else None,
+                role=teacher_role,
+                status=True,
+                created_by=request.web_user.get('user_id'),
+                created_on=timezone.now()
+            )
+            
+            # Save picture if provided
+            if picture_file:
+                user.picture.save(picture_file.name, picture_file, save=True)
+            
+            # Create Teacher profile
+            teacher = Teacher.objects.create(
+                teacher_guid_id=str(uuid.uuid4()),
+                user=user,
+                district_id=district_id if district_id else None,
+                vidhan_sabha_id=vidhan_sabha_id if vidhan_sabha_id else None,
+                panchayat_id=panchayat_id if panchayat_id else None,
+                village_id=village_id if village_id else None,
+                age=age if age else None,
+                gender=gender if gender else None,
+                date_of_birth=date_of_birth if date_of_birth else None,
+                contact=contact if contact else None,
+                full_address=full_address if full_address else None,
+                education=education if education else None,
+                guardian_name=guardian_name if guardian_name else None,
+                guardian_number=guardian_number if guardian_number else None,
+                status=True,
+                enrollment_date=enrollment_date,
+                created_by=request.web_user.get('user_id'),
+                created_on=timezone.now()
+            )
+
+            # Parse enrollment_date if provided
+            if enrollment_date:
+                try:
+                    teacher.enrollment_date = datetime.strptime(enrollment_date, '%Y-%m-%d').date()
+                    teacher.save(update_fields=['enrollment_date'])
+                except ValueError:
+                    try:
+                        teacher.enrollment_date = datetime.fromisoformat(enrollment_date.replace('Z', '+00:00')).date()
+                        teacher.save(update_fields=['enrollment_date'])
+                    except ValueError:
+                        pass
+            
+            return JsonResponse({
+                'id': user.id,
+                'teacher_guid_id': teacher.teacher_guid_id,
+                'user_id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'whats_app': user.whats_app,
+                'picture': user.picture.url if user.picture else None,
+                'status': user.status,
+                'enrolment_roll_id': user.enrolment_roll_id,
+                'role_code': user.role.role_code,
+                'district_id': teacher.district_id,
+                'vidhan_sabha_id': teacher.vidhan_sabha_id,
+                'panchayat_id': teacher.panchayat_id,
+                'village_id': teacher.village_id,
+                'message': 'Teacher created successfully'
+            }, status=201)
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _update_teacher(self, request):
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('id')
+            
+            if not user_id:
+                return JsonResponse({'detail': 'ID is required'}, status=400)
+            
+            try:
+                user = User.objects.get(id=user_id, role__role_code='TEACHER', status=True)
+                teacher = Teacher.objects.get(user=user, status=True)
+            except (User.DoesNotExist, Teacher.DoesNotExist):
+                return JsonResponse({'detail': 'Teacher not found'}, status=404)
+            
+            name = data.get('name', '').strip()
+            email = data.get('email', '').strip().lower()
+            phone = data.get('phone_number', '').strip()
+            whats_app = data.get('whats_app', '').strip()
+            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            district_id = data.get('district_id')
+            vidhan_sabha_id = data.get('vidhan_sabha_id')
+            panchayat_id = data.get('panchayat_id')
+            village_id = data.get('village_id')
+            age = data.get('age')
+            gender = data.get('gender', '').strip()
+            date_of_birth = data.get('date_of_birth', '').strip()
+            contact = data.get('contact', '').strip()
+            full_address = data.get('full_address', '').strip()
+            education = data.get('education', '').strip()
+            guardian_name = data.get('guardian_name', '').strip()
+            guardian_number = data.get('guardian_number', '').strip()
+            enrollment_date = data.get('enrollment_date', '').strip()
+            password = data.get('password', '').strip()
+            
+            if name:
+                user.name = name
+            if email and email != user.email:
+                if User.objects.filter(email=email).exclude(id=user_id).exists():
+                    return JsonResponse({'detail': 'Email already exists'}, status=400)
+                user.email = email
+            if phone and phone != user.phone_number:
+                if User.objects.filter(phone_number=phone).exclude(id=user_id).exists():
+                    return JsonResponse({'detail': 'Phone number already exists'}, status=400)
+                user.phone_number = phone
+            if whats_app is not None:
+                user.whats_app = whats_app if whats_app else None
+            if enrolment_roll_id is not None:
+                if enrolment_roll_id and User.objects.filter(enrolment_roll_id=enrolment_roll_id).exclude(id=user_id).exists():
+                    return JsonResponse({'detail': 'Enrolment roll ID already exists'}, status=400)
+                user.enrolment_roll_id = enrolment_roll_id if enrolment_roll_id else None
+            
+            # Update password if provided
+            if password:
+                user.password = hash_password(password)
+            
+            user.updated_by = request.web_user.get('user_id')
+            user.updated_on = timezone.now()
+            user.save()
+            
+            # Handle picture (base64 data URL)
+            picture_data = data.get('picture', '').strip()
+            if picture_data and picture_data.startswith('data:'):
+                format, imgstr = picture_data.split(';base64,')
+                ext = format.split('/')[-1]
+                picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
+                user.picture.save(picture_file.name, picture_file, save=True)
+            
+            # Update teacher profile
+            if district_id is not None:
+                teacher.district_id = district_id if district_id else None
+            if vidhan_sabha_id is not None:
+                teacher.vidhan_sabha_id = vidhan_sabha_id if vidhan_sabha_id else None
+            if panchayat_id is not None:
+                teacher.panchayat_id = panchayat_id if panchayat_id else None
+            if village_id is not None:
+                teacher.village_id = village_id if village_id else None
+            if age is not None:
+                teacher.age = age if age else None
+            if gender is not None:
+                teacher.gender = gender if gender else None
+            if date_of_birth is not None:
+                teacher.date_of_birth = date_of_birth if date_of_birth else None
+            if contact is not None:
+                teacher.contact = contact if contact else None
+            if full_address is not None:
+                teacher.full_address = full_address if full_address else None
+            if education is not None:
+                teacher.education = education if education else None
+            if guardian_name is not None:
+                teacher.guardian_name = guardian_name if guardian_name else None
+            if guardian_number is not None:
+                teacher.guardian_number = guardian_number if guardian_number else None
+            if enrollment_date is not None:
+                if enrollment_date:
+                    try:
+                        teacher.enrollment_date = datetime.strptime(enrollment_date, '%Y-%m-%d').date()
+                    except ValueError:
+                        try:
+                            teacher.enrollment_date = datetime.fromisoformat(enrollment_date.replace('Z', '+00:00')).date()
+                        except ValueError:
+                            pass
+                else:
+                    teacher.enrollment_date = None
+            
+            teacher.updated_by = request.web_user.get('user_id')
+            teacher.updated_on = timezone.now()
+            teacher.save()
+            
+            return JsonResponse({
+                'id': user.id,
+                'teacher_guid_id': teacher.teacher_guid_id,
+                'user_id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'whats_app': user.whats_app,
+                'picture': user.picture.url if user.picture else None,
+                'status': user.status,
+                'enrolment_roll_id': user.enrolment_roll_id,
+                'role_code': user.role.role_code,
+                'district_id': teacher.district_id,
+                'vidhan_sabha_id': teacher.vidhan_sabha_id,
+                'panchayat_id': teacher.panchayat_id,
+                'village_id': teacher.village_id,
+                'message': 'Teacher updated successfully'
+            })
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _delete_teacher(self, request):
+        try:
+            teacher_id = request.GET.get('id')
+            if not teacher_id:
+                try:
+                    data = json.loads(request.body)
+                    teacher_id = data.get('id')
+                except:
+                    pass
+            
+            if not teacher_id:
+                return JsonResponse({'detail': 'Teacher ID is required'}, status=400)
+            
+            try:
+                user = User.objects.get(id=teacher_id, role__role_code='TEACHER', status=True)
+                teacher = Teacher.objects.get(user=user, status=True)
+            except (User.DoesNotExist, Teacher.DoesNotExist):
+                return JsonResponse({'detail': 'Teacher not found'}, status=404)
+            
+            user.status = False
+            user.updated_by = request.web_user.get('user_id')
+            user.updated_on = timezone.now()
+            user.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            teacher.status = False
+            teacher.updated_by = request.web_user.get('user_id')
+            teacher.updated_on = timezone.now()
+            teacher.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            return JsonResponse({'detail': 'Teacher deactivated successfully'})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
