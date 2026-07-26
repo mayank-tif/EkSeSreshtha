@@ -4,8 +4,6 @@
 {% block title %}Districts - Ek Se Sreshtha{% endblock %}
 
 {% block extra-css %}
-    <link rel="stylesheet" href="{% static 'esswebapp/css/layout.css' %}">
-    <link rel="stylesheet" href="{% static 'esswebapp/css/constituency.css' %}">
     <link rel="stylesheet" href="{% static 'esswebapp/css/district.css' %}">
 {% endblock %}
 
@@ -126,5 +124,8 @@
 {% endblock %}
 
 {% block extra-js %}
+    <script>
+        renderShell();
+    </script>
     <script src="{% static 'esswebapp/js/district.js' %}"></script>
 {% endblock %}

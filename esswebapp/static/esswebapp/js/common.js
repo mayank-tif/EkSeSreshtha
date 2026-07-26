@@ -12,6 +12,49 @@
    ================================================================ */
 
 /* ================================================================
+   GLOBAL CONFIGURATION
+   ----------------------------------------------------------------
+   Centralized configuration that can be overridden via:
+   1. Django settings (via meta tag in base.html)
+   2. Environment variables (via window.ENV_CONFIG)
+   3. Local storage (user preference)
+   ================================================================ */
+
+/**
+ * Global application configuration
+ * Can be overridden by adding <meta name="app-config" content='{"pageSize": 25}'> in base.html
+ * or by setting window.ENV_CONFIG before loading common.js
+ */
+const AppConfig = (function() {
+    const defaults = {
+        pageSize: 50,
+        maxVisiblePages: 5,
+        searchDebounceMs: 300,
+        toastDuration: 3000
+    };
+
+    // Try to get config from meta tag (set by Django template)
+    const meta = document.querySelector('meta[name="app-config"]');
+    let metaConfig = {};
+    if (meta) {
+        try {
+            metaConfig = JSON.parse(meta.getAttribute('content'));
+        } catch (e) {
+            console.warn('Invalid app-config meta tag:', e);
+        }
+    }
+
+    // Try to get from window.ENV_CONFIG (set by Django or env)
+    const envConfig = window.ENV_CONFIG || {};
+
+    // Merge: defaults < meta < env
+    return { ...defaults, ...metaConfig, ...envConfig };
+})();
+
+// Export for use in other modules
+window.AppConfig = AppConfig;
+
+/* ================================================================
    TOAST NOTIFICATION SYSTEM
    ----------------------------------------------------------------
    Shows temporary feedback messages at the top-right corner.
@@ -96,6 +139,39 @@ function closeModal(modalId) {
         document.body.style.overflow = '';
     }
 }
+
+/* ================================================================
+   AUTO-MODAL CLOSE HANDLERS
+   ----------------------------------------------------------------
+   Automatically attach click handlers to elements with
+   data-close-modal attribute.
+   ================================================================ */
+
+// Handle close buttons with data-close-modal attribute
+document.addEventListener('DOMContentLoaded', () => {
+    document.body.addEventListener('click', (e) => {
+        const closeBtn = e.target.closest('[data-close-modal]');
+        if (closeBtn) {
+            const modal = closeBtn.closest('.modal-backdrop');
+            if (modal) closeModal(modal.id);
+        }
+    });
+    
+    // Close modal on backdrop click
+    document.body.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal-backdrop')) {
+            closeModal(e.target.id);
+        }
+    });
+    
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const activeModal = document.querySelector('.modal-backdrop.active');
+            if (activeModal) closeModal(activeModal.id);
+        }
+    });
+});
 
 /* ================================================================
    FORMATTERS
@@ -304,19 +380,19 @@ function createGlobalLoader() {
  * Render pagination controls
  * @param {Object} options
  * @param {number} options.currentPage - Current page (1-based)
- * @param {number} options.pageSize - Items per page
+ * @param {number} options.pageSize - Items per page (defaults to AppConfig.pageSize)
  * @param {number} options.totalItems - Total number of items
  * @param {string} options.containerSelector - Selector for container element
  * @param {Function} options.onPageChange - Callback(pageNumber) when page changes
- * @param {number} options.maxVisiblePages - Max page buttons to show (default 5)
+ * @param {number} options.maxVisiblePages - Max page buttons to show (default from AppConfig)
  */
 function renderPagination({
     currentPage = 1,
-    pageSize = 50,
+    pageSize = AppConfig.pageSize,
     totalItems = 0,
     containerSelector,
     onPageChange,
-    maxVisiblePages = 5
+    maxVisiblePages = AppConfig.maxVisiblePages
 }) {
     const container = document.querySelector(containerSelector);
     if (!container) return;

@@ -26,9 +26,9 @@ urlpatterns = [
     
     # Constituency pages
     path('constituency/district/', DistrictView.as_view(), name='district'),
-    path('constituency/vidhan-sabha/', CentresView.as_view(), name='vidhan-sabha'),
-    path('constituency/panchayat/', CentresView.as_view(), name='panchayat'),
-    path('constituency/village/', CentresView.as_view(), name='village'),
+    path('constituency/vidhan-sabha/', VidhanSabhaView.as_view(), name='vidhan-sabha'),
+    path('constituency/panchayat/', PanchayatView.as_view(), name='panchayat'),
+    path('constituency/village/', VillageView.as_view(), name='village'),
     
     # Attendance center detail page
     path('attendance/center-detail/', AttendanceView.as_view(), name='center-detail'),

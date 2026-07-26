@@ -301,6 +301,9 @@ function renderShell({ title, active, breadcrumbs = [] }) {
             </div>
         </main>
     `;
+
+    // Emit event for page scripts that need to re-initialize after shell render
+    document.dispatchEvent(new CustomEvent('shell:rendered', { detail: { title, active, breadcrumbs } }));
 }
 
 /* ================================================================

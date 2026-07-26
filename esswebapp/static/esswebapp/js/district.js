@@ -22,7 +22,7 @@ renderShell({
 // STATE
 // ------------------------------------------------------------------
 let currentPage = 1;
-const pageSize = 50;
+const pageSize = AppConfig.pageSize;
 let isLoading = false;
 
 // ------------------------------------------------------------------
