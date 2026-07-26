@@ -1,4 +1,4 @@
-from django.urls import path, re_path
+from django.urls import path
 from .views import *
 
 app_name = 'esswebapp'
@@ -21,7 +21,7 @@ urlpatterns = [
     path('students/student-list/', StudentsView.as_view(), name='student-list'),
     path('users/', UsersView.as_view(), name='users'),
     path('users/super-admin/', SuperAdminView.as_view(), name='super-admin'),
-    path('users/regional-admin/', UsersView.as_view(), name='regional-admin'),
+    path('users/regional-admin/', RegionalAdminView.as_view(), name='regional-admin'),
     path('users/teacher/', UsersView.as_view(), name='teacher'),
     
     # Constituency pages

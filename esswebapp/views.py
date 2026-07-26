@@ -11,6 +11,8 @@ import uuid
 from APIS.models import *
 from APIS.utils import hash_password
 from .forms import LoginForm
+import base64
+from django.core.files.base import ContentFile
 
 
 # Allowed role codes for web login
@@ -515,6 +517,503 @@ class SuperAdminView(LoginRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
 
+
+
+class RegionalAdminView(LoginRequiredMixin, View):
+    """Regional Admin management page + API endpoints"""
+    template_name = 'esswebapp/pages/users/regional-admin.html'
+    
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._list_regional_admins_api(request)
+        
+        # Only super admins can access
+        if not request.web_user.get('is_super_admin'):
+            return redirect('esswebapp:dashboard')
+        
+        # Render the HTML page
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def post(self, request):
+        # Create new regional admin
+        return self._create_regional_admin(request)
+    
+    def put(self, request):
+        # Update existing regional admin
+        return self._update_regional_admin(request)
+    
+    def delete(self, request):
+        # Soft delete (set status=0)
+        return self._delete_regional_admin(request)
+    
+    def _get_regional_admins_queryset(self):
+        """Get regional admins from User model with REGIONAL_ADMIN role"""
+        return User.objects.filter(status=True, role__role_code='REGIONAL_ADMIN').select_related('role').order_by('-created_on')
+    
+    def _list_regional_admins_api(self, request):
+        try:
+            ra_id = request.GET.get('id')
+            print("ra_id", ra_id)
+            if ra_id:
+                try:
+                    user = self._get_regional_admins_queryset().get(id=ra_id)
+                    
+                    # Get RegionalAdmin profile if exists
+                    try:
+                        ra = RegionalAdmin.objects.select_related('district', 'vidhan_sabha', 'panchayat', 'village').get(user=user, status=True)
+                        print("ra", ra)
+                        ra_guid = ra.regional_admin_guid_id
+                        ra_district = ra.district_id
+                        ra_district_name = ra.district.name if ra.district else None
+                        ra_vidhan_sabha = ra.vidhan_sabha_id
+                        ra_vidhan_sabha_name = ra.vidhan_sabha.name if ra.vidhan_sabha else None
+                        ra_panchayat = ra.panchayat_id
+                        ra_panchayat_name = ra.panchayat.name if ra.panchayat else None
+                        ra_village = ra.village_id
+                        ra_village_name = ra.village.name if ra.village else None
+                        ra_age = ra.age
+                        ra_gender = ra.gender
+                        ra_dob = ra.date_of_birth
+                        ra_contact = ra.contact
+                        ra_address = ra.full_address
+                        ra_education = ra.education
+                        ra_guardian_name = ra.guardian_name
+                        ra_guardian_number = ra.guardian_number
+                        ra_created_by = ra.created_by
+                        ra_created_on = ra.created_on
+                        ra_updated_by = ra.updated_by
+                        ra_updated_on = ra.updated_on
+                        ra_enrollment_date = ra.enrollment_date
+                    except RegionalAdmin.DoesNotExist:
+                        ra_guid = None
+                        ra_district = None
+                        ra_district_name = None
+                        ra_vidhan_sabha = None
+                        ra_vidhan_sabha_name = None
+                        ra_panchayat = None
+                        ra_panchayat_name = None
+                        ra_village = None
+                        ra_village_name = None
+                        ra_age = None
+                        ra_gender = None
+                        ra_dob = None
+                        ra_contact = None
+                        ra_address = None
+                        ra_education = None
+                        ra_guardian_name = None
+                        ra_guardian_number = None
+                        ra_created_by = user.created_by
+                        ra_created_on = user.created_on
+                        ra_updated_by = user.updated_by
+                        ra_updated_on = user.updated_on
+                    
+                    return JsonResponse({
+                        'id': user.id,
+                        'regional_admin_guid_id': ra_guid,
+                        'user_id': user.id,
+                        'name': user.name,
+                        'email': user.email,
+                        'phone_number': user.phone_number,
+                        'whats_app': user.whats_app,
+                        'picture': user.picture.url if user.picture else None,
+                        'status': user.status,
+                        'enrolment_roll_id': user.enrolment_roll_id,
+                        'role_id': user.role_id,
+                        'role_code': user.role.role_code if user.role else None,
+                        'district_id': ra_district,
+                        'district_name': ra_district_name,
+                        'vidhan_sabha_id': ra_vidhan_sabha,
+                        'vidhan_sabha_name': ra_vidhan_sabha_name,
+                        'panchayat_id': ra_panchayat,
+                        'panchayat_name': ra_panchayat_name,
+                        'village_id': ra_village,
+                        'village_name': ra_village_name,
+                        'age': ra_age,
+                        'gender': ra_gender,
+                        'date_of_birth': ra_dob,
+                        'contact': ra_contact,
+                        'full_address': ra_address,
+                        'education': ra_education,
+                        'guardian_name': ra_guardian_name,
+                        'guardian_number': ra_guardian_number,
+                        'created_by': ra_created_by,
+                        'created_on': ra_created_on.isoformat() if ra_created_on else None,
+                        'updated_by': ra_updated_by,
+                        'updated_on': ra_updated_on.isoformat() if ra_updated_on else None,
+                        'enrollment_date': ra_enrollment_date if ra_enrollment_date else None
+                    })
+                except User.DoesNotExist:
+                    return JsonResponse({'detail': 'Regional Admin not found'}, status=404)
+            
+            queryset = self._get_regional_admins_queryset()
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 50))
+            search = request.GET.get('search', '').strip().lower()
+            
+            if search:
+                queryset = queryset.filter(
+                    models.Q(name__icontains=search) |
+                    models.Q(email__icontains=search) |
+                    models.Q(phone_number__icontains=search)
+                )
+            
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            items = []
+            for user in queryset[start:end]:
+                # Get RegionalAdmin profile if exists
+                try:
+                    ra = RegionalAdmin.objects.select_related('district', 'vidhan_sabha', 'panchayat', 'village').get(user=user, status=True)
+                    ra_guid = ra.regional_admin_guid_id
+                    ra_district = ra.district_id
+                    ra_district_name = ra.district.name if ra.district else None
+                    ra_vidhan_sabha = ra.vidhan_sabha_id
+                    ra_vidhan_sabha_name = ra.vidhan_sabha.name if ra.vidhan_sabha else None
+                    ra_panchayat = ra.panchayat_id
+                    ra_panchayat_name = ra.panchayat.name if ra.panchayat else None
+                    ra_village = ra.village_id
+                    ra_village_name = ra.village.name if ra.village else None
+                    ra_age = ra.age
+                    ra_gender = ra.gender
+                    ra_dob = ra.date_of_birth
+                    ra_contact = ra.contact
+                    ra_address = ra.full_address
+                    ra_education = ra.education
+                    ra_guardian_name = ra.guardian_name
+                    ra_guardian_number = ra.guardian_number
+                    ra_created_by = ra.created_by
+                    ra_created_on = ra.created_on
+                    ra_updated_by = ra.updated_by
+                    ra_updated_on = ra.updated_on
+                except RegionalAdmin.DoesNotExist:
+                    ra_guid = None
+                    ra_district = None
+                    ra_district_name = None
+                    ra_vidhan_sabha = None
+                    ra_vidhan_sabha_name = None
+                    ra_panchayat = None
+                    ra_panchayat_name = None
+                    ra_village = None
+                    ra_village_name = None
+                    ra_age = None
+                    ra_gender = None
+                    ra_dob = None
+                    ra_contact = None
+                    ra_address = None
+                    ra_education = None
+                    ra_guardian_name = None
+                    ra_guardian_number = None
+                    ra_created_by = user.created_by
+                    ra_created_on = user.created_on
+                    ra_updated_by = user.updated_by
+                    ra_updated_on = user.updated_on
+                
+                items.append({
+                    'id': user.id,
+                    'regional_admin_guid_id': ra_guid,
+                    'user_id': user.id,
+                    'name': user.name,
+                    'email': user.email,
+                    'phone_number': user.phone_number,
+                    'whats_app': user.whats_app,
+                    'picture': user.picture.url if user.picture else None,
+                    'status': user.status,
+                    'enrolment_roll_id': user.enrolment_roll_id,
+                    'role_id': user.role_id,
+                    'role_code': user.role.role_code if user.role else None,
+                    'district_id': ra_district,
+                    'district_name': ra_district_name,
+                    'vidhan_sabha_id': ra_vidhan_sabha,
+                    'vidhan_sabha_name': ra_vidhan_sabha_name,
+                    'panchayat_id': ra_panchayat,
+                    'panchayat_name': ra_panchayat_name,
+                    'village_id': ra_village,
+                    'village_name': ra_village_name,
+                    'age': ra_age,
+                    'gender': ra_gender,
+                    'date_of_birth': ra_dob,
+                    'contact': ra_contact,
+                    'full_address': ra_address,
+                    'education': ra_education,
+                    'guardian_name': ra_guardian_name,
+                    'guardian_number': ra_guardian_number,
+                    'created_by': ra_created_by,
+                    'created_on': ra_created_on.isoformat() if ra_created_on else None,
+                    'updated_by': ra_updated_by,
+                    'updated_on': ra_updated_on.isoformat() if ra_updated_on else None
+                })
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _create_regional_admin(self, request):
+        try:
+            data = json.loads(request.body)
+            print("data", data)
+            
+            name = data.get('name', '').strip()
+            email = data.get('email', '').strip().lower()
+            phone = data.get('phone_number', '').strip()
+            whats_app = data.get('whats_app', '').strip()
+            password = data.get('password', '').strip()
+            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            district_id = data.get('district_id')
+            vidhan_sabha_id = data.get('vidhan_sabha_id')
+            panchayat_id = data.get('panchayat_id')
+            village_id = data.get('village_id')
+            age = data.get('age')
+            gender = data.get('gender', '').strip()
+            date_of_birth = data.get('date_of_birth', '').strip()
+            contact = data.get('contact', '').strip()
+            full_address = data.get('full_address', '').strip()
+            education = data.get('education', '').strip()
+            guardian_name = data.get('guardian_name', '').strip()
+            guardian_number = data.get('guardian_number', '').strip()
+            enrollment_date = data.get('enrollment_date', '').strip()
+            
+            if not name:
+                return JsonResponse({'detail': 'Name is required'}, status=400)
+            if not email:
+                return JsonResponse({'detail': 'Email is required'}, status=400)
+            if not password:
+                return JsonResponse({'detail': 'Password is required'}, status=400)
+            
+            # Check for duplicates
+            if User.objects.filter(email=email).exists():
+                return JsonResponse({'detail': 'Email already exists'}, status=400)
+            if phone and User.objects.filter(phone_number=phone).exists():
+                return JsonResponse({'detail': 'Phone number already exists'}, status=400)
+            if enrolment_roll_id and User.objects.filter(enrolment_roll_id=enrolment_roll_id).exists():
+                return JsonResponse({'detail': 'Enrolment roll ID already exists'}, status=400)
+            
+            # Get REGIONAL_ADMIN role
+            regional_admin_role = Role.objects.filter(role_code='REGIONAL_ADMIN', status=True).first()
+            if not regional_admin_role:
+                return JsonResponse({'detail': 'REGIONAL_ADMIN role not configured'}, status=500)
+            
+            # Handle picture (base64 data URL)
+            picture_data = data.get('picture', '').strip()
+            picture_file = None
+            if picture_data and picture_data.startswith('data:'):
+                format, imgstr = picture_data.split(';base64,')
+                ext = format.split('/')[-1]
+                picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
+            
+            # Create user
+            user = User.objects.create(
+                name=name,
+                email=email,
+                phone_number=phone if phone else None,
+                whats_app=whats_app if whats_app else None,
+                password=hash_password(password),  
+                enrolment_roll_id=enrolment_roll_id if enrolment_roll_id else None,
+                role=regional_admin_role,
+                status=True,
+                created_by=request.web_user.get('user_id'),
+                created_on=timezone.now()
+            )
+            
+            # Save picture if provided
+            if picture_file:
+                user.picture.save(picture_file.name, picture_file, save=True)
+                
+            print("ra user", user)
+            
+            # Create RegionalAdmin profile
+            ra = RegionalAdmin.objects.create(
+                regional_admin_guid_id=str(uuid.uuid4()),
+                user=user,
+                district_id=district_id if district_id else None,
+                vidhan_sabha_id=vidhan_sabha_id if vidhan_sabha_id else None,
+                panchayat_id=panchayat_id if panchayat_id else None,
+                village_id=village_id if village_id else None,
+                age=age if age else None,
+                gender=gender if gender else None,
+                date_of_birth=date_of_birth if date_of_birth else None,
+                contact=contact if contact else None,
+                full_address=full_address if full_address else None,
+                education=education if education else None,
+                guardian_name=guardian_name if guardian_name else None,
+                guardian_number=guardian_number if guardian_number else None,
+                status=True,
+                enrollment_date=enrollment_date,
+                created_by=request.web_user.get('user_id'),
+                created_on=timezone.now()
+            )
+            print("ra", ra)
+            
+            return JsonResponse({
+                'id': user.id,
+                'regional_admin_guid_id': ra.regional_admin_guid_id,
+                'user_id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'whats_app': user.whats_app,
+                'status': user.status,
+                'enrolment_roll_id': user.enrolment_roll_id,
+                'role_code': user.role.role_code,
+                'district_id': ra.district_id,
+                'vidhan_sabha_id': ra.vidhan_sabha_id,
+                'panchayat_id': ra.panchayat_id,
+                'village_id': ra.village_id,
+                'message': 'Regional Admin created successfully'
+            }, status=201)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _update_regional_admin(self, request):
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('id')  # This is now user_id
+            
+            if not user_id:
+                return JsonResponse({'detail': 'ID is required'}, status=400)
+            
+            try:
+                user = User.objects.get(id=user_id, role__role_code='REGIONAL_ADMIN', status=True)
+                ra = RegionalAdmin.objects.get(user=user, status=True)
+            except (User.DoesNotExist, RegionalAdmin.DoesNotExist):
+                return JsonResponse({'detail': 'Regional Admin not found'}, status=404)
+            
+            name = data.get('name', '').strip()
+            email = data.get('email', '').strip().lower()
+            phone = data.get('phone_number', '').strip()
+            whats_app = data.get('whats_app', '').strip()
+            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            district_id = data.get('district_id')
+            vidhan_sabha_id = data.get('vidhan_sabha_id')
+            panchayat_id = data.get('panchayat_id')
+            village_id = data.get('village_id')
+            age = data.get('age')
+            gender = data.get('gender', '').strip()
+            date_of_birth = data.get('date_of_birth', '').strip()
+            contact = data.get('contact', '').strip()
+            full_address = data.get('full_address', '').strip()
+            education = data.get('education', '').strip()
+            guardian_name = data.get('guardian_name', '').strip()
+            guardian_number = data.get('guardian_number', '').strip()
+            password = data.get('password', '').strip()  # Optional password update
+            
+            if not name:
+                return JsonResponse({'detail': 'Name is required'}, status=400)
+            if not email:
+                return JsonResponse({'detail': 'Email is required'}, status=400)
+            
+            # Check for duplicates (excluding current user)
+            if User.objects.filter(email=email).exclude(id=user_id).exists():
+                return JsonResponse({'detail': 'Email already exists'}, status=400)
+            if phone and User.objects.filter(phone_number=phone).exclude(id=user_id).exists():
+                return JsonResponse({'detail': 'Phone number already exists'}, status=400)
+            if enrolment_roll_id and User.objects.filter(enrolment_roll_id=enrolment_roll_id).exclude(id=user_id).exists():
+                return JsonResponse({'detail': 'Enrolment roll ID already exists'}, status=400)
+            
+            # Update user
+            user.name = name
+            user.email = email
+            user.phone_number = phone if phone else None
+            user.whats_app = whats_app if whats_app else None
+            if enrolment_roll_id:
+                user.enrolment_roll_id = enrolment_roll_id
+            
+            # Update password only if provided and not blank
+            if password:
+                user.password = hash_password(password)
+            
+            # Handle picture (base64 data URL)
+            picture_data = data.get('picture', '').strip()
+            if picture_data and picture_data.startswith('data:'):
+                import base64
+                from django.core.files.base import ContentFile
+                import uuid
+                format, imgstr = picture_data.split(';base64,')
+                ext = format.split('/')[-1]
+                picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
+                user.picture.save(picture_file.name, picture_file, save=False)
+            
+            user.updated_by = request.web_user.get('user_id')
+            user.updated_on = timezone.now()
+            user.save()
+            
+            # Update regional admin
+            ra.district_id = district_id if district_id else None
+            ra.vidhan_sabha_id = vidhan_sabha_id if vidhan_sabha_id else None
+            ra.panchayat_id = panchayat_id if panchayat_id else None
+            ra.village_id = village_id if village_id else None
+            ra.age = age if age else None
+            ra.gender = gender if gender else None
+            ra.date_of_birth = date_of_birth if date_of_birth else None
+            ra.contact = contact if contact else None
+            ra.full_address = full_address if full_address else None
+            ra.education = education if education else None
+            ra.guardian_name = guardian_name if guardian_name else None
+            ra.guardian_number = guardian_number if guardian_number else None
+            ra.updated_by = request.web_user.get('user_id')
+            ra.updated_on = timezone.now()
+            ra.save()
+            
+            return JsonResponse({
+                'id': user.id,  # Use user.id as the main ID
+                'regional_admin_guid_id': ra.regional_admin_guid_id,
+                'user_id': user.id,
+                'name': user.name,
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'whats_app': user.whats_app,
+                'status': user.status,
+                'enrolment_roll_id': user.enrolment_roll_id,
+                'role_code': user.role.role_code if user.role else None,
+                'district_id': ra.district_id,
+                'vidhan_sabha_id': ra.vidhan_sabha_id,
+                'panchayat_id': ra.panchayat_id,
+                'village_id': ra.village_id,
+                'message': 'Regional Admin updated successfully'
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _delete_regional_admin(self, request):
+        try:
+            data = json.loads(request.body)
+            user_id = data.get('id')  # This is now user_id
+            
+            if not user_id:
+                return JsonResponse({'detail': 'ID is required'}, status=400)
+            
+            try:
+                user = User.objects.get(id=user_id, role__role_code='REGIONAL_ADMIN')
+                ra = RegionalAdmin.objects.get(user=user)
+            except (User.DoesNotExist, RegionalAdmin.DoesNotExist):
+                return JsonResponse({'detail': 'Regional Admin not found'}, status=404)
+            
+            # Soft delete - set status to False
+            ra.status = False
+            ra.updated_by = request.web_user.get('user_id')
+            ra.updated_on = timezone.now()
+            ra.save()
+            
+            # Also deactivate user
+            user.status = False
+            user.updated_by = request.web_user.get('user_id')
+            user.updated_on = timezone.now()
+            user.save()
+            
+            return JsonResponse({'message': 'Regional Admin deactivated successfully'})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
 
 
 

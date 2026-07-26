@@ -1,42 +1,98 @@
 /* ================================================================
-   EK SE SRESHTHA - REGIONAL ADMIN SCRIPT
-   ----------------------------------------------------------------
-   Manages Regional Admin accounts. Similar to Super Admin, but
-   with additional area-assignment fields (District → Vidhan Sabha
-   → Panchayat) using cascading dropdowns.
+   EK SE SRESHTHA - REGIONAL ADMIN PAGE SCRIPT
+   ---------------------------------------------------------------
+   Manages Regional Admin accounts: fetch, search, pagination,
+   and CRUD via API calls. Uses common.js utilities.
+   Left form handles both Add and Edit. Cascading dropdowns:
+   District -> Vidhan Sabha -> Panchayat
    ================================================================ */
 
-renderShell({
-    title: 'Regional Admin',
-    active: 'regional-admin',
-    breadcrumbs: [
-        { label: 'Users' },
-        { label: 'Regional Admin' }
-    ]
-});
+// ── State ─────────────────────────────────────────────────────────
+const state = {
+    page: 1,
+    pageSize: AppConfig.pageSize,
+    search: '',
+    editingId: null
+};
 
-/* ================================================================
-   INITIALIZATION
-   ================================================================ */
+// ── DOM References ────────────────────────────────────────────────
+const els = {
+    get search() { return document.getElementById('ra-search'); },
+    get list() { return document.getElementById('ra-list'); },
+    get countLabel() { return document.getElementById('ra-count-label'); },
 
-document.addEventListener('DOMContentLoaded', () => {
-    populateRaDistricts();
-    renderRegionalAdminList();
+    get form() { return document.getElementById('ra-form'); },
+    get formTitle() { return document.getElementById('ra-form-title'); },
+    get name() { return document.getElementById('ra-name'); },
+    get email() { return document.getElementById('ra-email'); },
+    get age() { return document.getElementById('ra-age'); },
+    get gender() { return document.getElementById('ra-gender'); },
+    get dob() { return document.getElementById('ra-dob'); },
+    get enrollment() { return document.getElementById('ra-enrollment'); },
+    get phone() { return document.getElementById('ra-phone'); },
+    get whatsapp() { return document.getElementById('ra-whatsapp'); },
 
-    document.getElementById('ra-form').addEventListener('submit', handleRaSubmit);
-    document.getElementById('ra-image').addEventListener('change', handleRaImageChange);
-});
+    get district() { return document.getElementById('ra-district'); },
+    get vs() { return document.getElementById('ra-vs'); },
+    get panchayat() { return document.getElementById('ra-panchayat'); },
 
-/* ================================================================
-   PROFILE IMAGE PREVIEW
-   ================================================================ */
+    get password() { return document.getElementById('ra-password'); },
+    get confirmPassword() { return document.getElementById('ra-confirm-password'); },
+    get image() { return document.getElementById('ra-image'); },
+    get imagePreview() { return document.getElementById('ra-image-preview'); },
+    get imageData() { return document.getElementById('ra-image-data'); },
+    get editingId() { return document.getElementById('ra-editing-id'); }
+};
 
-function handleRaImageChange(event) {
+// ── Init ──────────────────────────────────────────────────────────
+async function init() {
+    await loadDistrictDropdown();
+    await fetchAndRender();
+    bindEvents();
+}
+
+// Handle case where DOMContentLoaded already fired
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init().catch(err => console.error('Init error:', err));
+}
+
+// ── Event Bindings ────────────────────────────────────────────────
+function bindEvents() {
+    // Search with debounce
+    if (els.search) {
+        let debounceTimer;
+        els.search.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                state.page = 1;
+                state.search = els.search.value.trim().toLowerCase();
+                fetchAndRender();
+            }, 300);
+        });
+    }
+
+    // Form submit
+    if (els.form) els.form.addEventListener('submit', handleFormSubmit);
+
+    // Reset button - using inline onclick from template
+    // Image preview
+    if (els.image) els.image.addEventListener('change', handleImageChange);
+}
+
+// Global functions called from template inline handlers
+window.onRaDistrictChange = onDistrictChange;
+window.onRaVsChange = onVsChange;
+window.resetRegionalAdminForm = resetForm;
+
+// ── Image Preview ─────────────────────────────────────────────────
+function handleImageChange(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     if (file.size > 2 * 1024 * 1024) {
-        showToast('Image must be under 2 MB.', 'danger');
+        showToast('Image must be under 2 MB.', 'error');
         event.target.value = '';
         return;
     }
@@ -44,120 +100,213 @@ function handleRaImageChange(event) {
     const reader = new FileReader();
     reader.onload = (e) => {
         const dataUrl = e.target.result;
-        document.getElementById('ra-image-data').value = dataUrl;
-        document.getElementById('ra-image-preview').innerHTML =
-            `<img src="${dataUrl}" alt="Profile preview">`;
+        els.imageData.value = dataUrl;
+        if (els.imagePreview) {
+            els.imagePreview.innerHTML = `<img src="${dataUrl}" alt="Profile preview">`;
+        }
     };
     reader.readAsDataURL(file);
 }
 
-/* ================================================================
-   CASCADING DROPDOWNS FOR AREA ASSIGNMENT
-   ================================================================ */
+// ── Cascading Dropdowns ───────────────────────────────────────────
+async function loadDistrictDropdown() {
+    showGlobalLoader();
+    try {
+        const url = getUrl('district') + '?page=1&page_size=1000';
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
 
-function populateRaDistricts() {
-    const districts = getRecords('districts');
-    const select = document.getElementById('ra-district');
-    select.innerHTML = '<option value="">Select district</option>' +
-        districts.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+        if (!els.district) return;
+        els.district.innerHTML = '<option value="">Select district</option>' +
+            (data.results || []).map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+
+        if ($.fn.select2 && $(els.district).data('select2')) {
+            $(els.district).select2('destroy');
+        }
+        if ($.fn.select2) {
+            $(els.district).select2({
+                placeholder: 'Select district',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $(els.district).parent()
+            });
+            $(els.district).off('select2:select').on('select2:select', onDistrictChange);
+        }
+    } catch (e) {
+        console.error('Failed to load districts:', e);
+        showToast('Failed to load districts', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-function onRaDistrictChange() {
-    const districtId = document.getElementById('ra-district').value;
-    const vsSelect = document.getElementById('ra-vs');
-    const panchSelect = document.getElementById('ra-panchayat');
+async function onDistrictChange() {
+    const districtId = els.district?.value;
 
-    // Reset children whenever the parent changes
-    vsSelect.innerHTML = '<option value="">Select Vidhan Sabha</option>';
-    panchSelect.innerHTML = '<option value="">Select Panchayat</option>';
-    panchSelect.disabled = true;
-
-    if (!districtId) {
-        vsSelect.disabled = true;
-        return;
+    // Reset children
+    if (els.vs) {
+        els.vs.innerHTML = '<option value="">Select Vidhan Sabha</option>';
+        els.vs.disabled = true;
+        if ($.fn.select2 && $(els.vs).data('select2')) {
+            $(els.vs).select2('destroy');
+        }
+    }
+    if (els.panchayat) {
+        els.panchayat.innerHTML = '<option value="">Select Panchayat</option>';
+        els.panchayat.disabled = true;
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
     }
 
-    const list = getRecords('vidhanSabhas').filter(v => v.districtId === districtId);
-    vsSelect.innerHTML += list.map(v =>
-        `<option value="${v.id}">${escapeHtml(v.name)}</option>`
-    ).join('');
-    vsSelect.disabled = false;
+    if (!districtId) return;
+
+    showGlobalLoader();
+    try {
+        const url = getUrl('vidhan-sabha') + '?district_id=' + districtId + '&page=1&page_size=1000';
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+        if (!els.vs) return;
+        els.vs.innerHTML += (data.results || []).map(v =>
+            `<option value="${v.id}">${escapeHtml(v.name)}</option>`
+        ).join('');
+        els.vs.disabled = false;
+
+        if ($.fn.select2 && $(els.vs).data('select2')) {
+            $(els.vs).select2('destroy');
+        }
+        if ($.fn.select2) {
+            $(els.vs).select2({
+                placeholder: 'Select Vidhan Sabha',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $(els.vs).parent()
+            });
+            $(els.vs).off('select2:select').on('select2:select', onVsChange);
+        }
+    } catch (e) {
+        console.error('Failed to load Vidhan Sabhas:', e);
+        showToast('Failed to load Vidhan Sabhas', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-function onRaVsChange() {
-    const vsId = document.getElementById('ra-vs').value;
-    const panchSelect = document.getElementById('ra-panchayat');
-    panchSelect.innerHTML = '<option value="">Select Panchayat</option>';
+async function onVsChange() {
+    const vsId = els.vs?.value;
 
-    if (!vsId) {
-        panchSelect.disabled = true;
-        return;
+    if (els.panchayat) {
+        els.panchayat.innerHTML = '<option value="">Select Panchayat</option>';
+        els.panchayat.disabled = true;
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
     }
 
-    const list = getRecords('panchayats').filter(p => p.vidhanSabhaId === vsId);
-    panchSelect.innerHTML += list.map(p =>
-        `<option value="${p.id}">${escapeHtml(p.name)}</option>`
-    ).join('');
-    panchSelect.disabled = false;
+    if (!vsId) return;
+
+    showGlobalLoader();
+    try {
+        const url = getUrl('panchayat') + '?vidhan_sabha_id=' + vsId + '&page=1&page_size=1000';
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+
+        if (!els.panchayat) return;
+        els.panchayat.innerHTML += (data.results || []).map(p =>
+            `<option value="${p.id}">${escapeHtml(p.name)}</option>`
+        ).join('');
+        els.panchayat.disabled = false;
+
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
+        if ($.fn.select2) {
+            $(els.panchayat).select2({
+                placeholder: 'Select Panchayat',
+                allowClear: true,
+                width: '100%',
+                dropdownParent: $(els.panchayat).parent()
+            });
+        }
+    } catch (e) {
+        console.error('Failed to load Panchayats:', e);
+        showToast('Failed to load Panchayats', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-/* ================================================================
-   LIST RENDERING
-   ================================================================ */
+// ── Fetch & Render ────────────────────────────────────────────────
+async function fetchAndRender() {
+    showGlobalLoader();
+    try {
+        const params = new URLSearchParams({
+            page: state.page,
+            page_size: state.pageSize,
+            search: state.search
+        });
+        const url = getUrl('regional-admin') + '?' + params.toString();
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
 
-function renderRegionalAdminList() {
-    let admins = getRecords('regionalAdmins');
-    const districts = getRecords('districts');
-    const districtMap = Object.fromEntries(districts.map(d => [d.id, d.name]));
-
-    document.getElementById('ra-count-label').textContent =
-        `${admins.length} admin${admins.length === 1 ? '' : 's'} registered.`;
-
-    // Apply search filter (matches name / email / phone / district)
-    const searchEl = document.getElementById('ra-search');
-    const term = searchEl ? searchEl.value.trim().toLowerCase() : '';
-    if (term) {
-        admins = admins.filter(a =>
-            (a.name && a.name.toLowerCase().includes(term)) ||
-            (a.email && a.email.toLowerCase().includes(term)) ||
-            (a.phone && String(a.phone).includes(term)) ||
-            (districtMap[a.districtId] && districtMap[a.districtId].toLowerCase().includes(term))
-        );
+        renderList(data.results || []);
+        renderPaginationEl(data);
+        if (els.countLabel) els.countLabel.textContent = `${data.count || 0} admins registered.`;
+        if (els.total) els.total.textContent = data.count || 0;
+        if (els.start) els.start.textContent = ((state.page - 1) * state.pageSize) + 1;
+        if (els.end) els.end.textContent = Math.min(state.page * state.pageSize, data.count || 0);
+    } catch (e) {
+        console.error('Fetch failed:', e);
+        showToast('Failed to load Regional Admins', 'error');
+    } finally {
+        hideGlobalLoader();
     }
+}
 
-    const list = document.getElementById('ra-list');
-
-    if (admins.length === 0) {
-        list.innerHTML = `
+function renderList(items) {
+    if (!els.list) return;
+    if (!items.length) {
+        els.list.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">👨‍💼</div>
-                <div class="empty-state-title">No Regional Admins yet</div>
+                <div class="empty-state-icon">👤</div>
+                <div class="empty-state-title">No Regional Admins found</div>
                 <div class="empty-state-text">Add one using the form on the left.</div>
             </div>
         `;
         return;
     }
-
-    list.innerHTML = admins.map(admin => {
-        const avatarHtml = admin.image
-            ? `<img src="${admin.image}" alt="${escapeHtml(admin.name)}">`
-            : getInitials(admin.name);
-
-        const districtName = districtMap[admin.districtId] || 'Unassigned';
+    els.list.innerHTML = items.map(ra => {
+        const avatarHtml = ra.picture
+            ? `<img src="${escapeHtml(ra.picture)}" alt="${escapeHtml(ra.name)}">`
+            : getInitials(ra.name);
 
         return `
             <div class="user-list-item">
                 <div class="avatar">${avatarHtml}</div>
                 <div class="user-list-info">
-                    <div class="user-list-name">${escapeHtml(admin.name)}</div>
-                    <div class="user-list-meta">${escapeHtml(admin.email)} · ${escapeHtml(districtName)}</div>
+                    <div class="user-list-name">${escapeHtml(ra.name || '')}</div>
+                    <div class="user-list-meta">${escapeHtml(ra.email || '')} · ${escapeHtml(ra.phone_number || '')}</div>
+                    <div class="user-list-meta">${escapeHtml(ra.district_name || '')} / ${escapeHtml(ra.vidhan_sabha_name || '')} / ${escapeHtml(ra.panchayat_name || '')}</div>
                 </div>
                 <div class="user-list-actions">
-                    <button class="row-action-btn" onclick="editRegionalAdmin('${admin.id}')" title="Edit">
+                    <button class="row-action-btn btn-edit" data-id="${ra.id}" title="Edit">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
-                    <button class="row-action-btn danger" onclick="deleteRegionalAdmin('${admin.id}')" title="Delete">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                    <button class="row-action-btn btn-delete danger" data-id="${ra.id}" data-name="${escapeHtml(ra.name)}" title="Deactivate">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
                 </div>
             </div>
@@ -165,152 +314,261 @@ function renderRegionalAdminList() {
     }).join('');
 }
 
-/* ================================================================
-   FORM SUBMISSION
-   ================================================================ */
+function renderPaginationEl(data) {
+    if (!els.pagination) return;
+    renderPagination({
+        currentPage: data.page,
+        pageSize: data.page_size,
+        totalItems: data.count,
+        containerSelector: '#' + els.pagination.id,
+        onPageChange: (page) => {
+            state.page = page;
+            fetchAndRender();
+        }
+    });
+}
 
-function handleRaSubmit(event) {
-    event.preventDefault();
+// ── Form Submit (Create / Update) ─────────────────────────────────
+async function handleFormSubmit(e) {
+    e.preventDefault();
 
-    const editingId = document.getElementById('ra-editing-id').value;
+    const editingId = els.editingId.value;
+    const isEdit = !!editingId;
 
     const payload = {
-        name: document.getElementById('ra-name').value.trim(),
-        email: document.getElementById('ra-email').value.trim(),
-        age: parseInt(document.getElementById('ra-age').value) || null,
-        gender: document.getElementById('ra-gender').value,
-        dob: document.getElementById('ra-dob').value,
-        enrollmentDate: document.getElementById('ra-enrollment').value,
-        phone: document.getElementById('ra-phone').value.trim(),
-        whatsapp: document.getElementById('ra-whatsapp').value.trim() ||
-                  document.getElementById('ra-phone').value.trim(),
-        districtId: document.getElementById('ra-district').value,
-        vidhanSabhaId: document.getElementById('ra-vs').value,
-        panchayatId: document.getElementById('ra-panchayat').value,
-        image: document.getElementById('ra-image-data').value || null,
-        role: 'regional_admin'
+        name: els.name.value.trim(),
+        email: els.email.value.trim().toLowerCase(),
+        age: els.age.value ? parseInt(els.age.value, 10) : null,
+        gender: els.gender.value || null,
+        date_of_birth: els.dob.value || null,
+        enrollment_date: els.enrollment.value || null,
+        phone_number: els.phone.value.trim(),
+        whats_app: els.whatsapp.value.trim() || null,
+        password: els.password.value,
+        district_id: els.district.value ? parseInt(els.district.value, 10) : null,
+        vidhan_sabha_id: els.vs.value ? parseInt(els.vs.value, 10) : null,
+        panchayat_id: els.panchayat.value ? parseInt(els.panchayat.value, 10) : null
     };
 
-    const password = document.getElementById('ra-password').value;
-    const confirmPassword = document.getElementById('ra-confirm-password').value;
-
     // Validation
-    if (!payload.name || !payload.email || !payload.phone ||
-        !payload.districtId || !payload.vidhanSabhaId || !payload.panchayatId) {
-        showToast('Please fill in all required fields.', 'danger');
+    if (!payload.name || !payload.email || !payload.phone_number) {
+        showToast('Please fill in all required fields.', 'error');
         return;
     }
-
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
-        showToast('Please enter a valid email.', 'danger');
+        showToast('Please enter a valid email.', 'error');
+        return;
+    }
+    if (!isEdit && !payload.password) {
+        showToast('Password is required for new accounts.', 'error');
+        return;
+    }
+    if (payload.password && payload.password.length < 8) {
+        showToast('Password must be at least 8 characters.', 'error');
+        return;
+    }
+    if (payload.password && payload.password !== els.confirmPassword.value) {
+        showToast('Passwords do not match.', 'error');
+        return;
+    }
+    if (!payload.district_id || !payload.vidhan_sabha_id || !payload.panchayat_id) {
+        showToast('Please select District, Vidhan Sabha, and Panchayat.', 'error');
         return;
     }
 
-    // Password logic - required for new, optional for edit
-    if (!editingId) {
-        if (!password || password.length < 8) {
-            showToast('Password must be at least 8 characters.', 'danger');
-            return;
+    if (els.imageData.value) {
+        payload.picture = els.imageData.value;
+    }
+
+    showGlobalLoader();
+    try {
+        const url = getUrl('regional-admin');
+        const method = isEdit ? 'PUT' : 'POST';
+        const body = isEdit ? { ...payload, id: parseInt(editingId, 10) } : payload;
+
+        const res = await fetch(url, {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+
+        if (res.ok || res.status === 201) {
+            showToast(isEdit ? 'Regional Admin updated' : 'Regional Admin created', 'success');
+            resetForm();
+            fetchAndRender();
+        } else {
+            showToast(data.detail || 'Operation failed', 'error');
         }
-        if (password !== confirmPassword) {
-            showToast('Passwords do not match.', 'danger');
-            return;
+    } catch (e) {
+        console.error('Submit error:', e);
+        showToast('Request failed', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
+}
+
+// ── Edit / Delete ─────────────────────────────────────────────────
+async function openEditForm(id) {
+    showGlobalLoader();
+    try {
+        const url = getUrl('regional-admin') + '?id=' + id;
+        const res = await fetch(url, { 
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to fetch');
+
+        resetForm();
+        if (els.formTitle) els.formTitle.textContent = 'Edit Regional Admin';
+        els.editingId.value = data.id;
+
+        els.name.value = data.name || '';
+        els.email.value = data.email || '';
+        els.age.value = data.age || '';
+        els.gender.value = data.gender || '';
+        els.dob.value = data.date_of_birth ? data.date_of_birth.split('T')[0] : '';
+        els.enrollment.value = data.enrollment_date ? data.enrollment_date.split('T')[0] : '';
+        els.phone.value = data.phone_number || '';
+        els.whatsapp.value = data.whats_app || '';
+
+        // Load cascading dropdowns with pre-selected values
+        if (data.district_id) {
+            await loadDistrictDropdown();
+            els.district.value = data.district_id;
+            if ($.fn.select2) $(els.district).val(data.district_id).trigger('change');
+            await onDistrictChange();
+
+            if (data.vidhan_sabha_id) {
+                await new Promise(r => setTimeout(r, 100));
+                els.vs.value = data.vidhan_sabha_id;
+                if ($.fn.select2) $(els.vs).val(data.vidhan_sabha_id).trigger('change');
+                await onVsChange();
+
+                if (data.panchayat_id) {
+                    await new Promise(r => setTimeout(r, 100));
+                    els.panchayat.value = data.panchayat_id;
+                    if ($.fn.select2) $(els.panchayat).val(data.panchayat_id).trigger('change');
+                }
+            }
         }
-        payload.password = password;
-    } else if (password) {
-        if (password !== confirmPassword) {
-            showToast('Passwords do not match.', 'danger');
-            return;
+
+        // Passwords not loaded - user must retype to change
+        els.password.value = '';
+        els.confirmPassword.value = '';
+        els.password.required = false;
+        els.confirmPassword.required = false;
+
+        // Show existing profile image
+        if (data.picture) {
+            if (els.imagePreview) {
+                els.imagePreview.innerHTML = `<img src="${escapeHtml(data.picture)}" alt="Profile">`;
+            }
+            els.imageData.value = data.picture;
         }
-        payload.password = password;
-    }
 
-    // Persist
-    if (editingId) {
-        updateRecord('regionalAdmins', editingId, payload);
-        showToast('Regional Admin updated', 'success');
-    } else {
-        addRecord('regionalAdmins', payload);
-        showToast('Regional Admin created', 'success');
+        if (els.name) els.name.focus();
+    } catch (e) {
+        console.error('Edit fetch failed:', e);
+        showToast('Failed to load Regional Admin details', 'error');
+    } finally {
+        hideGlobalLoader();
     }
-
-    resetRegionalAdminForm();
-    renderRegionalAdminList();
 }
 
-/* ================================================================
-   EDIT & DELETE
-   ================================================================ */
+async function deleteRegionalAdmin(id) {
+    showGlobalLoader();
+    try {
+        const url = getUrl('regional-admin');
+        const res = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
 
-function editRegionalAdmin(id) {
-    const admin = findRecord('regionalAdmins', id);
-    if (!admin) return;
+        if (res.ok) {
+            showToast('Regional Admin deactivated', 'success');
+            fetchAndRender();
+        } else {
+            showToast(data.detail || 'Delete failed', 'error');
+        }
+    } catch (e) {
+        console.error('Delete error:', e);
+        showToast('Request failed', 'error');
+    } finally {
+        hideGlobalLoader();
+    }
+}
 
-    document.getElementById('ra-form-title').textContent = 'Edit Regional Admin';
-    document.getElementById('ra-editing-id').value = id;
+// ── Reset Form ────────────────────────────────────────────────────
+function resetForm() {
+    if (els.formTitle) els.formTitle.textContent = 'Register Regional Admin';
+    if (els.form) els.form.reset();
+    if (els.editingId) els.editingId.value = '';
+    if (els.imageData) els.imageData.value = '';
 
-    document.getElementById('ra-name').value = admin.name || '';
-    document.getElementById('ra-email').value = admin.email || '';
-    document.getElementById('ra-age').value = admin.age || '';
-    document.getElementById('ra-gender').value = admin.gender || '';
-    document.getElementById('ra-dob').value = admin.dob || '';
-    document.getElementById('ra-enrollment').value = admin.enrollmentDate || '';
-    document.getElementById('ra-phone').value = admin.phone || '';
-    document.getElementById('ra-whatsapp').value = admin.whatsapp || '';
-    document.getElementById('ra-district').value = admin.districtId || '';
-
-    // Cascade the dropdowns so children populate correctly
-    onRaDistrictChange();
-    document.getElementById('ra-vs').value = admin.vidhanSabhaId || '';
-    onRaVsChange();
-    document.getElementById('ra-panchayat').value = admin.panchayatId || '';
-
-    // Password not loaded - user has to retype to change
-    document.getElementById('ra-password').value = '';
-    document.getElementById('ra-confirm-password').value = '';
-    document.getElementById('ra-password').required = false;
-    document.getElementById('ra-confirm-password').required = false;
-
-    // Show existing image
-    const preview = document.getElementById('ra-image-preview');
-    if (admin.image) {
-        preview.innerHTML = `<img src="${admin.image}" alt="Profile">`;
-        document.getElementById('ra-image-data').value = admin.image;
-    } else {
-        preview.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
-        document.getElementById('ra-image-data').value = '';
+    // Reset dropdowns
+    if (els.district) {
+        els.district.value = '';
+        if ($.fn.select2 && $(els.district).data('select2')) {
+            $(els.district).val('').trigger('change');
+        }
+    }
+    if (els.vs) {
+        els.vs.innerHTML = '<option value="">Select Vidhan Sabha</option>';
+        els.vs.disabled = true;
+        if ($.fn.select2 && $(els.vs).data('select2')) {
+            $(els.vs).select2('destroy');
+        }
+    }
+    if (els.panchayat) {
+        els.panchayat.innerHTML = '<option value="">Select Panchayat</option>';
+        els.panchayat.disabled = true;
+        if ($.fn.select2 && $(els.panchayat).data('select2')) {
+            $(els.panchayat).select2('destroy');
+        }
     }
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (els.password) els.password.required = true;
+    if (els.confirmPassword) els.confirmPassword.required = true;
+
+    if (els.imagePreview) {
+        els.imagePreview.innerHTML = `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    }
 }
 
-function deleteRegionalAdmin(id) {
-    const admin = findRecord('regionalAdmins', id);
-    if (!admin) return;
-
-    // Warn if this admin is assigned to any centres
-    const assignedCentres = getRecords('centres').filter(c => c.regionalAdminId === id).length;
-    let msg = `Delete Regional Admin "${admin.name}"?`;
-    if (assignedCentres > 0) {
-        msg += `\n\n${assignedCentres} centre(s) will lose their assigned admin.`;
+// Event delegation for edit/delete buttons
+document.addEventListener('click', async (e) => {
+    const editBtn = e.target.closest('.btn-edit');
+    if (editBtn) {
+        const id = parseInt(editBtn.dataset.id, 10);
+        await openEditForm(id);
+        return;
     }
 
-    if (!confirm(msg)) return;
+    const deleteBtn = e.target.closest('.btn-delete');
+    if (deleteBtn) {
+        const id = parseInt(deleteBtn.dataset.id, 10);
+        const name = deleteBtn.dataset.name;
+        if (confirm(`Deactivate Regional Admin "${name}"? This will deactivate the account.`)) {
+            await deleteRegionalAdmin(id);
+        }
+        return;
+    }
+});
 
-    deleteRecord('regionalAdmins', id);
-    showToast('Regional Admin deleted', 'success');
-    renderRegionalAdminList();
-}
-
-function resetRegionalAdminForm() {
-    document.getElementById('ra-form-title').textContent = 'Register Regional Admin';
-    document.getElementById('ra-form').reset();
-    document.getElementById('ra-editing-id').value = '';
-    document.getElementById('ra-image-data').value = '';
-    document.getElementById('ra-vs').disabled = true;
-    document.getElementById('ra-panchayat').disabled = true;
-    document.getElementById('ra-password').required = true;
-    document.getElementById('ra-confirm-password').required = true;
-    document.getElementById('ra-image-preview').innerHTML =
-        `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
-}
+// Export for template inline handlers
+window.openEditForm = openEditForm;
+window.deleteRegionalAdmin = deleteRegionalAdmin;
