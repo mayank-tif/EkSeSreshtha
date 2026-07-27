@@ -3,7 +3,6 @@ import json
 import logging
 from datetime import datetime, timedelta
 import uuid
-from django.utils import timezone
 from django.db.models import OuterRef, Subquery, Count
 from .models import *
 from django.db import IntegrityError, connection, transaction
@@ -608,7 +607,12 @@ def get_center_by_user_id(user_id):
                 c.AssignedRegionalAdmin as RegionalAdminId,
                 u.Name as RegionalAdminName,
                 (SELECT COUNT(*) FROM Student s WHERE s.CenterId = c.Id AND s.Status = 1) as TotalStudents,
-                c.AssignedTeachers as TeacherId
+                c.AssignedTeachers as TeacherId,
+                c.LocationStatus,
+                c.Latitude,
+                c.Longitude,
+                c.LocationVerifiedAt,
+                c.LocationVerifiedBy
             FROM Center c
             LEFT JOIN District d ON c.DistrictId = d.Id AND d.Status = 1
             LEFT JOIN VidhanSabha v ON c.VidhanSabhaId = v.Id AND v.Status = 1
@@ -1058,7 +1062,7 @@ def save_center(center_data, request):
                     status=True,
                     class_status=False,
                     created_date=created_date,
-                    created_on=timezone.now(),
+                    created_on=datetime.now(),
                     created_by=current_user_id,
                     latitude=Decimal(str(latitude)) if latitude else None,
                     longitude=Decimal(str(longitude)) if longitude else None,
@@ -1235,7 +1239,6 @@ def check_manual_attendance_limit(student_id):
     logger.info(f"StudentHelper : CheckManualAttendanceLimit : Started for student {student_id}")
     
     try:
-        from datetime import datetime
         current_year = datetime.now().year
         current_month = datetime.now().month
         
@@ -1264,7 +1267,6 @@ def increment_manual_attendance(student_id):
     logger.info(f"StudentHelper : IncrementManualAttendance : Started for student {student_id}")
     
     try:
-        from datetime import datetime
         current_year = datetime.now().year
         current_month = datetime.now().month
         
@@ -1708,7 +1710,7 @@ def save_user(user_data):
                                         regional_admin=regional_admin
                                     ).update(
                                         status=False,
-                                        updated_on=timezone.now(),
+                                        updated_on=datetime.now(),
                                         updated_by=user_data.get('CreatedBy') or user_id
                                     )
                                     
@@ -1721,7 +1723,7 @@ def save_user(user_data):
                                                 panchayat_id=panchayat_id,
                                                 panchayat_name=panchayat.name,
                                                 status=True,
-                                                created_on=timezone.now(),
+                                                created_on=datetime.now(),
                                                 created_by=user_data.get('CreatedBy') or user_id
                                             )
                 
@@ -1809,7 +1811,7 @@ def save_user(user_data):
                     device_id=user_data.get('DeviceId'),
                     token=user_data.get('Token'),
                     role=role,
-                    created_on=timezone.now(),
+                    created_on=datetime.now(),
                     created_by=user_data.get('CreatedBy') or 1
                 )
                 user.save()
@@ -1832,7 +1834,7 @@ def save_user(user_data):
                         super_admin_guid_id=str(uuid.uuid4()),
                         user=user,
                         status=True,
-                        created_on=timezone.now(),
+                        created_on=datetime.now(),
                         created_by=user_data.get('CreatedBy') or 1
                     )
                 
@@ -1856,7 +1858,7 @@ def save_user(user_data):
                         panchayat_id=user_data.get('PanchayatId'),
                         village_id=user_data.get('VillageId'),
                         status=True,
-                        created_on=timezone.now(),
+                        created_on=datetime.now(),
                         created_by=user_data.get('CreatedBy') or 1
                     )
                     regional_admin.save()
@@ -1877,7 +1879,7 @@ def save_user(user_data):
                                     panchayat_id=panchayat_id,
                                     panchayat_name=panchayat.name,
                                     status=True,
-                                    created_on=timezone.now(),
+                                    created_on=datetime.now(),
                                     created_by=user_data.get('CreatedBy') or 1
                                 )
                 
@@ -1903,7 +1905,7 @@ def save_user(user_data):
                         village_id=user_data.get('VillageId'),
                         center_id=user_data.get('CenterId'),
                         status=True,
-                        created_on=timezone.now(),
+                        created_on=datetime.now(),
                         created_by=user_data.get('CreatedBy') or 1
                     )
                     teacher.save()
@@ -2263,12 +2265,12 @@ def save_class(class_data, request):
     try:
         class_enrolment_id = class_data.get("classEnrolmentId")
         center_id = class_data.get("centerId")
-        today = timezone.now().date()
+        today = datetime.now().date()
+        print(center_id, today)
 
         with transaction.atomic():
             # Check if class already exists for today
             existing = ClassModel.objects.filter(
-                class_enrolment_id=class_enrolment_id,
                 started_date__date=today,
                 center_id=center_id,
                 status=1
@@ -2279,16 +2281,15 @@ def save_class(class_data, request):
 
             # Create new class using Django ORM
             new_class = ClassModel.objects.create(
-                class_enrolment_id=class_enrolment_id,
                 name=class_data.get("name"),
                 center_id=center_id,
                 users_id=class_data.get("userId"),
                 total_students=class_data.get("totalStudents"),
                 avilable_students=class_data.get("avilableStudents"),
-                started_date=timezone.now(),
+                started_date=datetime.now(),
                 status=1,              # Active
                 sub_status=0,
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 created_by=current_user_id,
                 active_status=True
             )
@@ -2296,7 +2297,7 @@ def save_class(class_data, request):
             # Update center class status using ORM
             Center.objects.filter(id=center_id).update(
                 class_status=1,
-                updated_on=timezone.now(),
+                updated_on=datetime.now(),
                 updated_by=current_user_id
             )
 
@@ -2484,7 +2485,7 @@ def cancel_class_by_teacher(class_cancel_data, request):
             ending_date=class_cancel_data.get('EndingDate'),
             reason=class_cancel_data.get('Reason'),
             created_by=current_user_id,
-            created_on=timezone.now(),
+            created_on=datetime.now(),
             status=True
         )
         cancel.save()
@@ -2495,7 +2496,7 @@ def cancel_class_by_teacher(class_cancel_data, request):
             started_date__date=datetime.now().date()
         ).update(
             status=3,  # Cancel status
-            updated_on=timezone.now(),
+            updated_on=datetime.now(),
             updated_by=current_user_id
         )
         
@@ -2738,7 +2739,7 @@ def save_district(district_data):
                 district_guid_id=district_guid,
                 name=district_data.get('Name'),
                 status=district_data.get('Status'),
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 created_by=district_data.get('CreatedBy')
             )
             district.save()
@@ -3709,7 +3710,7 @@ def save_holidays(holidays_data):
             if center_ids_to_remove:
                 Holidays.objects.filter(name=name, center_id__in=center_ids_to_remove).update(
                     status=False,
-                    updated_on=timezone.now(),
+                    updated_on=datetime.now(),
                     updated_by=created_by
                 )
             
@@ -3846,13 +3847,13 @@ def get_all_holidays(status, user_id=0):
         
         if user_id == 0:
             # SuperAdmin - get all holidays
-            queryset = Holidays.objects.select_related('center').order_by('start_date')
+            queryset = Holidays.objects.filter(status=True).select_related('center').order_by('start_date')
             if status != 1:
                 # Upcoming holidays
                 queryset = queryset.filter(start_date__date__gte=today)
         else:
             # Regional Admin - filter by created_by
-            queryset = Holidays.objects.filter(created_by=user_id).select_related('center').order_by('start_date')
+            queryset = Holidays.objects.filter(status=True).filter(created_by=user_id).select_related('center').order_by('start_date')
             if status != 1:
                 # Upcoming holidays
                 queryset = queryset.filter(start_date__date__gte=today)
@@ -3976,7 +3977,7 @@ def save_panchayat(panchayat_data):
                 status=panchayat_data.get('Status'),
                 district_id=panchayat_data.get('DistrictId'),
                 vidhan_sabha_id=panchayat_data.get('VidhanSabhaId'),
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 created_by=panchayat_data.get('CreatedBy')
             )
             panchayat.save()
@@ -4175,7 +4176,7 @@ def save_student(student_data):
                 bpl=student_data.get('Bpl') or False,
                 school_id=student_data.get('SchoolId'),
                 status=True,
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 active_class_status=False,
                 manual_attendance=0
             )
@@ -4485,7 +4486,7 @@ def save_school(school_data):
             # Insert new school
             school = School(
                 school_name=school_data.get('SchoolName'),
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 created_by=school_data.get('CreatedBy'),
                 status=True
             )
@@ -5170,7 +5171,7 @@ def save_vidhan_sabha(vidhan_sabha_data):
                 name=vidhan_sabha_data.get('Name'),
                 status=vidhan_sabha_data.get('Status'),
                 district_id=vidhan_sabha_data.get('DistrictId'),
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 created_by=vidhan_sabha_data.get('CreatedBy')
             )
             vidhan_sabha.save()
@@ -5319,7 +5320,7 @@ def save_village(village_data):
                 district_id=village_data.get('DistrictId'),
                 vidhan_sabha_id=village_data.get('VidhanSabhaId'),
                 panchayat_id=village_data.get('PanchayatId'),
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 created_by=village_data.get('CreatedBy')
             )
             village.save()

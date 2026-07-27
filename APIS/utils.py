@@ -85,11 +85,59 @@ def ok(data=None, message="Success", code=status.HTTP_200_OK, extra=None):
     return Response(payload, status=code)
 
 
-def fail(message="Not found", code=status.HTTP_404_NOT_FOUND, data=None, error_key="error"):
+def fail(message="Not found", code=status.HTTP_200_OK, data=None, error_key="error"):
     payload = {"status": False, error_key: message, "code": code}
     if data is not None:
         payload["data"] = data
     return Response(payload, status=code)
+
+
+def validation_error(serializer_errors, code=status.HTTP_400_BAD_REQUEST):
+    """Format serializer validation errors into a consistent error response dict."""
+    # Extract first error message for simple display
+    first_error = "Validation failed"
+    if serializer_errors:
+        # Get the first error message from the serializer errors
+        for field, errors in serializer_errors.items():
+            if isinstance(errors, list) and errors:
+                first_error = f"{field}: {errors[0]}"
+                break
+            elif isinstance(errors, str):
+                first_error = f"{field}: {errors}"
+                break
+            elif isinstance(errors, dict):
+                for sub_field, sub_errors in errors.items():
+                    if isinstance(sub_errors, list) and sub_errors:
+                        first_error = f"{field}.{sub_field}: {sub_errors[0]}"
+                        break
+                    elif isinstance(sub_errors, str):
+                        first_error = f"{field}.{sub_field}: {sub_errors}"
+                        break
+                break
+    return {
+        "status": False,
+        "error": first_error,
+        "details": serializer_errors,
+        "code": code
+    }
+
+
+def handle_exception(e, log_prefix=""):
+    """Handle exceptions and return proper error response.
+    Handles duplicate entry errors (MySQL 1062) specially."""
+    if log_prefix:
+        logger.error(f"{log_prefix} : {str(e)}")
+    
+    error_msg = str(e)
+    # Handle duplicate entry errors (MySQL error 1062)
+    if '1062' in error_msg or 'Duplicate entry' in error_msg:
+        import re
+        match = re.search(r"Duplicate entry '([^']+)'", error_msg)
+        if match:
+            duplicate_value = match.group(1)
+            return fail(f"{duplicate_value} already exists", code=status.HTTP_409_CONFLICT)
+        return fail("This record already exists", code=status.HTTP_409_CONFLICT)
+    return fail(str(e), code=status.HTTP_400_BAD_REQUEST)
 
 
 def request_value(request, *names, default=None):

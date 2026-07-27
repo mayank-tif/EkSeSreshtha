@@ -238,9 +238,9 @@ class AnnouncementSaveannouncementPostView(APIView):
                     {
                         "status": False,
                         "error": "Announcement doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -290,9 +290,9 @@ class AnnouncementGetannouncementGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "List of announcements not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -374,9 +374,9 @@ class CenterSavecenterPostView(APIView):
                     {
                         "status": False,
                         "error": "Center doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -446,9 +446,9 @@ class CenterVerifyLocationPostView(APIView):
                     {
                         "status": False,
                         "error": "Center not found or already verified",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -517,9 +517,9 @@ class CenterGetAllCentersView(APIView):
                         "status": False,
                         "data": None,
                         "message": "List of centers not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -659,9 +659,9 @@ class CenterGetcenteryidGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "center not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -688,10 +688,10 @@ class CenterGetcenterbyteacheridGetView(APIView):
                     {
                         "status": False,
                         "data": None,
-                        "message": "center detail not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "message": "userId is required",
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
             
             center = get_center_by_user_id(int(user_id))
@@ -723,9 +723,9 @@ class CenterGetcenterbyteacheridGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "center detail not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -797,9 +797,9 @@ class CenterGetallcenterattendanceGetView(APIView):
                     {
                         "status": False,
                         "message": "Centers not available",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -956,9 +956,9 @@ class CenterGettotalattendancecountofcenterGetView(APIView):
                     {
                         "status": False,
                         "message": "Center not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -1095,9 +1095,9 @@ class ClassCancelclassPostView(APIView):
                     {
                         "status": False,
                         "error": "Class not canceled",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1136,15 +1136,33 @@ class ClassUpdateEndClassTimePostView(APIView):
             latitude = serializer.validated_data.get('Latitude')
             longitude = serializer.validated_data.get('Longitude')
             
+            photo_url = None
+            if photo_file:
+                try:
+                    # Save photo directly
+                    ext = os.path.splitext(photo_file.name)[1] if photo_file.name else '.jpg'
+                    filename = f"class_{class_id}_{uuid.uuid4().hex}{ext}"
+                    filepath = os.path.join('class_photos', filename)
+                    saved_path = default_storage.save(filepath, photo_file)
+                    photo_url = default_storage.url(saved_path)
+                except Exception as e:
+                    logger.error(f"ClassUpdateEndClassTime : Error saving photo: {str(e)}")
+                    return Response({
+                        "status": False,
+                        "error": f"Error saving photo: {str(e)}",
+                        "code": status.HTTP_400_BAD_REQUEST,
+                        "ErrorCode": -16
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
             class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
             if not class_obj:
                 return Response(
                     {
                         "status": False,
                         "error": "Class not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
             
             if class_obj.status == 2:
@@ -1188,21 +1206,6 @@ class ClassUpdateEndClassTimePostView(APIView):
                             "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
                             "code": status.HTTP_400_BAD_REQUEST
                         }, status=status.HTTP_400_BAD_REQUEST)
-        
-            try:
-                # Save photo directly
-                ext = os.path.splitext(photo_file.name)[1] if photo_file.name else '.jpg'
-                filename = f"class_{class_id}_{uuid.uuid4().hex}{ext}"
-                filepath = os.path.join('class_photos', filename)
-                saved_path = default_storage.save(filepath, photo_file)
-                photo_url = default_storage.url(saved_path)
-            except Exception as e:
-                return Response({
-                    "status": False,
-                    "error": str(e),
-                    "code": status.HTTP_400_BAD_REQUEST,
-                    "ErrorCode": -16
-                }, status=status.HTTP_400_BAD_REQUEST)
                             
             # Calculate attendance counts from records
             logged_user_id = get_user_id_from_token(request)
@@ -1305,9 +1308,9 @@ class ClassUpdateclasssubstatusPostView(APIView):
                     {
                         "status": False,
                         "error": "Status not updated",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1367,9 +1370,9 @@ class ClassCancelclassbyteacherPostView(APIView):
                     {
                         "status": False,
                         "error": "Class not cancelled",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1429,9 +1432,9 @@ class ClassDeleteclassbyteacheridPostView(APIView):
                     {
                         "status": False,
                         "error": "class not deleted",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1539,9 +1542,9 @@ class ClassGetliveclassdetailGetView(APIView):
                     {
                         "status": False,
                         "error": "Class detail not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1609,9 +1612,9 @@ class DistrictGetalldistrictGetView(APIView):
                         "status": False,
                         "message": "List of district not found",
                         "data": None,
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -1672,9 +1675,9 @@ class DistrictSavedistrictPostView(APIView):
                     {
                         "status": False,
                         "error": "District doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1732,9 +1735,9 @@ class VidhansabhaGetallvidhansabhaGetView(APIView):
                         "status": False,
                         "message": "List of vidhanSabha not found",
                         "data": None,
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -1795,9 +1798,9 @@ class VidhansabhaSavevidhansabhaPostView(APIView):
                     {
                         "status": False,
                         "error": "VidanSabha doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1859,9 +1862,9 @@ class VidhansabhaGetvidhansabhabydistrictidGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "VidanSabha not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -1919,9 +1922,9 @@ class VidhansabhaCheckvidhansabhanamePostView(APIView):
                     {
                         "status": False,
                         "error": "VidhanSabha name doesn't exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -1978,9 +1981,9 @@ class PanchayatGetallpanchayatGetView(APIView):
                         "status": False,
                         "message": "List of panchayat not found",
                         "data": None,
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -2041,9 +2044,9 @@ class PanchayatSavepanchayatPostView(APIView):
                     {
                         "status": False,
                         "error": "Panchayat doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2109,9 +2112,9 @@ class PanchayatGetpanchayatbydistrictandvidhansabhaidGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "Panchayat not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -2169,9 +2172,9 @@ class PanchayatCheckpanchayatnamePostView(APIView):
                     {
                         "status": True,
                         "error": "Panchayat name doesn't exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2229,9 +2232,9 @@ class VillageGetallvillageGetView(APIView):
                         "status": False,
                         "message": "List of villages not found",
                         "data": None,
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -2292,9 +2295,9 @@ class VillageSavevillagePostView(APIView):
                     {
                         "status": False,
                         "error": "Village doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2361,9 +2364,9 @@ class VillageGetvillagebydistrictvidhansabhaandpanchidGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "Village not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2421,9 +2424,9 @@ class VillageCheckvillagenamePostView(APIView):
                     {
                         "status": True,
                         "error": "Village name doesn't exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2488,9 +2491,9 @@ class SchoolSaveschoolPostView(APIView):
                     {
                         "status": False,
                         "error": "School doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2540,9 +2543,9 @@ class SchoolGetallschoolsGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "school not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2644,9 +2647,9 @@ class HolidaysSaveholidaysPostView(APIView):
                     {
                         "status": False,
                         "error": "Holdays doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -2708,9 +2711,9 @@ class HolidaysGetallholidaysbyteacheridGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "List of Holidays not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -2772,9 +2775,9 @@ class HolidaysGetallholidaysbycenteridGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "Holidays not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -2836,9 +2839,9 @@ class HolidaysGetallholidaysbyyearGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "List of Holidays not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -2889,7 +2892,7 @@ class HolidaysGetallholidaysGetView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "data": {},
+                        "data": [],
                         "message": "List of Holidays not found",
                         "code": status.HTTP_200_OK
                     },
@@ -2951,9 +2954,9 @@ class HolidaysDeleteholidaybyidPostView(APIView):
                     {
                         "status": False,
                         "error": "holiday not deleted",
-                        "code": status.HTTP_200_OK
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_200_OK
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -3048,9 +3051,9 @@ class StudentSavestudentPostView(APIView):
                     {
                         "status": False,
                         "error": "Student doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -3112,9 +3115,9 @@ class StudentGetstudentbyidGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "student not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -3178,9 +3181,9 @@ class StudentUpdatestudentactiveorinactivePostView(APIView):
                         "status": False,
                         "data": None,
                         "message": "Status not updated",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -3320,7 +3323,7 @@ class StudentGetallstudentsGetView(APIView):
                 return Response(
                     {
                         "status": False,
-                        "data": {},
+                        "data": [],
                         "message": "Not found",
                         "code": status.HTTP_200_OK
                     },
@@ -3521,9 +3524,9 @@ class StudentSaveAutomaticAttendanceView(APIView):
                     {
                         "status": True,
                         "message": "student not exists in center",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
             else:
                 # Log activity for automatic attendance applied
@@ -3598,8 +3601,8 @@ class StudentSaveManualAttendanceView(APIView):
                 return Response({
                     "status": False,
                     "error": "Student not found",
-                    "code": status.HTTP_404_NOT_FOUND
-                }, status=status.HTTP_404_NOT_FOUND)
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
             
             # Check center
             if not student.center_id:
@@ -3614,8 +3617,8 @@ class StudentSaveManualAttendanceView(APIView):
                 return Response({
                     "status": False,
                     "error": "Center not found",
-                    "code": status.HTTP_404_NOT_FOUND
-                }, status=status.HTTP_404_NOT_FOUND)
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
                 
                         
             if center.location_status != 'VERIFIED':
@@ -3717,9 +3720,9 @@ class StudentSaveManualAttendanceView(APIView):
                     {
                         "status": True,
                         "message": "student not exists in center",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
             else:
                 if logged_user_id:
@@ -3800,9 +3803,9 @@ class StudentattendanceGetallstudentwihavgattendanceGetView(APIView):
                     {
                         "status": False,
                         "error": "Students not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -3864,9 +3867,9 @@ class StudentattendanceGetallabsentattendanceGetView(APIView):
                     {
                         "status": False,
                         "error": "Active students not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -3931,9 +3934,9 @@ class StudentattendanceGetallstudentattendancstatusGetView(APIView):
                     {
                         "status": False,
                         "error": "Student status not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -4002,9 +4005,9 @@ class StudentattendanceGetallstudentattendancbymonthGetView(APIView):
                     {
                         "status": False,
                         "error": "Student not exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -4071,9 +4074,9 @@ class UserGetAllTeachersView(APIView):
                         "status": False,
                         "data": None,
                         "message": "Asigned teachers not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -4125,9 +4128,9 @@ class UserGetAllRegionalAdminsView(APIView):
                         "status": False,
                         "data": None,
                         "message": "List of regional admins not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -4183,9 +4186,9 @@ class UserLoginView(APIView):
                     {
                         "status": False,
                         "error": "invalid credential",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_401_UNAUTHORIZED
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_401_UNAUTHORIZED
                 )
                 
         except Exception as ex:
@@ -4328,9 +4331,9 @@ class UserSaveSuperAdminView(APIView):
                     {
                         "status": False,
                         "error": "SuperAdmin doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -4396,9 +4399,9 @@ class UserUpdateDeviceIdView(APIView):
                     {
                         "status": False,
                         "error": "SuperAdmin doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -4475,9 +4478,9 @@ class UserSaveUserView(APIView):
                     {
                         "status": False,
                         "error": "data doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -4558,9 +4561,9 @@ class UserUpdateSuperAdminUserView(APIView):
                     {
                         "status": False,
                         "error": "data doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -4651,9 +4654,9 @@ class UserGetUserDetailByPhoneNumberView(APIView):
                         "status": False,
                         "data": {},
                         "message": "user not exists",
-                        "code": status.HTTP_200_OK
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_200_OK
+                    status=status.HTTP_400_BAD_REQUEST
                 )
             
             user = get_user_detail_by_phone(phone_number)
@@ -4814,9 +4817,9 @@ class UserGetAllUnAssignedTeacherView(APIView):
                         "status": False,
                         "data": None,
                         "message": "List of teachers not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -4873,9 +4876,9 @@ class UserSearchDataView(APIView):
                     {
                         "status": False,
                         "message": "List of search data not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -4944,9 +4947,9 @@ class TeacherLoginteacherPostView(APIView):
                     {
                         "status": False,
                         "error": "Teacher doesn't exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_401_UNAUTHORIZED
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_401_UNAUTHORIZED
                 )
                 
         except Exception as e:
@@ -5012,9 +5015,9 @@ class TeacherSaveteacherPostView(APIView):
                     {
                         "status": False,
                         "error": "Teacher doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:
@@ -5069,9 +5072,9 @@ class RegionaladminGetallregionaladminGetView(APIView):
                         "status": False,
                         "data": None,
                         "message": "List of regional admins not found",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_200_OK
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_200_OK
                 )
                 
         except Exception as e:
@@ -5134,9 +5137,9 @@ class RegionaladminLoginregionaladminPostView(APIView):
                     {
                         "status": False,
                         "error": "Regional admin doesn't exists",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_401_UNAUTHORIZED
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_401_UNAUTHORIZED
                 )
                 
         except Exception as e:
@@ -5202,9 +5205,9 @@ class RegionaladminSaveregionaladminPostView(APIView):
                     {
                         "status": False,
                         "error": "Regional admin doesn't save",
-                        "code": status.HTTP_404_NOT_FOUND
+                        "code": status.HTTP_400_BAD_REQUEST
                     },
-                    status=status.HTTP_404_NOT_FOUND
+                    status=status.HTTP_400_BAD_REQUEST
                 )
                 
         except Exception as e:

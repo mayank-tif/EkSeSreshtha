@@ -21,6 +21,13 @@ def format_dotnet_datetime(value):
     return f"{value.month}/{value.day}/{value.year} {hour}:{value:%M:%S %p}"
 
 
+class DotNetDateTimeField(serializers.DateTimeField):
+    """DateTimeField that outputs .NET format (MM/dd/yyyy hh:mm:ss tt) in responses."""
+    
+    def to_representation(self, value):
+        return format_dotnet_datetime(value)
+
+
 def required_char():
     return serializers.CharField(required=True, allow_blank=False)
 
@@ -471,7 +478,7 @@ class CancelClassDtoSerializer(serializers.Serializer):
 
 class EndClassDtoSerializer(serializers.Serializer):
     Id = serializers.IntegerField(required=True)
-    ClassroomPhoto = serializers.ImageField(required=True)
+    ClassroomPhoto = serializers.ImageField(required=False, allow_null=True)
     Latitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     Longitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
@@ -485,10 +492,14 @@ class EndClassDtoSerializer(serializers.Serializer):
         longitude = attrs.get("Longitude")
 
         # Check if both are provided
-        if not latitude or not longitude:
+        if not latitude:
             raise serializers.ValidationError({
-                "Latitude": "Latitude is required.",
-                "Longitude": "Longitude is required."
+                "Latitude is required.",
+            })
+            
+        if not longitude:
+            raise serializers.ValidationError({
+                "Longitude is required."
             })
 
         # Check if numeric
@@ -884,7 +895,7 @@ class StudentAttendanceSaveRequestSerializer(serializers.Serializer):
         for field in ['ClassId', 'CenterId', 'UserId']:
             value = attrs.get(field)
             if value is not None and value <= 0:
-                raise serializers.ValidationError({field: f"{field} must be a positive integer"})
+                raise serializers.ValidationError({f"{field} must be a positive integer"})
         return attrs
 
 class StudentAttendanceCenterQuerySerializer(RequestSerializer):
@@ -994,7 +1005,7 @@ class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
             list_of_panchayat_ids = attrs.get('ListOfPanchayatIds')
             if not list_of_panchayat_ids:
                 raise serializers.ValidationError({
-                    "ListOfPanchayatIds": "ListOfPanchayatIds is required for Regional Admin"
+                    "ListOfPanchayatIds is required for Regional Admin"
                 })
             
             # Parse and validate panchayat IDs
@@ -1008,7 +1019,7 @@ class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
             missing_ids = [pid for pid in panchayat_ids if pid not in existing_ids]
             if missing_ids:
                 raise serializers.ValidationError({
-                    "ListOfPanchayatIds": f"Panchayat ids do not exist: {missing_ids}"
+                    f"Panchayat ids do not exist: {missing_ids}"
                 })
         
         return attrs
@@ -1042,11 +1053,11 @@ class LoginSerializer(serializers.Serializer):
     def validate(self, attrs):
         mobile_number = attrs.get("mobileNumber") or attrs.get("mobile_number")
         if not mobile_number:
-            raise serializers.ValidationError({"mobileNumber": "Mobile number is required."})
+            raise serializers.ValidationError({"Mobile number is required."})
         attrs["mobileNumber"] = mobile_number
 
         if not attrs.get("password"):
-            raise serializers.ValidationError({"password": "Password is required."})
+            raise serializers.ValidationError({"Password is required."})
 
         return attrs
     
