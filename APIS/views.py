@@ -3362,8 +3362,51 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+                
             attendance_data = serializer.validated_data
+            
+            center = Center.objects.filter(id=attendance_data.get("CenterId"), status=True).first()
+            if not center:
+                return Response({
+                    "status": False,
+                    "error": "Center not found",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+                            
+                                    
+            if center.location_status != 'VERIFIED':
+                return Response({
+                    "status": False,
+                    "error": "Center location not verified. Cannot mark attendance.",
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -13
+                }, status=status.HTTP_400_BAD_REQUEST)
+                        
+            # Verify GPS location - must be provided
+            latitude = attendance_data.get('Latitude')
+            longitude = attendance_data.get('Longitude')
+            if not (latitude and longitude):
+                return Response({
+                    "status": False,
+                    "error": "GPS location required for attendance",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Verify user is within 100m radius of the center
+            is_valid_loc, distance, center_lat, center_lng, center_status = verify_attendance_location(
+                center.id, float(latitude), float(longitude)
+            )
+                        
+            logger.info(f"UserView : SaveStudentAttendance : Location check - valid={is_valid_loc}, distance={distance:.1f}m, center_status={center_status}")
+                        
+            if not is_valid_loc:
+                return Response({
+                    "status": False,
+                    "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -14
+                }, status=status.HTTP_400_BAD_REQUEST)
+            print("common", attendance_data)
             result = save_student_attendance(attendance_data, is_automatic=False, is_manual=False)
 
             logged_user_id = get_user_id_from_token(request)
@@ -3469,8 +3512,51 @@ class StudentSaveAutomaticAttendanceView(APIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+                
             attendance_data = serializer.validated_data
+            
+            center = Center.objects.filter(id=attendance_data.get("CenterId"), status=True).first()
+            if not center:
+                return Response({
+                    "status": False,
+                    "error": "Center not found",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+                            
+                                    
+            if center.location_status != 'VERIFIED':
+                return Response({
+                    "status": False,
+                    "error": "Center location not verified. Cannot mark attendance.",
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -13
+                }, status=status.HTTP_400_BAD_REQUEST)
+                        
+            # Verify GPS location - must be provided
+            latitude = attendance_data.get('Latitude')
+            longitude = attendance_data.get('Longitude')
+            if not (latitude and longitude):
+                return Response({
+                    "status": False,
+                    "error": "GPS location required for attendance",
+                    "code": status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            # Verify user is within 100m radius of the center
+            is_valid_loc, distance, center_lat, center_lng, center_status = verify_attendance_location(
+                center.id, float(latitude), float(longitude)
+            )
+                        
+            logger.info(f"UserView : SaveAutomaticStudentAttendance : Location check - valid={is_valid_loc}, distance={distance:.1f}m, center_status={center_status}")
+                        
+            if not is_valid_loc:
+                return Response({
+                    "status": False,
+                    "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": -14
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             result = save_student_attendance(attendance_data, is_automatic=True, is_manual=False)
             logged_user_id = get_user_id_from_token(request)
             

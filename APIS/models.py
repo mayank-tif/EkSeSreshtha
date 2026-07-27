@@ -1070,6 +1070,7 @@ class StudentAttendance(models.Model):
     ATTENDANCE_TYPE_CHOICES = [
         ('AUTO', 'QR Auto Scan'),
         ('MANUAL', 'Manual Fallback'),
+        ('REGULAR', 'Regular')
     ]
     attendance_type = models.CharField(
         max_length=20,

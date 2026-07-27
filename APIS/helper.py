@@ -4560,6 +4560,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
     
     try:
         # Parse StudentIds from comma-separated string (matches .NET API)
+        print("attendence data", attendance_data)
         student_ids_raw = attendance_data.get('StudentIds', '')
         if isinstance(student_ids_raw, str):
             student_ids = [int(s.strip()) for s in student_ids_raw.split(',') if s.strip()]
@@ -4579,20 +4580,20 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
             return -1
         
         # Get class and center objects for FK
-        class_obj = ClassModel.objects.filter(id=class_id).first()
-        center_obj = Center.objects.filter(id=center_id).first()
+        class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()
+        center_obj = Center.objects.filter(id=center_id, status=True).first()
         
         for student_id in student_ids:
             # Check if student is active and belongs to center
-            student = Student.objects.filter(id=student_id).first()
+            student = Student.objects.filter(id=student_id, status=True).first()
             if not student:
                 continue  # Student not found, skip
             
-            if not is_automatic and not is_manual:
-                # Regular attendance (teacher marks via app)
-                if not student.status:  # Status=False → Inactive student
-                    return 0
-                if student.center_id != center_id:  # Center mismatch
+            # Regular attendance (teacher marks via app)
+            print("center id", student.center_id , center_id)
+            if not student.status:  # Status=False → Inactive student
+                return 0
+            if student.center_id != center_id:  # Center mismatch
                     return -2
             
             if is_automatic:
@@ -4615,7 +4616,8 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
                 existing = StudentAttendance.objects.filter(
                     student_id=student_id,
                     class_obj_id=class_id,
-                    scan_date__date=today
+                    scan_date__date=today,
+                    status=True
                 ).exists()
                 if existing:
                     return -1  # Already marked today
@@ -4624,18 +4626,23 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
                 existing = StudentAttendance.objects.filter(
                     student_id=student_id,
                     class_obj_id=class_id,
-                    scan_date__date=scan_date.date()
+                    scan_date__date=scan_date.date(),
+                    status=True
                 ).exists()
                 if existing:
                     return -1  # Already marked for this date
             
             # Determine attendance type
+            
             if is_manual:
                 attendance_type = True  # Type=True for manual
                 attendance_type_str = 'MANUAL'
             elif is_automatic:
                 attendance_type = False  # Type=False for auto
                 attendance_type_str = 'AUTO'
+            else:
+                attendance_type = True
+                attendance_type_str = 'REGULAR'
             
             scan_date_val = datetime.now() if (is_automatic or is_manual) else scan_date
             
