@@ -3012,10 +3012,20 @@ class StudentSavestudentPostView(APIView):
             serializer = api_serializers.StudentSaveStudentRequestSerializer(data=data)
             if not serializer.is_valid():
                 logger.error(f"StudentSavestudentPostView validation errors: {serializer.errors}")
+                # Surface the first validation message as the main error
+                # (e.g. "This number already exists" for unique field duplicates)
+                error_msg = "Invalid parameters"
+                for field_errors in serializer.errors.values():
+                    if isinstance(field_errors, list) and field_errors:
+                        error_msg = str(field_errors[0])
+                        break
+                    elif field_errors:
+                        error_msg = str(field_errors)
+                        break
                 return Response(
                     {
                         "status": False,
-                        "error": "Invalid parameters",
+                        "error": error_msg,
                         "details": serializer.errors,
                         "code": status.HTTP_400_BAD_REQUEST
                     },
@@ -3402,7 +3412,7 @@ class StudentattendanceSavestudentattendancePostView(APIView):
             if not is_valid_loc:
                 return Response({
                     "status": False,
-                    "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                    "error": "Oops — you're outside the centre. You can only mark attendance from the register centre location.",
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": -14
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -3552,7 +3562,7 @@ class StudentSaveAutomaticAttendanceView(APIView):
             if not is_valid_loc:
                 return Response({
                     "status": False,
-                    "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                    "error": "Oops — you're outside the centre. You can only mark attendance from the register centre location.",
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": -14
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -3732,7 +3742,7 @@ class StudentSaveManualAttendanceView(APIView):
             if not is_valid_loc:
                 return Response({
                     "status": False,
-                    "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                    "error": f"Oops — you're outside the centre. You can only mark attendance from the register centre location.",
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": -14
                 }, status=status.HTTP_400_BAD_REQUEST)

@@ -526,6 +526,14 @@ class ClassCancelTeacherDtoSerializer(serializers.Serializer):
     UsersId = serializers.IntegerField(required=True)
     Reason = serializers.CharField(allow_null=True, required=False)
 
+class ClassLiveStudentDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField(allow_null=True, required=False)
+    enrollmentId = serializers.CharField(allow_null=True, required=False)
+    profileImage = serializers.CharField(allow_null=True, required=False)
+    scanDate = serializers.DateTimeField(allow_null=True, required=False)
+    manualAttendance = serializers.IntegerField(allow_null=True, required=False)
+
 class ClassLiveDetailDtoSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField(allow_null=True, required=False)
@@ -535,6 +543,10 @@ class ClassLiveDetailDtoSerializer(serializers.Serializer):
     totalStudents = serializers.IntegerField(allow_null=True, required=False)
     avilableStudents = serializers.IntegerField(allow_null=True, required=False)
     subStatus = serializers.IntegerField(allow_null=True, required=False)
+    presentCount = serializers.IntegerField(allow_null=True, required=False)
+    absentCount = serializers.IntegerField(allow_null=True, required=False)
+    presentStudents = ClassLiveStudentDtoSerializer(many=True, required=False)
+    absentStudents = ClassLiveStudentDtoSerializer(many=True, required=False)
 
 class ClassGetClassCurrentStatusQuerySerializer(RequestSerializer):
     centerId = required_int()
@@ -775,6 +787,31 @@ class StudentSaveStudentRequestSerializer(RequestSerializer):
     Bpl = serializers.BooleanField(required=False, allow_null=True)
     SchoolId = serializers.IntegerField(required=True)
     #SchoolName = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
+    def validate(self, attrs):
+        """Validate unique fields (PhoneNumber, Email) against existing students.
+        On update (Id provided), the student being updated is excluded.
+        """
+        attrs = super().validate(attrs)
+        
+        student_id = attrs.get('Id') or 0
+        dup_qs = Student.objects.all()
+        if student_id:
+            dup_qs = dup_qs.exclude(id=student_id)
+        
+        phone = attrs.get('PhoneNumber')
+        if phone and dup_qs.filter(phone_number=phone).exists():
+            raise serializers.ValidationError({
+                "PhoneNumber": "This number already exists"
+            })
+        
+        email = attrs.get('Email')
+        if email and dup_qs.filter(email=email).exists():
+            raise serializers.ValidationError({
+                "Email": "This email already exists"
+            })
+        
+        return attrs
 
 class StudentGetStudentByIdQuerySerializer(RequestSerializer):
     studentId = required_int()

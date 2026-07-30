@@ -13,7 +13,7 @@ urlpatterns = [
     
     # Protected routes (require login)
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
-    path('centres/', CentresView.as_view(), name='centres'),
+    path('centres/', CenterView.as_view(), name='centres'),
     path('attendance/', AttendanceView.as_view(), name='attendance'),
     path('students/', StudentsView.as_view(), name='students'),
     path('students/school-list/', StudentsView.as_view(), name='school-list'),

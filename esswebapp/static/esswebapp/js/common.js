@@ -195,6 +195,24 @@ function formatDate(isoDate) {
 }
 
 /**
+ * Formats an ISO date string as "DD MMM YYYY, HH:MM" (e.g. "22 Jul 2026, 14:30").
+ * @param {string} isoDate - ISO date string
+ */
+function formatDateTime(isoDate) {
+    if (!isoDate) return '\u2014';
+    const date = new Date(isoDate);
+    if (isNaN(date.getTime())) return '\u2014';
+    return date.toLocaleString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+}
+
+/**
  * Returns just the initials of a full name, uppercase.
  * @param {string} name - Full name
  */
@@ -606,6 +624,7 @@ if (typeof module !== 'undefined' && module.exports) {
         openModal,
         closeModal,
         formatDate,
+        formatDateTime,
         getInitials,
         escapeHtml,
         formatDateForInput,

@@ -7,13 +7,17 @@ from django.db import models
 from django.db.models import Count
 import json
 import uuid
+import logging
 from datetime import datetime
 
 from APIS.models import *
 from APIS.utils import hash_password
+from .helpers import save_center_web
 from .forms import LoginForm
 import base64
 from django.core.files.base import ContentFile
+
+logger = logging.getLogger(__name__)
 
 
 # Allowed role codes for web login
@@ -2455,5 +2459,308 @@ class TeacherView(LoginRequiredMixin, View):
             teacher.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             return JsonResponse({'detail': 'Teacher deactivated successfully'})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class CenterView(LoginRequiredMixin, View):
+    """Educational Center management page + API endpoints"""
+    template_name = 'esswebapp/pages/centres/educational-centre.html'
+    
+    def get(self, request):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._list_centers_api(request)
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def post(self, request):
+        return self._create_center(request)
+    
+    def put(self, request):
+        return self._update_center(request)
+    
+    def delete(self, request):
+        return self._delete_center(request)
+    
+    def _get_centers_queryset(self):
+        """Get centers ordered by created_on desc"""
+        return Center.objects.filter(
+            status=True
+        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by('-created_on')
+    
+    def _get_user_names_map(self, user_ids):
+        """Batch-fetch user names for the given ids (RA / teacher display)."""
+        ids = [i for i in set(user_ids) if i]
+        if not ids:
+            return {}
+        return dict(User.objects.filter(id__in=ids).values_list('id', 'name'))
+    
+    def _get_student_counts_map(self, center_ids):
+        """Batch-count active students per center."""
+        if not center_ids:
+            return {}
+        return dict(
+            Student.objects.filter(center_id__in=center_ids, status=True)
+            .values('center_id').annotate(cnt=Count('id'))
+            .values_list('center_id', 'cnt')
+        )
+    
+    def _list_centers_api(self, request):
+        try:
+            center_id = request.GET.get('id')
+            if center_id:
+                try:
+                    center = self._get_centers_queryset().get(id=center_id)
+                    name_map = self._get_user_names_map([
+                        center.assigned_regional_admin, center.assigned_teachers
+                    ])
+                    student_counts = self._get_student_counts_map([center.id])
+                    return JsonResponse(self._serialize_center(center, name_map, student_counts))
+                except Center.DoesNotExist:
+                    return JsonResponse({'detail': 'Center not found'}, status=404)
+            
+            queryset = self._get_centers_queryset()
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', PAGE_SIZE))
+            search = request.GET.get('search', '').strip().lower()
+            
+            if search:
+                queryset = queryset.filter(
+                    models.Q(center_name__icontains=search) |
+                    models.Q(address__icontains=search) |
+                    models.Q(district__name__icontains=search) |
+                    models.Q(village__name__icontains=search)
+                )
+            
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            centers_page = list(queryset[start:end])
+            
+            # Batch-fetch related display data (avoids N+1 queries)
+            user_ids = []
+            for c in centers_page:
+                if c.assigned_regional_admin:
+                    user_ids.append(c.assigned_regional_admin)
+                if c.assigned_teachers:
+                    user_ids.append(c.assigned_teachers)
+            name_map = self._get_user_names_map(user_ids)
+            student_counts = self._get_student_counts_map([c.id for c in centers_page])
+            
+            items = [
+                self._serialize_center(c, name_map, student_counts)
+                for c in centers_page
+            ]
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _serialize_center(self, center, name_map=None, student_counts=None):
+        name_map = name_map or {}
+        student_counts = student_counts or {}
+        return {
+            'id': center.id,
+            'center_guid_id': center.center_guid_id,
+            'center_name': center.center_name,
+            'address': center.address,
+            'latitude': float(center.latitude) if center.latitude else None,
+            'longitude': float(center.longitude) if center.longitude else None,
+            'location_status': center.location_status,
+            'assigned_teachers': center.assigned_teachers,
+            'assigned_teacher_name': name_map.get(center.assigned_teachers),
+            'assigned_regional_admin': center.assigned_regional_admin,
+            'assigned_regional_admin_name': name_map.get(center.assigned_regional_admin),
+            'student_count': student_counts.get(center.id, 0),
+            'class_status': center.class_status,
+            'district_id': center.district_id,
+            'district_name': center.district.name if center.district else None,
+            'vidhan_sabha_id': center.vidhan_sabha_id,
+            'vidhan_sabha_name': center.vidhan_sabha.name if center.vidhan_sabha else None,
+            'panchayat_id': center.panchayat_id,
+            'panchayat_name': center.panchayat.name if center.panchayat else None,
+            'village_id': center.village_id,
+            'village_name': center.village.name if center.village else None,
+            'created_by': center.created_by,
+            'created_on': center.created_on.isoformat() if center.created_on else None,
+            'updated_by': center.updated_by,
+            'updated_on': center.updated_on.isoformat() if center.updated_on else None,
+            'started_date': center.started_date.isoformat() if center.started_date else None,
+        }
+    
+    def _create_center(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            center_name = data.get('center_name', '').strip()
+            address = data.get('address', '').strip()
+            district_id = data.get('district_id')
+            vidhan_sabha_id = data.get('vidhan_sabha_id')
+            panchayat_id = data.get('panchayat_id')
+            village_id = data.get('village_id')
+            latitude = data.get('latitude')
+            longitude = data.get('longitude')
+            assigned_teachers = data.get('assigned_teachers', 0)
+            assigned_regional_admin = data.get('assigned_regional_admin')
+            class_status = data.get('class_status', True)
+            started_date = data.get('started_date')
+            
+            # Parse started_date if provided
+            if started_date:
+                try:
+                    started_date = datetime.strptime(started_date, '%Y-%m-%d').date()
+                except ValueError:
+                    try:
+                        started_date = datetime.fromisoformat(started_date.replace('Z', '+00:00')).date()
+                    except ValueError:
+                        started_date = None
+            
+            if not center_name:
+                return JsonResponse({'detail': 'Center name is required'}, status=400)
+            if not address:
+                return JsonResponse({'detail': 'Address is required'}, status=400)
+            if not district_id:
+                return JsonResponse({'detail': 'District is required'}, status=400)
+            if not vidhan_sabha_id:
+                return JsonResponse({'detail': 'Vidhan Sabha is required'}, status=400)
+            if not panchayat_id:
+                return JsonResponse({'detail': 'Panchayat is required'}, status=400)
+            if not village_id:
+                return JsonResponse({'detail': 'Village is required'}, status=400)
+            
+            # Transform data to PascalCase format expected by the web center helper
+            center_data = {
+                'CenterName': center_name,
+                'Address': address,
+                'DistrictId': district_id,
+                'VidhanSabhaId': vidhan_sabha_id,
+                'PanchayatId': panchayat_id,
+                'VillageId': village_id,
+                'Latitude': latitude,
+                'Longitude': longitude,
+                'AssignedTeachers': assigned_teachers if assigned_teachers else 0,
+                'AssignedRegionalAdmin': assigned_regional_admin,
+                'StartedDate': started_date,
+                'ClassStatus': class_status
+            }
+            
+            # Call web-app-specific save helper (Id=0 means create new)
+            center_data['Id'] = 0
+            center = save_center_web(center_data, request)
+            
+            if not center:
+                return JsonResponse({'detail': 'Failed to create center'}, status=500)
+            
+            name_map = self._get_user_names_map([
+                center.assigned_regional_admin, center.assigned_teachers
+            ])
+            student_counts = self._get_student_counts_map([center.id])
+            response_data = self._serialize_center(center, name_map, student_counts)
+            response_data['message'] = 'Center created successfully'
+            return JsonResponse(response_data, status=201)
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            logger.error(f"Create center error: {str(e)}")
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _update_center(self, request):
+        try:
+            data = json.loads(request.body)
+            center_id = data.get('id')
+            
+            if not center_id:
+                return JsonResponse({'detail': 'ID is required'}, status=400)
+            
+            # Transform data to PascalCase format expected by save_center helper
+            center_data = {'Id': center_id}
+            
+            # Only include fields that are provided
+            if 'center_name' in data and data['center_name'] is not None:
+                center_data['CenterName'] = data['center_name'].strip()
+            if 'address' in data and data['address'] is not None:
+                center_data['Address'] = data['address'].strip()
+            if 'district_id' in data and data['district_id'] is not None:
+                center_data['DistrictId'] = data['district_id']
+            if 'vidhan_sabha_id' in data and data['vidhan_sabha_id'] is not None:
+                center_data['VidhanSabhaId'] = data['vidhan_sabha_id']
+            if 'panchayat_id' in data and data['panchayat_id'] is not None:
+                center_data['PanchayatId'] = data['panchayat_id']
+            if 'village_id' in data and data['village_id'] is not None:
+                center_data['VillageId'] = data['village_id']
+            if 'latitude' in data and data['latitude'] is not None:
+                center_data['Latitude'] = data['latitude']
+            if 'longitude' in data and data['longitude'] is not None:
+                center_data['Longitude'] = data['longitude']
+            if 'assigned_teachers' in data and data['assigned_teachers'] is not None:
+                center_data['AssignedTeachers'] = data['assigned_teachers']
+            if 'assigned_regional_admin' in data and data['assigned_regional_admin'] is not None:
+                center_data['AssignedRegionalAdmin'] = data['assigned_regional_admin']
+            if 'started_date' in data and data['started_date'] is not None:
+                started_date = data['started_date']
+                if isinstance(started_date, str):
+                    try:
+                        started_date = datetime.strptime(started_date, '%Y-%m-%d').date()
+                    except ValueError:
+                        try:
+                            started_date = datetime.fromisoformat(started_date.replace('Z', '+00:00')).date()
+                        except ValueError:
+                            started_date = None
+                center_data['StartedDate'] = started_date
+            if 'class_status' in data and data['class_status'] is not None:
+                center_data['ClassStatus'] = data['class_status']
+            
+            # Call web-app-specific save helper
+            center = save_center_web(center_data, request)
+            
+            if not center:
+                return JsonResponse({'detail': 'Center not found or failed to update'}, status=404)
+            
+            name_map = self._get_user_names_map([
+                center.assigned_regional_admin, center.assigned_teachers
+            ])
+            student_counts = self._get_student_counts_map([center.id])
+            response_data = self._serialize_center(center, name_map, student_counts)
+            response_data['message'] = 'Center updated successfully'
+            return JsonResponse(response_data, status=200)
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            logger.error(f"Update center error: {str(e)}")
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _delete_center(self, request):
+        try:
+            center_id = request.GET.get('id')
+            if not center_id:
+                try:
+                    data = json.loads(request.body)
+                    center_id = data.get('id')
+                except:
+                    pass
+            
+            if not center_id:
+                return JsonResponse({'detail': 'Center ID is required'}, status=400)
+            
+            try:
+                center = Center.objects.get(id=center_id, status=True)
+            except Center.DoesNotExist:
+                return JsonResponse({'detail': 'Center not found'}, status=404)
+            
+            center.status = False
+            center.updated_by = request.web_user.get('user_id')
+            center.updated_on = timezone.now()
+            center.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            return JsonResponse({'detail': 'Center deactivated successfully'})
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)

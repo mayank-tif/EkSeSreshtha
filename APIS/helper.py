@@ -2278,7 +2278,9 @@ def save_class(class_data, request):
 
             if existing:
                 return None
-
+            
+            absent_count = class_data.get("totalStudents") - class_data.get("avilableStudents")
+            
             # Create new class using Django ORM
             new_class = ClassModel.objects.create(
                 name=class_data.get("name"),
@@ -2286,6 +2288,7 @@ def save_class(class_data, request):
                 users_id=class_data.get("userId"),
                 total_students=class_data.get("totalStudents"),
                 avilable_students=class_data.get("avilableStudents"),
+                absent_count = absent_count,
                 started_date=datetime.now(),
                 status=1,              # Active
                 sub_status=0,
@@ -2326,7 +2329,11 @@ def get_class_by_id(class_id):
                 'SubStatus': class_obj.sub_status,
                 'Reason': class_obj.reason,
                 'CancelBy': class_obj.cancel_by,
-                'CancelDate': class_obj.cancel_date
+                'CancelDate': class_obj.cancel_date, 
+                'ClassroomPhotoUrl': class_obj.classroom_photo_url,
+                'PresentCount': class_obj.present_count, 
+                'AbsentCount': class_obj.absent_count,
+                'ClosedBy': class_obj.closed_by
             }
         return None
     except Exception as e:
@@ -2633,7 +2640,15 @@ def get_class_current_status(center_id, teacher_id):
         raise e
 
 def get_live_class_detail(class_id):
-    """Get live class detail"""
+    """Get live class detail with present/absent student lists and counts.
+    
+    Returns:
+        - Class info: id, name, status, startDate, endDate, avilableStudents, subStatus
+        - totalStudents: live count from Student table where center matches
+        - presentStudents: active students with attendance for this class today
+        - absentStudents: active students in the center without attendance today
+        - presentCount / absentCount
+    """
     logger.info(f"ClassHelper : GetLiveClassDetail : Started")
     
     try:
@@ -2641,7 +2656,7 @@ def get_live_class_detail(class_id):
         sql = """
             SELECT 
                 Id, Name, Status, StartedDate as StartDate,
-                EndDate, TotalStudents, AvilableStudents, SubStatus
+                EndDate, TotalStudents, AvilableStudents, SubStatus, CenterId
             FROM Class
             WHERE DATE(StartedDate) = %s AND Id = %s
         """
@@ -2649,22 +2664,78 @@ def get_live_class_detail(class_id):
             cursor.execute(sql, [today, class_id])
             row = cursor.fetchone()
             
-            if row:
-                columns = [col[0] for col in cursor.description]
-                row_dict = dict(zip(columns, row))
-                # Convert PascalCase to camelCase to match serializer
-                return {
-                    'id': row_dict.get('Id'),
-                    'name': row_dict.get('Name'),
-                    'status': row_dict.get('Status'),
-                    'startDate': row_dict.get('StartDate'),
-                    'endDate': row_dict.get('EndDate'),
-                    'totalStudents': row_dict.get('TotalStudents'),
-                    'avilableStudents': row_dict.get('AvilableStudents'),
-                    'subStatus': row_dict.get('SubStatus')
-                }
+            if not row:
+                return None
+            
+            columns = [col[0] for col in cursor.description]
+            row_dict = dict(zip(columns, row))
         
-        return None
+        center_id = row_dict.get('CenterId')
+        
+        # ── Present students: active students with attendance for THIS class today ──
+        present_attendance = (
+            StudentAttendance.objects.filter(
+                class_obj_id=class_id,
+                scan_date__date=today,
+                student__status=True
+            )
+            .select_related('student')
+            .order_by('scan_date')
+        )
+        
+        present_students = []
+        present_ids = set()
+        for att in present_attendance:
+            if att.student_id and att.student_id not in present_ids:
+                present_ids.add(att.student_id)
+                present_students.append({
+                    'id': att.student_id,
+                    'name': att.student.full_name if att.student else None,
+                    'enrollmentId': att.student.enrollment_id if att.student else None,
+                    'profileImage': att.student.profile_image if att.student else None,
+                    'scanDate': att.scan_date.isoformat() if att.scan_date else None
+                })
+        
+        # ── Absent students: active students in center NOT present today ──
+        absent_qs = Student.objects.filter(
+            center_id=center_id,
+            status=True
+        ).exclude(id__in=present_ids).values(
+            'id', 'full_name', 'enrollment_id', 'profile_image', 'manual_attendance'
+        )
+        
+        absent_students = [
+            {
+                'id': s['id'],
+                'name': s['full_name'],
+                'enrollmentId': s['enrollment_id'],
+                'profileImage': s['profile_image'],
+                'manualAttendance': s['manual_attendance'] or 0
+            }
+            for s in absent_qs
+        ]
+        
+        # ── Total students: live count from Student table for this center ──
+        total_students = Student.objects.filter(
+            center_id=center_id,
+            status=True
+        ).count()
+        
+        # Convert PascalCase to camelCase to match serializer
+        return {
+            'id': row_dict.get('Id'),
+            'name': row_dict.get('Name'),
+            'status': row_dict.get('Status'),
+            'startDate': row_dict.get('StartDate'),
+            'endDate': row_dict.get('EndDate'),
+            'totalStudents': total_students,
+            'avilableStudents': row_dict.get('AvilableStudents'),
+            'subStatus': row_dict.get('SubStatus'),
+            'presentCount': len(present_students),
+            'absentCount': len(absent_students),
+            'presentStudents': present_students,
+            'absentStudents': absent_students
+        }
         
     except Exception as e:
         logger.error(f"ClassHelper : GetLiveClassDetail : {str(e)}")
@@ -4594,7 +4665,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
             if not student.status:  # Status=False → Inactive student
                 return 0
             if student.center_id != center_id:  # Center mismatch
-                    return -2
+                return -2
             
             if is_automatic:
                 # QR Code auto-scan attendance
@@ -4674,6 +4745,7 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
             # Update class available students count
             if class_obj:
                 class_obj.avilable_students = (class_obj.avilable_students or 0) + 1
+                class_obj.absent_count = (class_obj.absent_count or 0) - 1
                 class_obj.save(update_fields=['avilable_students', 'updated_on', 'updated_by'])
         
         return 1
