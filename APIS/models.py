@@ -735,56 +735,15 @@ class Student(models.Model):
     bpl = models.BooleanField(db_column="Bpl", null=True, blank=True)
     category = models.CharField(db_column="Category", max_length=50, null=True, blank=True)
     father_mobile_number = models.CharField(db_column="FatherMobileNumber", max_length=50, null=True, blank=True)
+    roll_number = models.IntegerField(db_column="roll_number", null=True, blank=True)
     
     # Foreign Keys
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='students'
-    )
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='students'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='students'
-    )
-    village = models.ForeignKey(
-        Village,
-        db_column="VillageId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='students'
-    )
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='students'
-    )
-    school = models.ForeignKey(
-        School,
-        db_column="SchoolId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='students'
-    )
+    district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    panchayat = models.ForeignKey(Panchayat,db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    village = models.ForeignKey(Village, db_column="VillageId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    school = models.ForeignKey(School, db_column="SchoolId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)

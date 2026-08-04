@@ -539,6 +539,73 @@ function getCsrfToken() {
 }
 
 /* ================================================================
+   API FETCH HELPERS
+   ----------------------------------------------------------------
+   Generic API fetch with error handling and CSRF support.
+   ================================================================ */
+
+/**
+ * Builds headers for API requests
+ * @param {boolean} includeCsrf - Whether to include CSRF token
+ * @returns {Object} - Headers object
+ */
+function getApiHeaders(includeCsrf = true) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+    };
+    if (includeCsrf) {
+        const csrf = getCsrfToken();
+        if (csrf) headers['X-CSRFToken'] = csrf;
+    }
+    return headers;
+}
+
+/**
+ * Generic API fetch with error handling
+ * @param {string} url - API endpoint URL
+ * @param {Object} options - Fetch options
+ * @returns {Promise} - Parsed JSON response
+ */
+async function apiFetch(url, options = {}) {
+    const defaultOptions = {
+        headers: getApiHeaders(),
+        credentials: 'same-origin'
+    };
+
+    const mergedOptions = {
+        ...defaultOptions,
+        ...options,
+        headers: {
+            ...defaultOptions.headers,
+            ...(options.headers || {})
+        }
+    };
+
+    try {
+        const response = await fetch(url, mergedOptions);
+
+        const contentType = response.headers.get('content-type');
+        let data;
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            data = await response.text();
+        }
+
+        if (!response.ok) {
+            const errorMsg = data?.detail || data?.error || data?.message || `HTTP ${response.status}`;
+            throw new Error(errorMsg);
+        }
+
+        return data;
+    } catch (e) {
+        console.error('API fetch error:', e);
+        throw e;
+    }
+}
+
+/* ================================================================
    DASHBOARD RECORD HELPERS
    ----------------------------------------------------------------
    Returns mock/demo data for demonstration purposes.
@@ -617,7 +684,95 @@ function getRecords(type) {
     return records;
 }
 
-// Export for module systems (optional)
+/* ================================================================
+   VALIDATION HELPERS
+   ----------------------------------------------------------------
+   Reusable validation functions for forms.
+   ================================================================ */
+
+/**
+ * Validates Indian mobile number (10 digits, starts with 6/7/8/9)
+ * @param {string} mobile - Mobile number to validate
+ * @returns {boolean} - True if valid
+ */
+function isValidMobile(mobile) {
+    if (!mobile) return false;
+    const cleaned = mobile.replace(/\s+/g, '');
+    return /^[6-9]\d{9}$/.test(cleaned);
+}
+
+/**
+ * Validates email address
+ * @param {string} email - Email to validate
+ * @returns {boolean} - True if valid
+ */
+function isValidEmail(email) {
+    if (!email) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/**
+ * Validates required field
+ * @param {string} value - Field value
+ * @returns {boolean} - True if not empty
+ */
+function isRequired(value) {
+    return value !== undefined && value !== null && value.toString().trim() !== '';
+}
+
+/**
+ * Validates age (positive number, reasonable range)
+ * @param {number|string} age - Age to validate
+ * @returns {boolean} - True if valid
+ */
+function isValidAge(age) {
+    const num = parseInt(age, 10);
+    return !isNaN(num) && num > 0 && num <= 100;
+}
+
+/**
+ * Validates roll number (positive integer)
+ * @param {number|string} rollNo - Roll number to validate
+ * @returns {boolean} - True if valid
+ */
+function isValidRollNo(rollNo) {
+    const num = parseInt(rollNo, 10);
+    return !isNaN(num) && num > 0;
+}
+
+/**
+ * Validates a field and shows toast error if invalid
+ * @param {string} fieldName - Name of field for error message
+ * @param {any} value - Field value
+ * @param {Function} validator - Validation function
+ * @param {string} errorMessage - Custom error message
+ * @returns {boolean} - True if valid
+ */
+function validateField(fieldName, value, validator, errorMessage) {
+    if (!validator(value)) {
+        showToast(errorMessage || `Invalid ${fieldName}`, 'danger');
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Validates multiple fields at once
+ * @param {Array<Object>} fields - Array of {name, value, validator, errorMessage}
+ * @returns {boolean} - True if all valid
+ */
+function validateFields(fields) {
+    for (const field of fields) {
+        if (!validateField(field.name, field.value, field.validator, field.errorMessage)) {
+            // Focus the invalid field if it's an input
+            const el = document.getElementById(field.id);
+            if (el) el.focus();
+            return false;
+        }
+    }
+    return true;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         showToast,

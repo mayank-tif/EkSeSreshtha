@@ -8,22 +8,18 @@
    - Auto-display of the selected centre's details
    ================================================================ */
 
-renderShell({
-    title: 'Student Registration',
-    active: 'student-registration',
-    breadcrumbs: [
-        { label: 'Students' },
-        { label: 'Student Registration' }
-    ]
-});
-
 /* ================================================================
    INITIALIZATION
    ================================================================ */
 
-document.addEventListener('DOMContentLoaded', () => {
-    populateSchoolDropdown();
-    populateCentreOptions();
+let state = {
+    centres: [],
+    schools: []
+};
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadSchools();
+    await loadCentres();
 
     document.getElementById('student-form').addEventListener('submit', handleStudentSubmit);
     document.getElementById('student-image').addEventListener('change', handleStudentImageChange);
@@ -35,11 +31,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Real-time validation for mobile fields
+    const mobileFields = [
+        'student-contact',
+        'student-whatsapp',
+        'student-father-mobile',
+        'student-mother-mobile'
+    ];
+    mobileFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('blur', () => {
+                const val = el.value.trim();
+                if (val && !isValidMobile(val)) {
+                    showToast(`${el.labels[0]?.textContent?.replace('*','').trim() || 'Mobile'} must be 10 digits starting with 6/7/8/9`, 'danger');
+                    el.focus();
+                }
+            });
+        }
+    });
+
     // Load an editing student if passed via URL query (?id=...)
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('id');
     if (editId) {
-        editStudent(editId);
+        await editStudent(editId);
     }
 });
 
@@ -68,14 +84,51 @@ function handleStudentImageChange(event) {
 }
 
 /* ================================================================
-   SCHOOL DROPDOWN
+   LOAD SCHOOLS & CENTRES FROM API
    ================================================================ */
 
-function populateSchoolDropdown() {
-    const schools = getRecords('schools');
-    const select = document.getElementById('student-school');
-    select.innerHTML = '<option value="">Select school</option>' +
-        schools.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+async function loadSchools() {
+    try {
+        const data = await apiFetch(getUrl('school-list') + '?page=1&page_size=1000');
+        state.schools = data.results || data || [];
+        const select = document.getElementById('student-school');
+        select.innerHTML = '<option value="">Select school</option>' +
+            state.schools.map(s => `<option value="${s.id}">${escapeHtml(s.name || s.school_name)}</option>`).join('');
+    } catch (error) {
+        console.error('Failed to load schools:', error);
+    }
+}
+
+async function loadCentres() {
+    try {
+        const data = await fetchCentres({ page: 1, page_size: 1000 });
+        state.centres = data.results || data || [];
+
+        const optionsContainer = document.getElementById('centre-options');
+        if (!optionsContainer) return;
+
+        if (state.centres.length === 0) {
+            optionsContainer.innerHTML = `
+                <div class="searchable-select-option-empty">
+                    No centres available. Please create a centre first.
+                </div>
+            `;
+            return;
+        }
+
+        optionsContainer.innerHTML = state.centres.map(c => `
+            <div class="searchable-select-option"
+                 data-id="${c.id}"
+                 data-name="${escapeHtml(c.name || c.center_name || '').toLowerCase()}"
+                 onclick="selectCentre('${c.id}', '${escapeHtml(c.name || c.center_name || '').replace(/'/g, "'")}')"
+            >
+                <div style="font-weight: 500;">${escapeHtml(c.name || c.center_name)}</div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Failed to load centres:', error);
+        showToast('Failed to load centres', 'warning');
+    }
 }
 
 /* ================================================================

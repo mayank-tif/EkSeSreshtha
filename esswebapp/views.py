@@ -1,3 +1,4 @@
+from django.core.files.storage import default_storage
 from django.shortcuts import render, redirect
 from django.views import View
 from django.urls import re_path
@@ -79,14 +80,15 @@ class LoginView(View):
         except User.DoesNotExist:
             return render(request, self.template_name, {
                 'form': form,
-                'error': 'Invalid credentials'
+                'error': 'User does not exists!'
             })
         
         # Check password using same hashing as APIS app
+        print("user.password", user.password, hash_password(password))
         if hash_password(password) != user.password:
             return render(request, self.template_name, {
                 'form': form,
-                'error': 'Invalid credentials'
+                'error': 'Incorrect password!'
             })
         
         # Check role - only SUPER_ADMIN and REGIONAL_ADMIN allowed
@@ -167,11 +169,582 @@ class AttendanceView(LoginRequiredMixin, View):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
 
 
-class StudentsView(LoginRequiredMixin, View):
-    template_name = 'esswebapp/pages/students/school-list.html'
+class SchoolListView(LoginRequiredMixin, View):
+    """API view for listing schools - used in dropdowns"""
+    
+    def get(self, request):
+        try:
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 1000))
+            
+            queryset = School.objects.filter(status=True).order_by('school_name')
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            schools_page = list(queryset[start:end].values('id', 'school_name'))
+            
+            items = [
+                {'id': s['id'], 'name': s['school_name']}
+                for s in schools_page
+            ]
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class ClassListView(LoginRequiredMixin, View):
+    """API view for listing classes by centre - used in dropdowns"""
+    
+    def get(self, request):
+        try:
+            center_id = request.GET.get('center_id')
+            if not center_id:
+                return JsonResponse({'results': [], 'count': 0, 'page': 1, 'page_size': 1000, 'total_pages': 1})
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 1000))
+            
+            from APIS.models import ClassModel
+            queryset = ClassModel.objects.filter(
+                center_id=center_id,
+                active_status=True,
+                status=1  # Active classes only
+            ).order_by('name')
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            classes_page = list(queryset[start:end].values('id', 'name'))
+            
+            items = [
+                {'id': c['id'], 'name': c['name']}
+                for c in classes_page
+            ]
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class StudentRegistrationView(LoginRequiredMixin, View):
+    """View for student registration page"""
+    template_name = 'esswebapp/pages/students/student-registration.html'
     
     def get(self, request):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+
+
+class StudentsView(LoginRequiredMixin, View):
+    template_name = 'esswebapp/pages/students/student-list.html'
+    
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._list_students_api(request)
+        
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+
+    
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            # Transform web app field names to model field names
+            student_data = {
+                'roll_number': int(data.get('rollNo')) if data.get('rollNo') else None,
+                'enrollment_id': data.get('enrollment_id') or str(uuid.uuid4()),
+                'full_name': data.get('name') or data.get('full_name'),
+                'age': data.get('age'),
+                'gender': data.get('gender'),
+                'date_of_birth': self._parse_date(data.get('dateOfBirth')),
+                'joining_date': self._parse_datetime(data.get('joiningDate')),
+                'grade': data.get('grade'),
+                'father_name': data.get('fatherName'),
+                'mother_name': data.get('motherName'),
+                'father_mobile_number': data.get('fatherMobile'),
+                'mother_mobile_number': data.get('motherMobile'),
+                'father_occupation': data.get('fatherOccupation'),
+                'mother_occupation': data.get('motherOccupation'),
+                'phone_number': data.get('contactNumber'),
+                'whats_app': data.get('whatsApp'),
+                'full_address': data.get('address'),
+                'email': data.get('email'),
+                'category': data.get('category'),
+                'bpl': (lambda v: v.lower() == 'true' or v == 'Yes' or v is True if isinstance(v, str) else bool(v))(data.get('bpl')),
+                'school_id': data.get('schoolId'),
+                'center_id': data.get('centreId'),
+                'status': True,
+                'district_id': data.get('district_id'),
+                'vidhan_sabha_id': data.get('vidhan_sabha_id'),
+                'panchayat_id': data.get('panchayat_id'),
+                'village_id': data.get('village_id'),
+                'created_by': request.web_user.get('user_id'),
+                'created_on': datetime.now()
+            }
+            
+            # Remove None values for optional fields
+            student_data = {k: v for k, v in student_data.items() if v is not None}
+            
+            # Check for duplicate roll_number per center
+            roll_number = student_data.get('roll_number')
+            center_id = student_data.get('center_id')
+            if roll_number and center_id:
+                if Student.objects.filter(roll_number=roll_number, center_id=center_id, status=True).exists():
+                    return JsonResponse({'detail': 'Roll number already exists for this centre'}, status=400)
+            
+            # Handle profile image - decode base64 and save as file
+            profile_image_data = data.get('image') or data.get('profile_image')
+            if profile_image_data and isinstance(profile_image_data, str) and profile_image_data.startswith('data:image'):
+                # Decode base64 and save as file
+                try:
+                    format, imgstr = profile_image_data.split(';base64,')
+                    ext = format.split('/')[-1]
+                    # Use shorter filename to fit in 50-char column
+                    short_uuid = uuid.uuid4().hex[:8]
+                    filename = f"p_{request.web_user.get('user_id')}_{short_uuid}.{ext}"
+                    filepath = f"profile_pic/{filename}"
+                    student_data['profile_image'] = default_storage.save(filepath, ContentFile(base64.b64decode(imgstr)))
+                except Exception as e:
+                    logger.warning(f"Failed to save profile image: {e}")
+            
+            # Create Student model directly
+            student = Student.objects.create(**student_data)
+            
+            return JsonResponse({
+                'status': True,
+                'message': 'Student registered successfully',
+                'data': self._serialize_student(student)
+            }, status=201)
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def put(self, request):
+        try:
+            data = json.loads(request.body)
+            # If status is provided with only id (status toggle)
+            if 'status' in data or 'Status' in data:
+                if len(data) <= 2 and ('id' in data or 'Id' in data or len(data) == 1):
+                    return self._toggle_student_status(request)
+        except:
+            pass
+        return self._update_student(request)
+    
+    def delete(self, request):
+        return self._delete_student(request)
+    
+    def _get_students_queryset(self):
+        """Get students with related data"""
+        return Student.objects.select_related(
+            'center', 'school', 'district', 'vidhan_sabha', 'panchayat', 'village'
+        ).order_by('-created_on')
+    
+    def _get_user_names_map(self, user_ids):
+        """Batch-fetch user names for the given ids."""
+        ids = [i for i in set(user_ids) if i]
+        if not ids:
+            return {}
+        return dict(User.objects.filter(id__in=ids).values_list('id', 'name'))
+    
+    def _get_student_school_map(self, student_ids):
+        """Batch-fetch school names for student ids."""
+        if not student_ids:
+            return {}
+        schools = School.objects.filter(id__in=student_ids).values_list('id', 'school_name')
+        return dict(schools)
+    
+
+    def _list_classes_api(self, request):
+        """Return list of classes for dropdown selection, filtered by center_id."""
+        try:
+            center_id = request.GET.get('center_id')
+            if not center_id:
+                return JsonResponse({'results': [], 'count': 0, 'page': 1, 'page_size': 1000, 'total_pages': 1})
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 1000))
+            
+            queryset = ClassModel.objects.filter(
+                center_id=center_id,
+                active_status=True,
+                status=1  # Active classes only
+            ).order_by('name')
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            classes_page = list(queryset[start:end].values('id', 'name'))
+            
+            items = [
+                {'id': c['id'], 'name': c['name']}
+                for c in classes_page
+            ]
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _format_date(self, date_val):
+        """Format date value to ISO format string, handling both date objects and strings."""
+        if not date_val:
+            return None
+        if hasattr(date_val, 'isoformat'):
+            return date_val.isoformat()
+        # Handle string dates (DD-MM-YYYY or YYYY-MM-DD)
+        if isinstance(date_val, str):
+            try:
+                # Try DD-MM-YYYY
+                if '-' in date_val and len(date_val) == 10:
+                    parts = date_val.split('-')
+                    if len(parts[0]) == 2:  # DD-MM-YYYY
+                        from datetime import datetime
+                        return datetime.strptime(date_val, '%d-%m-%Y').date().isoformat()
+                    elif len(parts[0]) == 4:  # YYYY-MM-DD
+                        return date_val
+            except:
+                pass
+        return str(date_val)
+    
+    def _list_students_api(self, request):
+        try:
+            student_id = request.GET.get('id')
+            if student_id:
+                try:
+                    student = self._get_students_queryset().get(id=student_id)
+                    return JsonResponse(self._serialize_student(student))
+                except Student.DoesNotExist:
+                    return JsonResponse({'detail': 'Student not found'}, status=404)
+            
+            queryset = self._get_students_queryset()
+            
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 20))
+            search = request.GET.get('search', '').strip().lower()
+            
+            # Location filters
+            district_id = request.GET.get('district_id')
+            vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
+            panchayat_id = request.GET.get('panchayat_id')
+            village_id = request.GET.get('village_id')
+            
+            if district_id:
+                queryset = queryset.filter(district_id=district_id)
+            if vidhan_sabha_id:
+                queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+            if panchayat_id:
+                queryset = queryset.filter(panchayat_id=panchayat_id)
+            if village_id:
+                queryset = queryset.filter(village_id=village_id)
+            
+            if search:
+                queryset = queryset.filter(
+                    models.Q(full_name__icontains=search) |
+                    models.Q(enrollment_id__icontains=search) |
+                    models.Q(father_name__icontains=search) |
+                    models.Q(phone_number__icontains=search)
+                )
+            
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            students_page = list(queryset[start:end])
+            
+            # Batch-fetch related display data
+            center_ids = [s.center_id for s in students_page if s.center_id]
+            school_ids = [s.school_id for s in students_page if s.school_id]
+            
+            centers = Center.objects.filter(id__in=center_ids).values('id', 'center_name')
+            center_map = {c['id']: c['center_name'] for c in centers}
+            
+            schools = School.objects.filter(id__in=school_ids).values('id', 'school_name')
+            school_map = {s['id']: s['school_name'] for s in schools}
+            
+            items = [
+                self._serialize_student(s, center_map, school_map)
+                for s in students_page
+            ]
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _serialize_student(self, student, center_map=None, school_map=None):
+        center_map = center_map or {}
+        school_map = school_map or {}
+        
+        # Handle both Student model objects and dicts (from save_student helper)
+        def get_val(obj, key, default=None):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+        
+        return {
+            'id': get_val(student, 'id') or get_val(student, 'Id'),
+            'enrollment_id': get_val(student, 'enrollment_id') or get_val(student, 'EnrollmentId'),
+            'roll_number': get_val(student, 'roll_number') or get_val(student, 'RollNumber'),
+            'full_name': get_val(student, 'full_name') or get_val(student, 'FullName'),
+            'mother_name': get_val(student, 'mother_name') or get_val(student, 'MotherName'),
+            'father_name': get_val(student, 'father_name') or get_val(student, 'FatherName'),
+            'age': get_val(student, 'age') or get_val(student, 'Age'),
+            'gender': get_val(student, 'gender') or get_val(student, 'Gender'),
+            'contact': get_val(student, 'phone_number') or get_val(student, 'PhoneNumber') or get_val(student, 'Contact'),
+            'date_of_birth': self._format_date(get_val(student, 'date_of_birth') or get_val(student, 'DateOfBirth')),
+            'email': get_val(student, 'email') or get_val(student, 'Email'),
+            'remarks': get_val(student, 'remarks') or get_val(student, 'Remarks'),
+            'grade': get_val(student, 'grade') or get_val(student, 'Grade'),
+            'phone_number': get_val(student, 'phone_number') or get_val(student, 'PhoneNumber'),
+            'image': (lambda p: f'/media/{p}' if p and not p.startswith('http') and not p.startswith('/media/') and not p.startswith('data:') else p)(get_val(student, 'profile_image') or get_val(student, 'ProfileImage')),
+            'whatsapp': get_val(student, 'whats_app') or get_val(student, 'WhatsApp'),
+            'full_address': get_val(student, 'full_address') or get_val(student, 'FullAddress'),
+            'status': get_val(student, 'status') or get_val(student, 'Status'),
+            'joining_date': self._format_date(get_val(student, 'joining_date') or get_val(student, 'JoiningDate')),
+            'center_id': get_val(student, 'center_id') or get_val(student, 'CenterId'),
+            'center_name': center_map.get(get_val(student, 'center_id') or get_val(student, 'CenterId')) if (get_val(student, 'center_id') or get_val(student, 'CenterId')) else None,
+            'teacher_name': None,
+            'district_id': get_val(student, 'district_id') or get_val(student, 'DistrictId'),
+            'vidhan_sabha_id': get_val(student, 'vidhan_sabha_id') or get_val(student, 'VidhanSabhaId'),
+            'village_id': get_val(student, 'village_id') or get_val(student, 'VillageId'),
+            'panchayat_id': get_val(student, 'panchayat_id') or get_val(student, 'PanchayatId'),
+            'father_mobile_number': get_val(student, 'father_mobile_number') or get_val(student, 'FatherMobileNumber'),
+            'father_occupation': get_val(student, 'father_occupation') or get_val(student, 'FatherOccupation'),
+            'mother_mobile_number': get_val(student, 'mother_mobile_number') or get_val(student, 'MotherMobileNumber'),
+            'mother_occupation': get_val(student, 'mother_occupation') or get_val(student, 'MotherOccupation'),
+            'category': get_val(student, 'category') or get_val(student, 'Category'),
+            'bpl': get_val(student, 'bpl') or get_val(student, 'Bpl'),
+            'school_id': get_val(student, 'school_id') or get_val(student, 'SchoolId'),
+            'school_name': school_map.get(get_val(student, 'school_id') or get_val(student, 'SchoolId')) if (get_val(student, 'school_id') or get_val(student, 'SchoolId')) else None,
+            'active_class': get_val(student, 'grade') or get_val(student, 'Grade'),
+            'active': get_val(student, 'status') or get_val(student, 'Status')
+        }
+    
+    
+    def _parse_date(self, date_str):
+        """Parse date string in various formats to date object."""
+        if not date_str:
+            return None
+        if hasattr(date_str, 'date'):
+            return date_str.date()
+        if isinstance(date_str, str):
+            # Try multiple formats
+            for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%d-%m-%y', '%d/%m/%y', '%Y-%m-%dT%H:%M:%S'):
+                try:
+                    return datetime.strptime(date_str, fmt).date()
+                except ValueError:
+                    continue
+        return None
+    
+    def _parse_datetime(self, date_str):
+        """Parse datetime string in various formats to datetime object."""
+        if not date_str:
+            return None
+        if hasattr(date_str, 'hour'):
+            return date_str
+        if isinstance(date_str, str):
+            for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%dT%H:%M:%S.%f'):
+                try:
+                    return datetime.strptime(date_str, fmt)
+                except ValueError:
+                    continue
+        return None
+    
+    def _update_student(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            student_id = data.get('id') or data.get('Id')
+            if not student_id:
+                return JsonResponse({'detail': 'ID is required'}, status=400)
+            
+            # Get existing student
+            try:
+                student = Student.objects.get(id=student_id, status=True)
+            except Student.DoesNotExist:
+                return JsonResponse({'detail': 'Student not found'}, status=404)
+            
+            # Update fields if provided
+            field_mapping = {
+                'enrollment_id': 'rollNo',
+                'roll_number': 'rollNo',
+                'full_name': 'name',
+                'age': 'age',
+                'gender': 'gender',
+                'date_of_birth': 'dateOfBirth',
+                'joining_date': 'joiningDate',
+                'grade': 'grade',
+                'father_name': 'fatherName',
+                'mother_name': 'motherName',
+                'father_mobile_number': 'fatherMobile',
+                'mother_mobile_number': 'motherMobile',
+                'father_occupation': 'fatherOccupation',
+                'mother_occupation': 'motherOccupation',
+                'phone_number': 'contactNumber',
+                'whats_app': 'whatsApp',
+                'full_address': 'address',
+                'email': 'email',
+                'category': 'category',
+                'bpl': 'bpl',
+                'school_id': 'schoolId',
+                'center_id': 'centreId',
+                'profile_image': 'image',
+                'district_id': 'district_id',
+                'vidhan_sabha_id': 'vidhan_sabha_id',
+                'panchayat_id': 'panchayat_id',
+                'village_id': 'village_id',
+            }
+            
+            # Check for duplicate roll_number per center (if roll_number is being updated)
+            new_roll_number = data.get('rollNo')
+            new_center_id = data.get('centreId') or student.center_id
+            if new_roll_number and new_center_id and int(new_roll_number) != student.roll_number:
+                if Student.objects.filter(roll_number=int(new_roll_number), center_id=new_center_id, status=True).exclude(id=student_id).exists():
+                    return JsonResponse({'detail': 'Roll number already exists for this centre'}, status=400)
+            
+            # Handle profile image - decode base64 and save as file
+            profile_image_data = data.get('image') or data.get('profile_image')
+            if profile_image_data and isinstance(profile_image_data, str) and profile_image_data.startswith('data:image'):
+                # Decode base64 and save as file
+                try:
+                    format, imgstr = profile_image_data.split(';base64,')
+                    ext = format.split('/')[-1]
+                    # Use shorter filename to fit in 50-char column
+                    short_uuid = uuid.uuid4().hex[:8]
+                    filename = f"p_{request.web_user.get('user_id')}_{short_uuid}.{ext}"
+                    filepath = f"profile_pic/{filename}"
+                    student.profile_image = default_storage.save(filepath, ContentFile(base64.b64decode(imgstr)))
+                except Exception as e:
+                    logger.warning(f"Failed to save profile image: {e}")
+            
+            for model_field, data_field in field_mapping.items():
+                # Skip profile_image as it's handled above
+                if model_field == 'profile_image':
+                    continue
+                if data_field in data and data[data_field] is not None:
+                    value = data[data_field]
+                    if model_field in ['age'] and value != '':
+                        value = int(value)
+                    elif model_field in ['roll_number'] and value != '':
+                        value = int(value)
+                    elif model_field in ['district_id', 'vidhan_sabha_id', 'panchayat_id', 'village_id', 'school_id', 'center_id'] and value != '':
+                        value = int(value)
+                    elif model_field == 'bpl':
+                        if isinstance(value, str):
+                            value = value.lower() == 'true' or value == 'Yes'
+                        else:
+                            value = bool(value)
+                    elif model_field == 'email':
+                        value = value if value else None
+                    print("Updating field", model_field, "to value", value)
+                    setattr(student, model_field, value)
+            
+            student.updated_by = request.web_user.get('user_id')
+            student.updated_on = datetime.now()
+            student.save()
+            
+            return JsonResponse({
+                'status': True,
+                'message': 'Student updated successfully',
+                'data': self._serialize_student(student)
+            })
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _toggle_student_status(self, request):
+        try:
+            data = json.loads(request.body)
+            student_id = data.get('Id') or data.get('id')
+            status = data.get('Status') or data.get('status')
+            print("student_id, status", student_id, status)
+            
+            if not student_id:
+                return JsonResponse({'detail': 'Student ID is required'}, status=400)
+            if status is None:
+                return JsonResponse({'detail': 'Status is required'}, status=400)
+            
+            try:
+                student = Student.objects.get(id=student_id)
+            except Student.DoesNotExist:
+                return JsonResponse({'detail': 'Student not found'}, status=404)
+            
+            student.status = bool(int(status))
+            student.updated_by = request.web_user.get('user_id')
+            student.updated_on = datetime.now()
+            student.save()
+            
+            return JsonResponse({
+                'status': True,
+                'message': f'Student {"activated" if student.status else "deactivated"} successfully',
+                'data': self._serialize_student(student)
+            })
+        except json.JSONDecodeError:
+            return JsonResponse({'detail': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _delete_student(self, request):
+        try:
+            # Handle both query param and body
+            student_id = request.GET.get('id')
+            if not student_id:
+                try:
+                    data = json.loads(request.body)
+                    student_id = data.get('id')
+                except:
+                    pass
+            
+            if not student_id:
+                return JsonResponse({'detail': 'Student ID is required'}, status=400)
+            
+            try:
+                student = Student.objects.get(id=student_id, status=True)
+            except Student.DoesNotExist:
+                return JsonResponse({'detail': 'Student not found'}, status=404)
+            
+            student.status = False
+            student.updated_by = request.web_user.get('user_id')
+            student.updated_on = datetime.now()
+            student.save()
+            
+            return JsonResponse({'detail': 'Student deactivated successfully'})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
 
 
 class UsersView(LoginRequiredMixin, View):
@@ -493,7 +1066,6 @@ class SuperAdminView(LoginRequiredMixin, View):
     
     def _delete_super_admin(self, request):
         try:
-            import json
             data = json.loads(request.body)
             user_id = data.get('id')  # This is now user_id
             

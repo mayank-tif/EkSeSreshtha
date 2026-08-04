@@ -1,43 +1,13 @@
+{% extends "esswebapp/base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Registration - Ek Se Sreshtha</title>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+{% block title %}Student Registration - Ek Se Sreshtha{% endblock %}
 
-    <link rel="stylesheet" href="{% static 'esswebapp/css/variables.css' %}">
-    <link rel="stylesheet" href="{% static 'esswebapp/css/base.css' %}">
-    <link rel="stylesheet" href="{% static 'esswebapp/css/components.css' %}">
-    <link rel="stylesheet" href="{% static 'esswebapp/css/layout.css' %}">
+{% block extra-css %}
     <link rel="stylesheet" href="{% static 'esswebapp/css/students.css' %}">
-</head>
-<body
-    data-user-session='{{ user|default:"{}"|safe }}'
-    data-url-dashboard="{% url 'esswebapp:dashboard' %}"
-    data-url-centres="{% url 'esswebapp:centres' %}"
-    data-url-attendance="{% url 'esswebapp:attendance' %}"
-    data-url-students="{% url 'esswebapp:students' %}"
-    data-url-users="{% url 'esswebapp:users' %}"
-    data-url-logout="{% url 'esswebapp:logout' %}"
-    data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
-    data-url-district="{% url 'esswebapp:district' %}"
-    data-url-vidhan-sabha="{% url 'esswebapp:vidhan-sabha' %}"
-    data-url-panchayat="{% url 'esswebapp:panchayat' %}"
-    data-url-village="{% url 'esswebapp:village' %}"
-    data-url-super-admin="{% url 'esswebapp:super-admin' %}"
-    data-url-regional-admin="{% url 'esswebapp:regional-admin' %}"
-    data-url-teacher="{% url 'esswebapp:teacher' %}"
-    data-url-student-registration="{% url 'esswebapp:student-registration' %}"
-    data-url-school-list="{% url 'esswebapp:school-list' %}"
->
+{% endblock %}
 
-    <div id="app-shell">
-
+{% block page-content %}
         <div class="page-header">
             <div class="page-header-info">
                 <h1>Student Registration</h1>
@@ -60,7 +30,7 @@
                 </div>
             </div>
             <div class="card-body">
-                <form id="student-form">
+                <form id="student-form" novalidate>
 
                     <!-- ==================================================
                          SECTION: Student photo upload
@@ -124,17 +94,21 @@
                         <label class="form-label" for="student-class">Active class <span class="required">*</span></label>
                         <select id="student-class" class="form-select" required>
                             <option value="">Select class</option>
-                            <option>Nursery</option>
-                            <option>LKG</option>
-                            <option>UKG</option>
-                            <option>Class 1</option>
-                            <option>Class 2</option>
-                            <option>Class 3</option>
-                            <option>Class 4</option>
-                            <option>Class 5</option>
-                            <option>Class 6</option>
-                            <option>Class 7</option>
-                            <option>Class 8</option>
+                            <option value="Nursery">Nursery</option>
+                            <option value="LKG">LKG</option>
+                            <option value="UKG">UKG</option>
+                            <option value="1st">1st</option>
+                            <option value="2nd">2nd</option>
+                            <option value="3rd">3rd</option>
+                            <option value="4th">4th</option>
+                            <option value="5th">5th</option>
+                            <option value="6th">6th</option>
+                            <option value="7th">7th</option>
+                            <option value="8th">8th</option>
+                            <option value="9th">9th</option>
+                            <option value="10th">10th</option>
+                            <option value="11th">11th</option>
+                            <option value="12th">12th</option>
                         </select>
                     </div>
 
@@ -157,11 +131,11 @@
                     <div class="form-grid-2">
                         <div class="form-group">
                             <label class="form-label" for="student-father-mobile">Father's mobile</label>
-                            <input type="tel" id="student-father-mobile" class="form-input" placeholder="10-digit number">
+                            <input type="tel" id="student-father-mobile" class="form-input" placeholder="10-digit number" maxlength="10" pattern="[6-9][0-9]{9}" inputmode="numeric">
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="student-mother-mobile">Mother's mobile</label>
-                            <input type="tel" id="student-mother-mobile" class="form-input" placeholder="10-digit number">
+                            <input type="tel" id="student-mother-mobile" class="form-input" placeholder="10-digit number" maxlength="10" pattern="[6-9][0-9]{9}" inputmode="numeric">
                         </div>
                     </div>
 
@@ -184,11 +158,15 @@
                     <div class="form-grid-2">
                         <div class="form-group">
                             <label class="form-label" for="student-contact">Contact number <span class="required">*</span></label>
-                            <input type="tel" id="student-contact" class="form-input" placeholder="10-digit number" required>
+                            <input type="tel" id="student-contact" class="form-input" placeholder="10-digit number" required maxlength="10" pattern="[6-9][0-9]{9}" inputmode="numeric">
                         </div>
                         <div class="form-group">
                             <label class="form-label" for="student-whatsapp">WhatsApp number</label>
-                            <input type="tel" id="student-whatsapp" class="form-input" placeholder="If different from contact">
+                            <input type="tel" id="student-whatsapp" class="form-input" placeholder="If different from contact" maxlength="10" pattern="[6-9][0-9]{9}" inputmode="numeric">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="student-email">Email</label>
+                            <input type="email" id="student-email" class="form-input" placeholder="student@example.com" maxlength="100">
                         </div>
                     </div>
 
@@ -219,8 +197,8 @@
                             <label class="form-label" for="student-bpl">BPL card holder?</label>
                             <select id="student-bpl" class="form-select">
                                 <option value="">Select</option>
-                                <option>Yes</option>
-                                <option>No</option>
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
                             </select>
                         </div>
                     </div>
@@ -288,17 +266,8 @@
                 </form>
             </div>
         </div>
-    </div>
+{% endblock %}
 
-    <script src="{% static 'esswebapp/js/common.js' %}"></script>
-    <script src="{% static 'esswebapp/js/sidebar.js' %}"></script>
+{% block extra-js %}
     <script src="{% static 'esswebapp/js/student-registration.js' %}"></script>
-    <script>
-        renderShell({
-            title: 'Student Registration',
-            active: 'student-registration',
-            breadcrumbs: [{label: 'Students'}, {label: 'Student Registration'}]
-        });
-    </script>
-</body>
-</html>
+{% endblock %}

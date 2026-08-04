@@ -187,6 +187,10 @@
     overflow: hidden;
 }
 
+.searchable-select-dropdown[hidden] {
+    display: none !important;
+}
+
 /* Search input at the top of dropdown */
 .searchable-select-search {
     padding: var(--space-3);

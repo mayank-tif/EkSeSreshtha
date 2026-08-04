@@ -64,8 +64,9 @@ const NAV_ITEMS = [
         id: 'students',
         label: 'Students',
         icon: 'user-graduate',
+        urlName: 'student-list',
         children: [
-            { id: 'student-registration', label: 'Student Registration', urlName: 'student-registration' },
+            { id: 'student-list', label: 'Student List', urlName: 'students' },
             { id: 'school-list', label: 'School List', urlName: 'school-list' }
         ]
     },
