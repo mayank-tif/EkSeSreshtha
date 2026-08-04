@@ -153,10 +153,8 @@ async function deleteSchool(id) {
 
         if (result?.detail) {
             showToast(result.detail, 'danger');
-            return;
         }
 
-        showToast('School deleted.', 'success');
         await loadSchools();
         renderSchoolTable();
     } catch (error) {
