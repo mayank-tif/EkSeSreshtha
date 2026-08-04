@@ -216,7 +216,7 @@ class SchoolListView(LoginRequiredMixin, View):
         return self._delete_school(request)
     
     def _list_schools_api(self, request):
-        """Return schools as JSON for table, or single school if id provided"""
+        """Return paginated schools as JSON for table, or single school if id provided"""
         try:
             
             # If id is provided, return single school
@@ -236,11 +236,27 @@ class SchoolListView(LoginRequiredMixin, View):
                 except School.DoesNotExist:
                     return JsonResponse({'detail': 'School not found'}, status=404)
             
-            # Otherwise return all schools (no pagination for school list)
+            # Otherwise return paginated list
             schools = School.objects.filter(status=True).order_by('-created_on')
             
+            # Pagination params
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', PAGE_SIZE))
+            search = request.GET.get('search', '').strip().lower()
+            
+            if search:
+                schools = schools.filter(
+                    models.Q(school_name__icontains=search)
+                )
+            
+            total = schools.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
             items = []
-            for s in schools:
+            for s in schools[start:end]:
                 items.append({
                     'id': s.id,
                     'schoolName': s.school_name,
@@ -253,7 +269,10 @@ class SchoolListView(LoginRequiredMixin, View):
             
             return JsonResponse({
                 'results': items,
-                'count': len(items)
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
             })
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)

@@ -75,9 +75,27 @@
                         </tr>
                     </thead>
                     <tbody id="school-table-body">
-                        <!-- Rows injected by school-dropdown-list.js -->
+                        <!-- Rows injected by school-list.js -->
                     </tbody>
                 </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="pagination-wrapper">
+                <div class="pagination-info">
+                    Showing <span id="pagination-start">0</span> to <span id="pagination-end">0</span> of <span id="pagination-total">0</span>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-sm btn-secondary" id="prev-page" disabled>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                        Previous
+                    </button>
+                    <div class="page-numbers" id="page-numbers"></div>
+                    <button class="btn btn-sm btn-secondary" id="next-page" disabled>
+                        Next
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -89,7 +107,7 @@
     <script>
         renderShell({
             title: 'School List',
-            active: 'school-dropdown-list',
+            active: 'school-details-list',
             breadcrumbs: [{label: 'Students'}, {label: 'School List'}]
         });
     </script>
