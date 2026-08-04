@@ -447,20 +447,28 @@ async function openStudentProfile(studentId) {
     showGlobalLoader();
     try {
         const student = await fetchStudentById(studentId);
-        if (!student) return;
+        if (!student) {
+            showToast('Student not found', 'danger');
+            hideGlobalLoader();
+            return;
+        }
 
-        // Fetch related records for display
-        const [centre, school, teacher, admin] = await Promise.allSettled([
-            student.center_id ? fetchRecord('centres', student.center_id) : null,
-            student.school_id ? fetchRecord('schools', student.school_id) : null,
-            student.teacher_id ? fetchRecord('teachers', student.teacher_id) : null,
-            student.regional_admin_id ? fetchRecord('regional-admins', student.regional_admin_id) : null
-        ]);
+        // Student API already returns center_name, school_name, bpl, category,
+        // district_name, vidhan_sabha_name, panchayat_name, village_name
+        // And center's interconnected location: center_district_name, center_vidhan_sabha_name,
+        // center_panchayat_name, center_village_name, center_address
+        // No need for separate API calls
+        const centreName = student.center_name || 'Unassigned';
+        const schoolName = student.school_name || '—';
+        const bplValue = student.bpl === true || student.bpl === 'true' || student.bpl === 1 || student.bpl === '1' ? 'Yes' : (student.bpl === false || student.bpl === 'false' || student.bpl === 0 || student.bpl === '0' ? 'No' : '—');
+        const category = student.category || '—';
 
-        const centreData = centre.status === 'fulfilled' ? centre.value : null;
-        const schoolData = school.status === 'fulfilled' ? school.value : null;
-        const teacherData = teacher.status === 'fulfilled' ? teacher.value : null;
-        const adminData = admin.status === 'fulfilled' ? admin.value : null;
+        // Use center's interconnected location hierarchy (District -> VS -> Panchayat -> Village)
+        const centreDistrict = student.center_district_name || student.district_name || '—';
+        const centreVS = student.center_vidhan_sabha_name || student.vidhan_sabha_name || '—';
+        const centrePanchayat = student.center_panchayat_name || student.panchayat_name || '—';
+        const centreVillage = student.center_village_name || student.village_name || '—';
+        const centreAddress = student.center_address || '—';
 
         const profileImage = student.image;
         const imageUrl = profileImage && (profileImage.startsWith('http') || profileImage.startsWith('/media/') || profileImage.startsWith('data:'))
@@ -489,10 +497,10 @@ async function openStudentProfile(studentId) {
                 <div class="info-grid">
                     <div class="info-item"><div class="info-label">Date of Birth</div><div class="info-value">${escapeHtml(formatDate(student.date_of_birth) || '—')}</div></div>
                     <div class="info-item"><div class="info-label">Joining Date</div><div class="info-value">${escapeHtml(formatDate(student.joining_date) || '—')}</div></div>
-                    <div class="info-item"><div class="info-label">Category</div><div class="info-value">${escapeHtml(student.category || '—')}</div></div>
-                    <div class="info-item"><div class="info-label">BPL</div><div class="info-value">${escapeHtml(student.bpl || '—')}</div></div>
+                    <div class="info-item"><div class="info-label">Category</div><div class="info-value">${escapeHtml(category)}</div></div>
+                    <div class="info-item"><div class="info-label">BPL</div><div class="info-value">${escapeHtml(bplValue)}</div></div>
                     <div class="info-item"><div class="info-label">Address</div><div class="info-value">${escapeHtml(student.full_address || student.address || '—')}</div></div>
-                    <div class="info-item"><div class="info-label">School</div><div class="info-value">${escapeHtml(schoolData?.name || '—')}</div></div>
+                    <div class="info-item"><div class="info-label">School</div><div class="info-value">${escapeHtml(schoolName)}</div></div>
                 </div>
             </div>
 
@@ -503,15 +511,17 @@ async function openStudentProfile(studentId) {
                     <div class="info-item"><div class="info-label">Father's Mobile</div><div class="info-value">${escapeHtml(student.father_mobile_number || '—')}</div></div>
                     <div class="info-item"><div class="info-label">Mother's Name</div><div class="info-value">${escapeHtml(student.mother_name || '—')}</div></div>
                     <div class="info-item"><div class="info-label">Mother's Mobile</div><div class="info-value">${escapeHtml(student.mother_mobile_number || '—')}</div></div>
+                    <div class="info-item"><div class="info-label">Father's Occupation</div><div class="info-value">${escapeHtml(student.father_occupation || '—')}</div></div>
+                    <div class="info-item"><div class="info-label">Mother's Occupation</div><div class="info-value">${escapeHtml(student.mother_occupation || '—')}</div></div>
                 </div>
             </div>
 
             <div class="student-detail-section">
-                <h3>Centre</h3>
+                <h3>Centre & Location</h3>
                 <div class="info-grid">
-                    <div class="info-item"><div class="info-label">Centre</div><div class="info-value">${escapeHtml(centreData?.name || 'Unassigned')}</div></div>
-                    <div class="info-item"><div class="info-label">Teacher</div><div class="info-value">${escapeHtml(teacherData?.name || '—')}</div></div>
-                    <div class="info-item"><div class="info-label">Regional Admin</div><div class="info-value">${escapeHtml(adminData?.name || '—')}</div></div>
+                    <div class="info-item"><div class="info-label">Centre</div><div class="info-value">${escapeHtml(centreName)}</div></div>
+                    <div class="info-item"><div class="info-label">Teacher</div><div class="info-value">${escapeHtml(student.center_teacher_name || '—')}</div></div>
+                    <div class="info-item"><div class="info-label">Regional Admin</div><div class="info-value">${escapeHtml(student.center_regional_admin_name || '—')}</div></div>
                 </div>
             </div>
         `;

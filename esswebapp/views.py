@@ -270,7 +270,7 @@ class StudentsView(LoginRequiredMixin, View):
             # Transform web app field names to model field names
             student_data = {
                 'roll_number': int(data.get('rollNo')) if data.get('rollNo') else None,
-                'enrollment_id': data.get('enrollment_id') or str(uuid.uuid4()),
+                'enrollment_id': str(uuid.uuid4()),
                 'full_name': data.get('name') or data.get('full_name'),
                 'age': data.get('age'),
                 'gender': data.get('gender'),
@@ -438,7 +438,27 @@ class StudentsView(LoginRequiredMixin, View):
             if student_id:
                 try:
                     student = self._get_students_queryset().get(id=student_id)
-                    return JsonResponse(self._serialize_student(student))
+                    # Fetch center and school names for single student
+                    center_map = {}
+                    school_map = {}
+                    if student.center_id:
+                        center = Center.objects.filter(id=student.center_id).values('id', 'center_name', 'assigned_teachers', 'assigned_regional_admin').first()
+                        if center:
+                            center_map[center['id']] = center['center_name']
+                            # Get teacher and regional admin names
+                            user_ids = []
+                            if center['assigned_teachers']:
+                                user_ids.append(center['assigned_teachers'])
+                            if center['assigned_regional_admin']:
+                                user_ids.append(center['assigned_regional_admin'])
+                            name_map = self._get_user_names_map(user_ids)
+                            student.center.assigned_teacher_name = name_map.get(center['assigned_teachers'])
+                            student.center.assigned_regional_admin_name = name_map.get(center['assigned_regional_admin'])
+                    if student.school_id:
+                        school = School.objects.filter(id=student.school_id).values('id', 'school_name').first()
+                        if school:
+                            school_map[school['id']] = school['school_name']
+                    return JsonResponse(self._serialize_student(student, center_map, school_map))
                 except Student.DoesNotExist:
                     return JsonResponse({'detail': 'Student not found'}, status=404)
             
@@ -514,6 +534,55 @@ class StudentsView(LoginRequiredMixin, View):
                 return obj.get(key, default)
             return getattr(obj, key, default)
         
+        # Get center_id
+        center_id = get_val(student, 'center_id') or get_val(student, 'CenterId')
+        
+        # Get student's own location names (from student's direct FKs)
+        district_name = None
+        vidhan_sabha_name = None
+        panchayat_name = None
+        village_name = None
+        
+        # Get center's location names (from center's FKs - more reliable as they're interconnected)
+        center_district_name = None
+        center_vidhan_sabha_name = None
+        center_panchayat_name = None
+        center_village_name = None
+        center_address = None
+        center_latitude = None
+        center_longitude = None
+        center_location_status = None
+        center_teacher_name = None
+        center_regional_admin_name = None
+        
+        if not isinstance(student, dict):
+            # Student's direct location FKs
+            district_name = student.district.name if student.district else None
+            vidhan_sabha_name = student.vidhan_sabha.name if student.vidhan_sabha else None
+            panchayat_name = student.panchayat.name if student.panchayat else None
+            village_name = student.village.name if student.village else None
+            
+            # Center's location FKs (preferred - they're interconnected: District -> VS -> Panchayat -> Village)
+            if student.center:
+                center_district_name = student.center.district.name if student.center.district else None
+                center_vidhan_sabha_name = student.center.vidhan_sabha.name if student.center.vidhan_sabha else None
+                center_panchayat_name = student.center.panchayat.name if student.center.panchayat else None
+                center_village_name = student.center.village.name if student.center.village else None
+                center_address = student.center.address
+                center_latitude = float(student.center.latitude) if student.center.latitude else None
+                center_longitude = float(student.center.longitude) if student.center.longitude else None
+                center_location_status = student.center.location_status
+                # Center's assigned teacher and regional admin
+                center_teacher_name = student.center.assigned_teacher_name if hasattr(student.center, 'assigned_teacher_name') else None
+                center_regional_admin_name = student.center.assigned_regional_admin_name if hasattr(student.center, 'assigned_regional_admin_name') else None
+        
+        # Handle Bpl field - DB stores '0'/'1' as strings, convert to boolean
+        bpl_raw = get_val(student, 'bpl') or get_val(student, 'Bpl')
+        if isinstance(bpl_raw, str):
+            bpl_val = bpl_raw.lower() in ('1', 'true', 'yes')
+        else:
+            bpl_val = bool(bpl_raw)
+        
         return {
             'id': get_val(student, 'id') or get_val(student, 'Id'),
             'enrollment_id': get_val(student, 'enrollment_id') or get_val(student, 'EnrollmentId'),
@@ -534,19 +603,35 @@ class StudentsView(LoginRequiredMixin, View):
             'full_address': get_val(student, 'full_address') or get_val(student, 'FullAddress'),
             'status': get_val(student, 'status') or get_val(student, 'Status'),
             'joining_date': self._format_date(get_val(student, 'joining_date') or get_val(student, 'JoiningDate')),
-            'center_id': get_val(student, 'center_id') or get_val(student, 'CenterId'),
-            'center_name': center_map.get(get_val(student, 'center_id') or get_val(student, 'CenterId')) if (get_val(student, 'center_id') or get_val(student, 'CenterId')) else None,
+            'center_id': center_id,
+            'center_name': center_map.get(center_id) if center_id else None,
+            'center_address': center_address,
+            'center_latitude': center_latitude,
+            'center_longitude': center_longitude,
+            'center_location_status': center_location_status,
+            'center_teacher_name': center_teacher_name,
+            'center_regional_admin_name': center_regional_admin_name,
             'teacher_name': None,
             'district_id': get_val(student, 'district_id') or get_val(student, 'DistrictId'),
             'vidhan_sabha_id': get_val(student, 'vidhan_sabha_id') or get_val(student, 'VidhanSabhaId'),
             'village_id': get_val(student, 'village_id') or get_val(student, 'VillageId'),
             'panchayat_id': get_val(student, 'panchayat_id') or get_val(student, 'PanchayatId'),
+            # Student's direct location (may be empty)
+            'district_name': district_name,
+            'vidhan_sabha_name': vidhan_sabha_name,
+            'panchayat_name': panchayat_name,
+            'village_name': village_name,
+            # Center's location (preferred - interconnected hierarchy)
+            'center_district_name': center_district_name,
+            'center_vidhan_sabha_name': center_vidhan_sabha_name,
+            'center_panchayat_name': center_panchayat_name,
+            'center_village_name': center_village_name,
             'father_mobile_number': get_val(student, 'father_mobile_number') or get_val(student, 'FatherMobileNumber'),
             'father_occupation': get_val(student, 'father_occupation') or get_val(student, 'FatherOccupation'),
             'mother_mobile_number': get_val(student, 'mother_mobile_number') or get_val(student, 'MotherMobileNumber'),
             'mother_occupation': get_val(student, 'mother_occupation') or get_val(student, 'MotherOccupation'),
             'category': get_val(student, 'category') or get_val(student, 'Category'),
-            'bpl': get_val(student, 'bpl') or get_val(student, 'Bpl'),
+            'bpl': bpl_val,
             'school_id': get_val(student, 'school_id') or get_val(student, 'SchoolId'),
             'school_name': school_map.get(get_val(student, 'school_id') or get_val(student, 'SchoolId')) if (get_val(student, 'school_id') or get_val(student, 'SchoolId')) else None,
             'active_class': get_val(student, 'grade') or get_val(student, 'Grade'),
