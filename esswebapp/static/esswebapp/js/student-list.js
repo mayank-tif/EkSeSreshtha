@@ -609,7 +609,7 @@ async function deleteStudent(id) {
 async function fetchRecord(type, id) {
     const urlMap = {
         'centres': 'centres',
-        'schools': 'school-list',
+        'schools': 'school-dropdown-list',
         'teachers': 'teacher',
         'regional-admins': 'regional-admin'
     };

@@ -169,22 +169,15 @@ class AttendanceView(LoginRequiredMixin, View):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
 
 
-class SchoolListView(LoginRequiredMixin, View):
+class SchoolDropDownView(LoginRequiredMixin, View):
     """API view for listing schools - used in dropdowns"""
     
     def get(self, request):
         try:
-            page = int(request.GET.get('page', 1))
-            page_size = int(request.GET.get('page_size', 1000))
             
             queryset = School.objects.filter(status=True).order_by('school_name')
-            total = queryset.count()
-            total_pages = (total + page_size - 1) // page_size
             
-            start = (page - 1) * page_size
-            end = start + page_size
-            
-            schools_page = list(queryset[start:end].values('id', 'school_name'))
+            schools_page = list(queryset.values('id', 'school_name'))
             
             items = [
                 {'id': s['id'], 'name': s['school_name']}
@@ -193,11 +186,170 @@ class SchoolListView(LoginRequiredMixin, View):
             
             return JsonResponse({
                 'results': items,
-                'count': total,
-                'page': page,
-                'page_size': page_size,
-                'total_pages': total_pages
             })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class SchoolListView(LoginRequiredMixin, View):
+    """School management page + API endpoints"""
+    template_name = 'esswebapp/pages/students/school-list.html'
+    
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._list_schools_api(request)
+        
+        # Render the HTML page
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def post(self, request):
+        # Create new school
+        return self._create_school(request)
+    
+    def put(self, request):
+        # Update existing school
+        return self._update_school(request)
+    
+    def delete(self, request):
+        # Soft delete (set status=0)
+        return self._delete_school(request)
+    
+    def _list_schools_api(self, request):
+        """Return schools as JSON for table, or single school if id provided"""
+        try:
+            
+            # If id is provided, return single school
+            school_id = request.GET.get('id')
+            if school_id:
+                try:
+                    school = School.objects.filter(status=True).get(id=school_id)
+                    return JsonResponse({
+                        'id': school.id,
+                        'schoolName': school.school_name,
+                        'status': school.status,
+                        'created_by': school.created_by,
+                        'created_on': school.created_on.isoformat() if school.created_on else None,
+                        'updated_by': school.updated_by,
+                        'updated_on': school.updated_on.isoformat() if school.updated_on else None,
+                    })
+                except School.DoesNotExist:
+                    return JsonResponse({'detail': 'School not found'}, status=404)
+            
+            # Otherwise return all schools (no pagination for school list)
+            schools = School.objects.filter(status=True).order_by('-created_on')
+            
+            items = []
+            for s in schools:
+                items.append({
+                    'id': s.id,
+                    'schoolName': s.school_name,
+                    'status': s.status,
+                    'created_by': s.created_by,
+                    'created_on': s.created_on.isoformat() if s.created_on else None,
+                    'updated_by': s.updated_by,
+                    'updated_on': s.updated_on.isoformat() if s.updated_on else None,
+                })
+            
+            return JsonResponse({
+                'results': items,
+                'count': len(items)
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _create_school(self, request):
+        try:
+            data = json.loads(request.body)
+            name = data.get('name', '').strip()
+            
+            if not name:
+                return JsonResponse({'detail': 'School name is required'}, status=400)
+            
+            # Check if school with same name exists
+            if School.objects.filter(school_name__iexact=name, status=True).exists():
+                return JsonResponse({'detail': 'A school with this name already exists'}, status=400)
+            
+            # Get user ID from session
+            user_id = request.web_user.get('user_id')
+            
+            school = School.objects.create(
+                school_name=name,
+                status=True,
+                created_by=user_id,
+                created_on=timezone.now(),
+            )
+            
+            return JsonResponse({
+                'id': school.id,
+                'schoolName': school.school_name,
+                'status': school.status,
+                'created_by': school.created_by,
+                'created_on': school.created_on.isoformat() if school.created_on else None,
+                'updated_by': school.updated_by,
+                'updated_on': school.updated_on.isoformat() if school.updated_on else None,
+            }, status=201)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _update_school(self, request):
+        try:
+            data = json.loads(request.body)
+            school_id = data.get('id')
+            name = data.get('name', '').strip()
+            
+            if not school_id or not name:
+                return JsonResponse({'detail': 'School ID and name are required'}, status=400)
+            
+            school = School.objects.filter(id=school_id).first()
+            if not school:
+                return JsonResponse({'detail': 'School not found'}, status=404)
+            
+            # Check duplicate (excluding self)
+            if School.objects.filter(school_name__iexact=name, status=True).exclude(id=school_id).exists():
+                return JsonResponse({'detail': 'A school with this name already exists'}, status=400)
+            
+            # Get user ID from session
+            user_id = request.web_user.get('user_id')
+            
+            school.school_name = name
+            school.updated_by = user_id
+            school.updated_on = timezone.now()
+            school.save()
+            
+            return JsonResponse({
+                'id': school.id,
+                'schoolName': school.school_name,
+                'status': school.status,
+                'created_by': school.created_by,
+                'created_on': school.created_on.isoformat() if school.created_on else None,
+                'updated_by': school.updated_by,
+                'updated_on': school.updated_on.isoformat() if school.updated_on else None,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _delete_school(self, request):
+        try:
+            data = json.loads(request.body)
+            school_id = data.get('id')
+            
+            if not school_id:
+                return JsonResponse({'detail': 'School ID is required'}, status=400)
+            
+            school = School.objects.filter(id=school_id).first()
+            if not school:
+                return JsonResponse({'detail': 'School not found'}, status=404)
+            
+            # Get user ID from session
+            user_id = request.web_user.get('user_id')
+            
+            school.status = False
+            school.updated_by = user_id
+            school.updated_on = timezone.now()
+            school.save()
+            
+            return JsonResponse({'detail': 'School deleted successfully'})
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
 

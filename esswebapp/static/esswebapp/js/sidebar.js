@@ -67,7 +67,7 @@ const NAV_ITEMS = [
         urlName: 'student-list',
         children: [
             { id: 'student-list', label: 'Student List', urlName: 'students' },
-            { id: 'school-list', label: 'School List', urlName: 'school-list' }
+            { id: 'school-details-list', label: 'School List', urlName: 'school-details-list' }
         ]
     },
     {

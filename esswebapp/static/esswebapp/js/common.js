@@ -707,13 +707,13 @@ async function fetchCentres(params = {}) {
 }
 
 /**
- * Fetch schools from API
+ * Fetch schools from API (esswebapp paginated for dropdowns)
  * @param {Object} params - Query parameters
  * @returns {Promise} - API response
  */
 async function fetchSchools(params = {}) {
     const queryString = new URLSearchParams(params).toString();
-    const url = getUrl('school-list') + (queryString ? '?' + queryString : '');
+    const url = getUrl('school-dropdown-list') + (queryString ? '?' + queryString : '');
     return apiFetch(url);
 }
 

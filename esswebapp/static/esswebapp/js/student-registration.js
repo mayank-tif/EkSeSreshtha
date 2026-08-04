@@ -89,7 +89,7 @@ function handleStudentImageChange(event) {
 
 async function loadSchools() {
     try {
-        const data = await apiFetch(getUrl('school-list') + '?page=1&page_size=1000');
+        const data = await apiFetch(getUrl('school-dropdown-list') + '?page=1&page_size=1000');
         state.schools = data.results || data || [];
         const select = document.getElementById('student-school');
         select.innerHTML = '<option value="">Select school</option>' +

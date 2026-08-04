@@ -1,41 +1,47 @@
 /* ================================================================
    EK SE SRESHTHA - SCHOOL LIST SCRIPT
    ----------------------------------------------------------------
-   Simple master list of partner schools. Provides:
+   Master list of partner schools with full CRUD via API.
    - Add a school with a single input field
    - Edit / delete existing school rows
    - Live search filter over the table
-   Storage table: ess_schools
    ================================================================ */
 
-/* Render the shared sidebar/topbar/breadcrumbs for this page. */
-renderShell({
-    title: 'School List',
-    active: 'school-list',
-    breadcrumbs: [
-        { label: 'Students' },
-        { label: 'School List' }
-    ]
-});
+let state = {
+    schools: []
+};
 
 /* ================================================================
    INITIALIZATION
    ================================================================ */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('school-form').addEventListener('submit', handleSchoolSubmit);
+    await loadSchools();
     renderSchoolTable();
 });
 
 /* ================================================================
-   FORM SUBMIT (add / update)
-   ----------------------------------------------------------------
-   The same form handles both adding a new school and editing an
-   existing one. When editing, the hidden `school-editing-id`
-   field carries the record id.
+   LOAD SCHOOLS FROM API
    ================================================================ */
 
-function handleSchoolSubmit(event) {
+async function loadSchools() {
+    try {
+        const response = await apiFetch(getUrl('school-details-list'));
+        state.schools = response?.results || response || [];
+        console.log('Loaded schools:', state.schools.length);
+    } catch (error) {
+        console.error('Failed to load schools:', error);
+        showToast('Failed to load schools', 'danger');
+        state.schools = [];
+    }
+}
+
+/* ================================================================
+   FORM SUBMIT (add / update)
+   ================================================================ */
+
+async function handleSchoolSubmit(event) {
     event.preventDefault();
 
     const nameInput = document.getElementById('school-name');
@@ -48,29 +54,51 @@ function handleSchoolSubmit(event) {
     }
 
     // Prevent duplicate school names (case-insensitive, excluding the row being edited)
-    const existing = getRecords('schools').find(s =>
-        s.name.toLowerCase() === name.toLowerCase() && s.id !== editingId
+    const existing = state.schools.find(s =>
+        (s.schoolName || s.name || '').toLowerCase() === name.toLowerCase() &&
+        s.id !== editingId
     );
     if (existing) {
         showToast('A school with this name already exists.', 'danger');
         return;
     }
 
-    if (editingId) {
-        updateRecord('schools', editingId, { name: name });
-        showToast('School updated successfully.', 'success');
-    } else {
-        addRecord('schools', { name: name });
-        showToast('School added successfully.', 'success');
-    }
+    showGlobalLoader();
+    try {
+        let result;
+        if (editingId) {
+            // Update
+            result = await apiFetch(getUrl('school-details-list'), {
+                method: 'PUT',
+                body: JSON.stringify({ id: editingId, name: name })
+            });
+        } else {
+            // Create
+            result = await apiFetch(getUrl('school-details-list'), {
+                method: 'POST',
+                body: JSON.stringify({ name: name })
+            });
+        }
 
-    resetSchoolForm();
-    renderSchoolTable();
+        if (result?.detail) {
+            showToast(result.detail, 'danger');
+            return;
+        }
+
+        showToast(editingId ? 'School updated successfully.' : 'School added successfully.', 'success');
+        resetSchoolForm();
+        await loadSchools();
+        renderSchoolTable();
+    } catch (error) {
+        console.error('School save failed:', error);
+        showToast('Failed to save school: ' + error.message, 'danger');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
 /* ================================================================
    RESET FORM
-   Clears the input and switches the button back to "Add" mode.
    ================================================================ */
 
 function resetSchoolForm() {
@@ -87,11 +115,15 @@ function resetSchoolForm() {
    ================================================================ */
 
 function editSchool(id) {
-    const school = findRecord('schools', id);
-    if (!school) return;
+    // Find school by id
+    const school = state.schools.find(s => s.id == id);
+    if (!school) {
+        showToast('School not found', 'danger');
+        return;
+    }
 
     document.getElementById('school-editing-id').value = school.id;
-    document.getElementById('school-name').value = school.name;
+    document.getElementById('school-name').value = school.schoolName || school.name || '';
     document.getElementById('school-form-title').textContent = 'Edit School';
     document.getElementById('school-submit-btn').textContent = 'Update School';
     document.getElementById('school-cancel-btn').hidden = false;
@@ -105,20 +137,38 @@ function editSchool(id) {
    Confirms with the user before removing the row.
    ================================================================ */
 
-function deleteSchool(id) {
-    const school = findRecord('schools', id);
+async function deleteSchool(id) {
+    const school = state.schools.find(s => s.id == id);
     if (!school) return;
 
-    if (!confirm(`Delete "${school.name}"? This action cannot be undone.`)) return;
+    const schoolName = school.schoolName || school.name || 'this school';
+    if (!confirm(`Delete "${schoolName}"? This action cannot be undone.`)) return;
 
-    deleteRecord('schools', id);
-    showToast('School deleted.', 'success');
-    renderSchoolTable();
+    showGlobalLoader();
+    try {
+        const result = await apiFetch(getUrl('school-details-list'), {
+            method: 'DELETE',
+            body: JSON.stringify({ id })
+        });
+
+        if (result?.detail) {
+            showToast(result.detail, 'danger');
+            return;
+        }
+
+        showToast('School deleted.', 'success');
+        await loadSchools();
+        renderSchoolTable();
+    } catch (error) {
+        console.error('Failed to delete school:', error);
+        showToast('Failed to delete school: ' + error.message, 'danger');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
 /* ================================================================
    RENDER TABLE
-   ----------------------------------------------------------------
    Applies the search filter, updates the record count, and paints
    one row per matching school.
    ================================================================ */
@@ -126,11 +176,13 @@ function deleteSchool(id) {
 function renderSchoolTable() {
     const tbody = document.getElementById('school-table-body');
     const searchTerm = document.getElementById('school-search').value.trim().toLowerCase();
-    const all = getRecords('schools');
+    const all = state.schools;
 
     // Filter by search term (matches on school name)
     const filtered = searchTerm
-        ? all.filter(s => s.name.toLowerCase().includes(searchTerm))
+        ? all.filter(s =>
+            (s.schoolName || s.name || '').toLowerCase().includes(searchTerm)
+        )
         : all;
 
     // Update the record count pill
@@ -150,20 +202,24 @@ function renderSchoolTable() {
     }
 
     // Render rows (index numbering resets with each filter)
-    tbody.innerHTML = filtered.map((school, index) => `
+    tbody.innerHTML = filtered.map((school, index) => {
+        const schoolId = school.id;
+        const schoolName = school.schoolName || school.name || '';
+        const createdOn = school.created_on || school.createdOn || '';
+        return `
         <tr>
             <td class="row-index">${index + 1}</td>
-            <td>${escapeHtml(school.name)}</td>
-            <td>${formatDate(school.createdAt)}</td>
+            <td>${escapeHtml(schoolName)}</td>
+            <td>${formatDate(createdOn)}</td>
             <td>
                 <div class="table-actions">
-                    <button class="btn-icon" title="Edit" onclick="editSchool('${school.id}')">
+                    <button class="btn-icon" title="Edit" onclick="editSchool('${schoolId}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
                         </svg>
                     </button>
-                    <button class="btn-icon btn-icon-danger" title="Delete" onclick="deleteSchool('${school.id}')">
+                    <button class="btn-icon btn-icon-danger" title="Delete" onclick="deleteSchool('${schoolId}')">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
                              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
@@ -172,5 +228,5 @@ function renderSchoolTable() {
                 </div>
             </td>
         </tr>
-    `).join('');
+    `}).join('');
 }
