@@ -120,7 +120,7 @@ async function loadCentres() {
             <div class="searchable-select-option"
                  data-id="${c.id}"
                  data-name="${escapeHtml(c.name || c.center_name || '').toLowerCase()}"
-                 onclick="selectCentre('${c.id}', '${escapeHtml(c.name || c.center_name || '').replace(/'/g, "'")}')"
+                 onclick="selectCentre('${c.id}', '${escapeHtml(c.name || c.center_name || '').replace(/'/g, "\\'")}')"
             >
                 <div style="font-weight: 500;">${escapeHtml(c.name || c.center_name)}</div>
             </div>
@@ -138,14 +138,37 @@ async function loadCentres() {
    ================================================================ */
 
 /**
- * Populates the options list from all centres in storage.
+ * Toggle the centre dropdown visibility
+ */
+function toggleCentreDropdown() {
+    const dropdown = document.getElementById('centre-dropdown');
+    const filterInput = document.getElementById('centre-filter');
+    dropdown.hidden = !dropdown.hidden;
+    if (!dropdown.hidden && filterInput) {
+        filterInput.value = '';
+        filterInput.focus();
+        populateCentreOptions();
+    }
+}
+
+/**
+ * Filter centre options based on search input (inside dropdown)
+ */
+function filterCentres() {
+    const search = document.getElementById('centre-filter').value.toLowerCase();
+    const options = document.querySelectorAll('.searchable-select-option');
+    options.forEach(opt => {
+        const name = opt.dataset.name || '';
+        opt.hidden = !name.includes(search);
+    });
+}
+
+/**
+ * Populates the options list from all centres in state.
  * The filter input searches this same list.
  */
 function populateCentreOptions() {
-    const centres = getRecords('centres');
-    const villages = getRecords('villages');
-    const villageMap = Object.fromEntries(villages.map(v => [v.id, v.name]));
-
+    const centres = state.centres;
     const optionsContainer = document.getElementById('centre-options');
 
     if (centres.length === 0) {
@@ -160,82 +183,14 @@ function populateCentreOptions() {
     optionsContainer.innerHTML = centres.map(c => `
         <div class="searchable-select-option"
              data-id="${c.id}"
-             data-name="${escapeHtml(c.name).toLowerCase()}"
-             onclick="selectCentre('${c.id}', '${escapeHtml(c.name).replace(/'/g, "\\'")}')"
+             data-name="${escapeHtml(c.name || c.center_name || '').toLowerCase()}"
+             onclick="selectCentre('${c.id}', '${escapeHtml(c.name || c.center_name || '').replace(/'/g, "\\'")}')"
         >
-            <div style="font-weight: 500;">${escapeHtml(c.name)}</div>
-            <div style="font-size: var(--text-xs); color: var(--gray-500); margin-top: 2px;">
-                ${escapeHtml(villageMap[c.villageId] || 'Location unknown')}
-            </div>
+            <div style="font-weight: 500;">${escapeHtml(c.name || c.center_name)}</div>
         </div>
     `).join('');
 }
 
-/**
- * Toggles the dropdown open/closed.
- */
-function toggleCentreDropdown() {
-    const dropdown = document.getElementById('centre-dropdown');
-    dropdown.hidden = !dropdown.hidden;
-    if (!dropdown.hidden) {
-        document.getElementById('centre-filter').focus();
-    }
-}
-
-/* Close the dropdown when the user clicks anywhere outside the
-   searchable select, so it never lingers over the info panel. */
-document.addEventListener('click', (event) => {
-    const dropdown = document.getElementById('centre-dropdown');
-    if (!dropdown || dropdown.hidden) return;
-    const wrapper = event.target.closest('.searchable-select');
-    if (!wrapper) dropdown.hidden = true;
-});
-
-/* Escape key also dismisses the dropdown. */
-document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    const dropdown = document.getElementById('centre-dropdown');
-    if (dropdown && !dropdown.hidden) dropdown.hidden = true;
-});
-
-/**
- * Filters visible options based on typed text.
- */
-function filterCentres() {
-    const filter = document.getElementById('centre-filter').value.toLowerCase().trim();
-    const options = document.querySelectorAll('.searchable-select-option');
-
-    let visibleCount = 0;
-    options.forEach(opt => {
-        const name = opt.dataset.name || '';
-        const matches = !filter || name.includes(filter);
-        opt.style.display = matches ? '' : 'none';
-        if (matches) visibleCount++;
-    });
-
-    // Show a "no results" message if nothing matches
-    const container = document.getElementById('centre-options');
-    let emptyMsg = container.querySelector('.searchable-select-option-empty[data-dynamic]');
-    if (visibleCount === 0 && filter) {
-        if (!emptyMsg) {
-            const el = document.createElement('div');
-            el.className = 'searchable-select-option-empty';
-            el.dataset.dynamic = 'true';
-            el.textContent = `No centres matching "${filter}"`;
-            container.appendChild(el);
-        } else {
-            emptyMsg.textContent = `No centres matching "${filter}"`;
-        }
-    } else if (emptyMsg) {
-        emptyMsg.remove();
-    }
-}
-
-/**
- * Called when the user picks a centre from the dropdown.
- * Stores the ID, shows the name in the input, and reveals the
- * details panel below.
- */
 function selectCentre(centreId, centreName) {
     document.getElementById('student-centre').value = centreId;
     document.getElementById('centre-search-input').value = centreName;
@@ -246,49 +201,48 @@ function selectCentre(centreId, centreName) {
         el.classList.toggle('selected', el.dataset.id === centreId);
     });
 
-    showCentreInfoPanel(centreId);
+    // Find the full centre object from loaded API data (not mock cache)
+    const centre = state.centres.find(c => c.id == centreId);
+    if (centre) {
+        showCentreInfoPanel(centre);
+    }
 }
 
 /**
  * Populates the info panel below the centre dropdown with
  * the centre's district/VS/Panchayat/Village/staff details.
+ * @param {Object} centre - Centre object from API (already loaded in state.centres)
  */
-function showCentreInfoPanel(centreId) {
-    const centre = findRecord('centres', centreId);
+function showCentreInfoPanel(centre) {
     if (!centre) return;
 
-    const district = findRecord('districts', centre.districtId);
-    const vs = findRecord('vidhanSabhas', centre.vidhanSabhaId);
-    const panchayat = findRecord('panchayats', centre.panchayatId);
-    const village = findRecord('villages', centre.villageId);
-    const ra = findRecord('regionalAdmins', centre.regionalAdminId);
-    const teacher = findRecord('teachers', centre.teacherId);
-
+    // Centre API already returns district_name, vidhan_sabha_name, panchayat_name, village_name
+    // and assigned_teacher_name, assigned_regional_admin_name
     const grid = document.getElementById('centre-info-grid');
     grid.innerHTML = `
         <div class="centre-info-item">
             <div class="centre-info-label">District</div>
-            <div class="centre-info-value">${escapeHtml(district?.name || '—')}</div>
+            <div class="centre-info-value">${escapeHtml(centre.district_name || '—')}</div>
         </div>
         <div class="centre-info-item">
             <div class="centre-info-label">Vidhan Sabha</div>
-            <div class="centre-info-value">${escapeHtml(vs?.name || '—')}</div>
+            <div class="centre-info-value">${escapeHtml(centre.vidhan_sabha_name || '—')}</div>
         </div>
         <div class="centre-info-item">
             <div class="centre-info-label">Panchayat</div>
-            <div class="centre-info-value">${escapeHtml(panchayat?.name || '—')}</div>
+            <div class="centre-info-value">${escapeHtml(centre.panchayat_name || '—')}</div>
         </div>
         <div class="centre-info-item">
             <div class="centre-info-label">Village</div>
-            <div class="centre-info-value">${escapeHtml(village?.name || '—')}</div>
-        </div>
-        <div class="centre-info-item">
-            <div class="centre-info-label">Regional Admin</div>
-            <div class="centre-info-value">${escapeHtml(ra?.name || 'Unassigned')}</div>
+            <div class="centre-info-value">${escapeHtml(centre.village_name || '—')}</div>
         </div>
         <div class="centre-info-item">
             <div class="centre-info-label">Teacher</div>
-            <div class="centre-info-value">${escapeHtml(teacher?.name || 'Unassigned')}</div>
+            <div class="centre-info-value">${escapeHtml(centre.assigned_teacher_name || 'Unassigned')}</div>
+        </div>
+        <div class="centre-info-item">
+            <div class="centre-info-label">Regional Admin</div>
+            <div class="centre-info-value">${escapeHtml(centre.assigned_regional_admin_name || 'Unassigned')}</div>
         </div>
     `;
 
@@ -299,7 +253,7 @@ function showCentreInfoPanel(centreId) {
    FORM SUBMISSION
    ================================================================ */
 
-function handleStudentSubmit(event) {
+async function handleStudentSubmit(event) {
     event.preventDefault();
 
     const editingId = document.getElementById('student-editing-id').value;
@@ -327,7 +281,7 @@ function handleStudentSubmit(event) {
         schoolId: document.getElementById('student-school').value,
         centreId: document.getElementById('student-centre').value,
         image: document.getElementById('student-image-data').value || null,
-        active: true
+        email: document.getElementById('student-email').value.trim()
     };
 
     // Validation
@@ -339,7 +293,7 @@ function handleStudentSubmit(event) {
     }
 
     // Duplicate roll number check (excluding self on edit)
-    const duplicate = getRecords('students').find(s =>
+    const duplicate = state.centres.find(s =>
         s.rollNo === payload.rollNo && s.id !== editingId
     );
     if (duplicate) {
@@ -347,64 +301,110 @@ function handleStudentSubmit(event) {
         return;
     }
 
-    if (editingId) {
-        updateRecord('students', editingId, payload);
-        showToast('Student updated', 'success');
-    } else {
-        addRecord('students', payload);
-        showToast('Student registered successfully', 'success');
+    try {
+        showGlobalLoader();
+
+        if (editingId) {
+            await apiFetch(getUrl('students'), {
+                method: 'PUT',
+                body: JSON.stringify({ id: editingId, ...payload })
+            });
+            showToast('Student updated', 'success');
+        } else {
+            await apiFetch(getUrl('students'), {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showToast('Student registered successfully', 'success');
+        }
+
+        resetStudentForm();
+
+        // Return to the student list so the new/updated record is visible
+        setTimeout(() => { window.location.href = '/students/'; }, 900);
+    } catch (error) {
+        console.error('Student save failed:', error);
+        showToast('Failed to save student: ' + error.message, 'danger');
+    } finally {
+        hideGlobalLoader();
     }
-
-    resetStudentForm();
-
-    // Return to the student list so the new/updated record is visible
-    setTimeout(() => { window.location.href = 'student-list.html'; }, 900);
 }
 
 /* ================================================================
-   EDIT MODE (called from attendance page via URL param)
+   EDIT MODE (called from student list via URL param)
    ================================================================ */
 
-function editStudent(id) {
-    const student = findRecord('students', id);
-    if (!student) return;
-
-    document.getElementById('student-form-title').textContent = 'Edit Student';
-    document.getElementById('student-editing-id').value = id;
-
-    document.getElementById('student-roll').value = student.rollNo || '';
-    document.getElementById('student-name').value = student.name || '';
-    document.getElementById('student-age').value = student.age || '';
-    document.getElementById('student-gender').value = student.gender || '';
-    document.getElementById('student-dob').value = student.dob || '';
-    document.getElementById('student-joining').value = student.joiningDate || '';
-    document.getElementById('student-class').value = student.activeClass || '';
-    document.getElementById('student-father').value = student.fatherName || '';
-    document.getElementById('student-mother').value = student.motherName || '';
-    document.getElementById('student-father-mobile').value = student.fatherMobile || '';
-    document.getElementById('student-mother-mobile').value = student.motherMobile || '';
-    document.getElementById('student-father-occ').value = student.fatherOccupation || '';
-    document.getElementById('student-mother-occ').value = student.motherOccupation || '';
-    document.getElementById('student-contact').value = student.contactNumber || '';
-    document.getElementById('student-whatsapp').value = student.whatsapp || '';
-    document.getElementById('student-address').value = student.address || '';
-    document.getElementById('student-category').value = student.category || '';
-    document.getElementById('student-bpl').value = student.bpl || '';
-    document.getElementById('student-school').value = student.schoolId || '';
-
-    // Set centre and show info panel
-    if (student.centreId) {
-        const centre = findRecord('centres', student.centreId);
-        if (centre) {
-            selectCentre(centre.id, centre.name);
+async function editStudent(id) {
+    showGlobalLoader();
+    try {
+        // Fetch student from API (not mock cache)
+        const student = await apiFetch(getUrl('students') + '?id=' + id);
+        if (!student) {
+            showToast('Student not found', 'danger');
+            return;
         }
-    }
 
-    // Show existing photo
-    const preview = document.getElementById('student-image-preview');
-    if (student.image) {
-        preview.innerHTML = `<img src="${student.image}" alt="Student">`;
-        document.getElementById('student-image-data').value = student.image;
+        document.getElementById('student-form-title').textContent = 'Edit Student';
+        document.getElementById('student-editing-id').value = id;
+
+        // Map API response fields to form fields
+        document.getElementById('student-roll').value = student.roll_number || student.rollNo || '';
+        document.getElementById('student-name').value = student.full_name || student.name || '';
+        document.getElementById('student-age').value = student.age || '';
+        document.getElementById('student-gender').value = student.gender || '';
+
+        // Format date for HTML input (yyyy-MM-dd)
+        const dob = student.date_of_birth || student.dob || '';
+        document.getElementById('student-dob').value = dob.split('T')[0];
+
+        const joiningDate = student.joining_date || student.joiningDate || '';
+        document.getElementById('student-joining').value = joiningDate.split('T')[0];
+
+        document.getElementById('student-class').value = student.grade || student.active_class || student.activeClass || '';
+        document.getElementById('student-father').value = student.father_name || student.fatherName || '';
+        document.getElementById('student-mother').value = student.mother_name || student.motherName || '';
+        document.getElementById('student-father-mobile').value = student.father_mobile_number || student.fatherMobile || '';
+        document.getElementById('student-mother-mobile').value = student.mother_mobile_number || student.motherMobile || '';
+        document.getElementById('student-father-occ').value = student.father_occupation || student.fatherOccupation || '';
+        document.getElementById('student-mother-occ').value = student.mother_occupation || student.motherOccupation || '';
+        document.getElementById('student-contact').value = student.phone_number || student.contact || student.contactNumber || '';
+        document.getElementById('student-whatsapp').value = student.whatsapp || '';
+        document.getElementById('student-email').value = student.email || '';
+        document.getElementById('student-address').value = student.full_address || student.address || '';
+        document.getElementById('student-category').value = student.category || '';
+
+        // BPL dropdown expects 'true' or 'false'
+        const bplVal = student.bpl;
+        if (bplVal === true || bplVal === 'true' || bplVal === 1 || bplVal === '1') {
+            document.getElementById('student-bpl').value = 'true';
+        } else if (bplVal === false || bplVal === 'false' || bplVal === 0 || bplVal === '0') {
+            document.getElementById('student-bpl').value = 'false';
+        } else {
+            document.getElementById('student-bpl').value = '';
+        }
+
+        document.getElementById('student-school').value = student.school_id || student.schoolId || '';
+
+        // Set centre and show info panel
+        if (student.center_id || student.centreId) {
+            const centreId = student.center_id || student.centreId;
+            const centre = state.centres.find(c => c.id == centreId);
+            if (centre) {
+                selectCentre(centre.id, centre.name || centre.center_name);
+            }
+        }
+
+        // Show existing photo
+        const preview = document.getElementById('student-image-preview');
+        if (student.image) {
+            preview.innerHTML = `<img src="${student.image}" alt="Student">`;
+            document.getElementById('student-image-data').value = student.image;
+        }
+    } catch (error) {
+        console.error('Failed to load student for editing:', error);
+        showToast('Failed to load student data', 'danger');
+    } finally {
+        hideGlobalLoader();
     }
 }
 

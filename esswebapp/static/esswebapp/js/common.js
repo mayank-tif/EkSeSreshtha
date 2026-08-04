@@ -684,6 +684,39 @@ function getRecords(type) {
     return records;
 }
 
+/**
+ * Find a single record by ID from local cache
+ * @param {string} type - Record type
+ * @param {number|string} id - Record ID
+ * @returns {Object|null} - Record or null if not found
+ */
+function findRecord(type, id) {
+    const records = getRecords(type);
+    return records.find(r => r.id == id) || null;
+}
+
+/**
+ * Fetch centres from API
+ * @param {Object} params - Query parameters
+ * @returns {Promise} - API response
+ */
+async function fetchCentres(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const url = getUrl('centres') + (queryString ? '?' + queryString : '');
+    return apiFetch(url);
+}
+
+/**
+ * Fetch schools from API
+ * @param {Object} params - Query parameters
+ * @returns {Promise} - API response
+ */
+async function fetchSchools(params = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    const url = getUrl('school-list') + (queryString ? '?' + queryString : '');
+    return apiFetch(url);
+}
+
 /* ================================================================
    VALIDATION HELPERS
    ----------------------------------------------------------------
@@ -789,6 +822,9 @@ if (typeof module !== 'undefined' && module.exports) {
         debounce,
         classNames,
         getRecords,
+        findRecord,
+        fetchCentres,
+        fetchSchools,
         showGlobalLoader,
         hideGlobalLoader,
         renderPagination,

@@ -270,4 +270,11 @@
 
 {% block extra-js %}
     <script src="{% static 'esswebapp/js/student-registration.js' %}"></script>
+    <script>
+        renderShell({
+            title: 'Student Registration',
+            active: 'student-list',
+            breadcrumbs: [{label: 'Students'}]
+        });
+    </script>
 {% endblock %}
