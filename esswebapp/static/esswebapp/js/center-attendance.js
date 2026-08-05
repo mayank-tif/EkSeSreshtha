@@ -9,7 +9,7 @@
      - Average attendance (with mini progress bar)
    Toolbar: free-text search (left) + cascading location filters
    (right, see location-filter.js) + a live count badge.
-   Clicking a row opens center-detail.html?id=<centreId>.
+   Clicking a row opens center-detail?id=<centreId>.
    ================================================================ */
 
 /* Shared shell */
@@ -19,90 +19,147 @@ renderShell({
     breadcrumbs: [{ label: 'Center Attendance' }]
 });
 
+/* Module state */
+let currentPage = 1;
+const pageSize = AppConfig.pageSize;
+let totalPages = 1;
+let totalCount = 0;
+let isLoading = false;
+let currentAttendanceDate = null;
+
 /* Initialize once DOM is ready. */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize date picker for attendance date (defaults to today)
+    const dateInput = document.getElementById('attendance-date');
+    if (dateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+        currentAttendanceDate = today;
+        dateInput.addEventListener('change', () => {
+            currentAttendanceDate = dateInput.value;
+            currentPage = 1;
+            loadCentres();
+        });
+    }
+
     // Cascading District -> VS -> Panchayat -> Village filter;
     // every change re-renders the table and the live count.
-    initLocationFilter(renderCentreTable);
-    renderCentreTable();
+    initLocationFilter(loadCentres);
+
+    // Search input
+    const searchInput = document.getElementById('centre-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce(() => {
+            currentPage = 1;
+            loadCentres();
+        }, 300));
+    }
+
+    // Pagination buttons
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                loadCentres();
+            }
+        });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadCentres();
+            }
+        });
+    }
+
+    await loadCentres();
 });
+
+/* Debounce helper */
+function debounce(fn, delay) {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn(...args), delay);
+    };
+}
+
+/* ================================================================
+   LOAD CENTRES FROM API (with pagination)
+   ================================================================ */
+
+async function loadCentres() {
+    if (isLoading) return;
+    isLoading = true;
+    showGlobalLoader('Loading centres...');
+
+    try {
+        const searchTerm = document.getElementById('centre-search').value.trim();
+        const locFilter = getLocationFilter();
+
+        const params = new URLSearchParams({
+            page: currentPage,
+            page_size: pageSize
+        });
+        if (searchTerm) params.set('search', searchTerm);
+        if (locFilter.districtId) params.set('district_id', locFilter.districtId);
+        if (locFilter.vsId) params.set('vidhan_sabha_id', locFilter.vsId);
+        if (locFilter.panchayatId) params.set('panchayat_id', locFilter.panchayatId);
+        if (locFilter.villageId) params.set('village_id', locFilter.villageId);
+        if (currentAttendanceDate) params.set('date', currentAttendanceDate);
+
+        const url = `${getUrl('attendance')}?${params}`;
+        const response = await apiFetch(url);
+
+        const centres = response?.results || [];
+        totalCount = response?.count || 0;
+        totalPages = response?.total_pages || 1;
+
+        renderCentreTable(centres);
+        updatePagination();
+        updateCountBadge(searchTerm, locFilter, centres.length);
+    } catch (error) {
+        console.error('Failed to load centres:', error);
+        showToast('Failed to load centres', 'danger');
+        renderCentreTable([]);
+        updatePagination();
+    } finally {
+        hideGlobalLoader();
+        isLoading = false;
+    }
+}
 
 /* ================================================================
    RENDER CENTRE TABLE
-   Applies the location filter + search, then paints one row
-   per matching centre.
    ================================================================ */
 
-function renderCentreTable() {
+function renderCentreTable(centres) {
     const tbody = document.getElementById('centre-table-body');
-    const searchTerm = document.getElementById('centre-search').value.trim().toLowerCase();
 
-    const centres    = getRecords('centres');
-    const students   = getRecords('students');
-    const teachers   = getRecords('teachers');
-    const admins     = getRecords('regionalAdmins');
-    const districts  = getRecords('districts');
-    const vsList     = getRecords('vidhanSabhas');
-    const panchayats = getRecords('panchayats');
-    const villages   = getRecords('villages');
-
-    // Quick lookup maps id -> name
-    const teacherMap   = Object.fromEntries(teachers.map(t => [t.id, t.name]));
-    const adminMap     = Object.fromEntries(admins.map(a => [a.id, a.name]));
-    const districtMap  = Object.fromEntries(districts.map(d => [d.id, d.name]));
-    const vsMap        = Object.fromEntries(vsList.map(v => [v.id, v.name]));
-    const panchayatMap = Object.fromEntries(panchayats.map(p => [p.id, p.name]));
-    const villageMap   = Object.fromEntries(villages.map(v => [v.id, v.name]));
-
-    // ------------------------------------------------------------
-    // Filter chain: location cascade, then free-text search
-    // (search matches centre / teacher / admin / village names)
-    // ------------------------------------------------------------
-    const locFilter = getLocationFilter();
-    let filtered = centres.filter(c => matchesLocationFilter(c, locFilter));
-
-    if (searchTerm) {
-        filtered = filtered.filter(c =>
-            c.name.toLowerCase().includes(searchTerm) ||
-            (teacherMap[c.teacherId] || '').toLowerCase().includes(searchTerm) ||
-            (adminMap[c.regionalAdminId] || '').toLowerCase().includes(searchTerm) ||
-            (villageMap[c.villageId] || '').toLowerCase().includes(searchTerm)
-        );
-    }
-
-    // Live count badge reflects the current filter selection
-    const anyFilter = searchTerm ||
-        locFilter.districtId || locFilter.vsId || locFilter.panchayatId || locFilter.villageId;
-    document.getElementById('centre-count').textContent = anyFilter
-        ? `${filtered.length} / ${centres.length} centres`
-        : `${centres.length} centre${centres.length === 1 ? '' : 's'}`;
-
-    // Empty state
-    if (filtered.length === 0) {
+    if (centres.length === 0) {
         tbody.innerHTML = `
             <tr><td colspan="6" class="table-empty">
-                ${anyFilter
-                    ? 'No centres match your filters.'
-                    : 'No centres yet. Add one from Educational Centre.'}
+                No centres match your filters.
             </td></tr>
         `;
         return;
     }
 
-    // Paint one row per centre. The whole row navigates to the
-    // detail page (plus an explicit eye button for clarity).
-    tbody.innerHTML = filtered.map(centre => {
-        const studentCount  = students.filter(s => s.centreId === centre.id).length;
-        const attendancePct = computeCentreAveragePct(centre.id);
-        const teacherName   = teacherMap[centre.teacherId] || 'Unassigned';
-        const adminName     = adminMap[centre.regionalAdminId] || 'Unassigned';
+    tbody.innerHTML = centres.map(centre => {
+        const studentCount = centre.student_count || 0;
+        const attendancePct = centre.attendance_pct || 0;
+        const teacherName = centre.assigned_teacher_name || 'Unassigned';
+        const adminName = centre.assigned_regional_admin_name || 'Unassigned';
 
         // Location chain with graceful fallbacks
         const chainParts = [
-            districtMap[centre.districtId],
-            vsMap[centre.vidhanSabhaId],
-            panchayatMap[centre.panchayatId],
-            villageMap[centre.villageId]
+            centre.district_name,
+            centre.vidhan_sabha_name,
+            centre.panchayat_name,
+            centre.village_name
         ].map(n => n || '—');
 
         const barClass = attendancePct < 60 ? 'low' : attendancePct < 80 ? 'medium' : '';
@@ -110,7 +167,7 @@ function renderCentreTable() {
         return `
             <tr class="centre-row" onclick="openCentreDetail('${centre.id}')">
                 <td>
-                    <div class="centre-row-name">${escapeHtml(centre.name)}</div>
+                    <div class="centre-row-name">${escapeHtml(centre.center_name)}</div>
                     <div class="centre-row-chain">
                         ${chainParts.map((name, i) => `
                             <span class="centre-row-chain-part">${escapeHtml(name)}</span>
@@ -145,24 +202,83 @@ function renderCentreTable() {
     }).join('');
 }
 
-/* Navigate to the 4-tab centre detail page. */
-function openCentreDetail(centreId) {
-    window.location.href = `center-detail.html?id=${centreId}`;
+/* ================================================================
+   PAGINATION & COUNT BADGE
+   ================================================================ */
+
+function updatePagination() {
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+    const pageNumbers = document.getElementById('page-numbers');
+    const paginationStart = document.getElementById('pagination-start');
+    const paginationEnd = document.getElementById('pagination-end');
+    const paginationTotal = document.getElementById('pagination-total');
+
+    if (prevBtn) prevBtn.disabled = currentPage === 1;
+    if (nextBtn) nextBtn.disabled = currentPage === totalPages;
+
+    if (paginationStart) paginationStart.textContent = totalCount ? (currentPage - 1) * pageSize + 1 : 0;
+    if (paginationEnd) paginationEnd.textContent = Math.min(currentPage * pageSize, totalCount || 0);
+    if (paginationTotal) paginationTotal.textContent = totalCount || 0;
+
+    if (!pageNumbers) return;
+    pageNumbers.innerHTML = '';
+
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    if (endPage - startPage < 4) startPage = Math.max(1, endPage - 4);
+
+    if (startPage > 1) {
+        addPageBtn(1);
+        if (startPage > 2) addEllipsis();
+    }
+
+    for (let p = startPage; p <= endPage; p++) {
+        addPageBtn(p);
+    }
+
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) addEllipsis();
+        addPageBtn(totalPages);
+    }
+
+    function addPageBtn(pageNum) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `page-btn ${pageNum === currentPage ? 'active' : ''}`;
+        btn.textContent = pageNum;
+        btn.onclick = () => {
+            currentPage = pageNum;
+            loadCentres();
+        };
+        pageNumbers.appendChild(btn);
+    }
+
+    function addEllipsis() {
+        const span = document.createElement('span');
+        span.className = 'page-ellipsis';
+        span.textContent = '…';
+        pageNumbers.appendChild(span);
+    }
+}
+
+function updateCountBadge(searchTerm, locFilter, filteredCount) {
+    const badge = document.getElementById('centre-count');
+    if (!badge) return;
+
+    const anyFilter = searchTerm ||
+        locFilter.districtId || locFilter.vsId || locFilter.panchayatId || locFilter.villageId;
+    
+    badge.textContent = anyFilter
+        ? `${filteredCount} / ${totalCount} centres`
+        : `${totalCount} centre${totalCount === 1 ? '' : 's'}`;
 }
 
 /* ================================================================
-   FAKE ATTENDANCE AVERAGE
-   ----------------------------------------------------------------
-   Stable pseudo-random percentage per centre so the value doesn't
-   jump between page loads. Real values come from the mobile app.
+   NAVIGATION
    ================================================================ */
 
-function computeCentreAveragePct(centreId) {
-    // Simple deterministic hash from the centre id
-    let hash = 0;
-    for (let i = 0; i < centreId.length; i++) {
-        hash = ((hash << 5) - hash + centreId.charCodeAt(i)) | 0;
-    }
-    // Range 72 - 96
-    return 72 + (Math.abs(hash) % 25);
+function openCentreDetail(centreId) {
+    // Use the Django URL pattern name 'center-detail' which maps to /attendance/center-detail/
+    window.location.href = `${getUrl('center-detail')}?id=${centreId}`;
 }

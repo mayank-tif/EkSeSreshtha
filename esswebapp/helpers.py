@@ -14,7 +14,8 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser
+from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User
+from django.db.models import Count
 
 logger = logging.getLogger(__name__)
 
@@ -250,3 +251,238 @@ def _assign_new_regional_admin(center, current_user_id):
                 )
     except Exception as e:
         logger.error(f"WebCenterHelper : Error updating new regional admin status: {str(e)}")
+
+
+# ==================================================================
+# CENTER ATTENDANCE HELPERS
+# ==================================================================
+
+def get_center_attendance_data(center_ids, attendance_date=None):
+    """
+    Get attendance data for a list of centers on a specific date.
+    
+    Uses StudentAttendance records (created by API attendance marking)
+    rather than ClassModel records.
+    
+    Args:
+        center_ids: List of center IDs
+        attendance_date: date object or None (defaults to today)
+    
+    Returns:
+        dict mapping center_id -> {
+            'total_students': int (active students in center),
+            'present_students': int (attendance records for date),
+            'attendance_pct': int (percentage),
+            'teacher_name': str or None,
+            'regional_admin_name': str or None,
+        }
+    """
+    logger.info(f"WebCenterAttendanceHelper : GetCenterAttendanceData : Started for {len(center_ids)} centers, date={attendance_date}")
+    
+    if not center_ids:
+        return {}
+    
+    if attendance_date is None:
+        attendance_date = datetime.now().date()
+    elif isinstance(attendance_date, str):
+        try:
+            attendance_date = datetime.strptime(attendance_date, '%Y-%m-%d').date()
+        except ValueError:
+            attendance_date = datetime.now().date()
+    
+    # 1. Get active student count per center
+    student_counts = dict(
+        Student.objects.filter(center_id__in=center_ids, status=True)
+        .values('center_id').annotate(cnt=Count('id'))
+        .values_list('center_id', 'cnt')
+    )
+    
+    # 2. Get present student count per center from StudentAttendance
+    present_counts = dict(
+        StudentAttendance.objects.filter(
+            center_id__in=center_ids,
+            scan_date__date=attendance_date,
+            status=True
+        ).values('center_id').annotate(
+            present_cnt=Count('id', distinct=True)
+        ).values_list('center_id', 'present_cnt')
+    )
+    
+    # 3. Get teacher and regional admin names in bulk
+    user_ids = []
+    centers = Center.objects.filter(id__in=center_ids).select_related()
+    for c in centers:
+        if c.assigned_teachers:
+            user_ids.append(c.assigned_teachers)
+        if c.assigned_regional_admin:
+            user_ids.append(c.assigned_regional_admin)
+    
+    name_map = {}
+    if user_ids:
+        name_map = dict(User.objects.filter(id__in=set(user_ids)).values_list('id', 'name'))
+    
+    # 4. Build result
+    result = {}
+    for center_id in center_ids:
+        total = student_counts.get(center_id, 0)
+        present = present_counts.get(center_id, 0)
+        pct = int((present / total * 100)) if total > 0 else 0
+        
+        center = Center.objects.filter(id=center_id).first()
+        teacher_name = None
+        regional_admin_name = None
+        if center:
+            teacher_name = name_map.get(center.assigned_teachers)
+            regional_admin_name = name_map.get(center.assigned_regional_admin)
+        
+        result[center_id] = {
+            'total_students': total,
+            'present_students': present,
+            'attendance_pct': pct,
+            'teacher_name': teacher_name,
+            'regional_admin_name': regional_admin_name,
+        }
+    
+    logger.info(f"WebCenterAttendanceHelper : GetCenterAttendanceData : End - {len(result)} centers")
+    return result
+
+
+# ==================================================================
+# STUDENT ATTENDANCE HISTORY HELPERS
+# ==================================================================
+
+def get_student_attendance_history(student_id, start_date=None, end_date=None):
+    """
+    Get attendance history for a specific student.
+    
+    Args:
+        student_id: Student ID
+        start_date: date object or None (defaults to 30 days ago)
+        end_date: date object or None (defaults to today)
+    
+    Returns:
+        List of dicts with 'date' and 'status' (Present/Absent)
+    """
+    logger.info(f"WebStudentAttendanceHelper : GetStudentAttendanceHistory : Started for student={student_id}")
+    
+    if start_date is None:
+        start_date = datetime.now().date() - timedelta(days=30)
+    elif isinstance(start_date, str):
+        try:
+            start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+        except ValueError:
+            start_date = datetime.now().date() - timedelta(days=30)
+    
+    if end_date is None:
+        end_date = datetime.now().date()
+    elif isinstance(end_date, str):
+        try:
+            end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+        except ValueError:
+            end_date = datetime.now().date()
+    
+    # Get attendance records for this student in the date range
+    records = StudentAttendance.objects.filter(
+        student_id=student_id,
+        scan_date__date__gte=start_date,
+        scan_date__date__lte=end_date,
+        status=True
+    ).values('scan_date', 'type').order_by('scan_date')
+    
+    # Group by date - if multiple records for same day, consider Present if any is Present
+    attendance_by_date = {}
+    for record in records:
+        date_key = record['scan_date'].date()
+        if date_key not in attendance_by_date:
+            attendance_by_date[date_key] = 'Absent'
+        if record['type'] is True or record['type'] == 'True':  # Present
+            attendance_by_date[date_key] = 'Present'
+    
+    # Convert to list format
+    result = []
+    for date_key, status in sorted(attendance_by_date.items()):
+        result.append({
+            'date': date_key,
+            'status': status
+        })
+    
+    logger.info(f"WebStudentAttendanceHelper : GetStudentAttendanceHistory : End - {len(result)} records")
+    return result
+
+
+def get_student_monthly_attendance(student_id, year, month):
+    """
+    Get attendance summary for a specific student for a given month.
+    
+    Args:
+        student_id: Student ID
+        year: Year (e.g., 2026)
+        month: Month (1-12)
+    
+    Returns:
+        dict with 'present', 'absent', 'total_days', 'percentage'
+    """
+    from calendar import monthrange
+    
+    start_date = datetime(year, month, 1).date()
+    days_in_month = monthrange(year, month)[1]
+    end_date = datetime(year, month, days_in_month).date()
+    
+    history = get_student_attendance_history(student_id, start_date, end_date)
+    
+    present = sum(1 for r in history if r['status'] == 'Present')
+    absent = sum(1 for r in history if r['status'] == 'Absent')
+    total = present + absent
+    pct = int((present / total * 100)) if total > 0 else 0
+    
+    return {
+        'present': present,
+        'absent': absent,
+        'total_days': total,
+        'percentage': pct
+    }
+
+
+def get_student_daily_attendance(student_id, year, month):
+    """
+    Get day-wise attendance for a specific student for a given month.
+    
+    Args:
+        student_id: Student ID
+        year: Year (e.g., 2026)
+        month: Month (1-12)
+    
+    Returns:
+        List of dicts with 'day' and 'status' for each day in the month
+    """
+    from calendar import monthrange
+    
+    days_in_month = monthrange(year, month)[1]
+    today = datetime.now().date()
+    
+    history = get_student_attendance_history(student_id,
+        datetime(year, month, 1).date(),
+        datetime(year, month, days_in_month).date()
+    )
+    
+    # Build lookup
+    attendance_map = {r['date']: r['status'] for r in history}
+    
+    result = []
+    for day in range(1, days_in_month + 1):
+        date = datetime(year, month, day).date()
+        if date > today:
+            continue  # Skip future dates
+        if date.weekday() == 6:  # Skip Sundays
+            continue
+        
+        status = attendance_map.get(date, 'Absent')
+        result.append({
+            'day': day,
+            'date': date,
+            'status': status
+        })
+    
+    return result
+
+

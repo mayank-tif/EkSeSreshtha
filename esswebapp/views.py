@@ -13,7 +13,7 @@ from datetime import datetime
 
 from APIS.models import *
 from APIS.utils import hash_password
-from .helpers import save_center_web
+from .helpers import *
 from .forms import LoginForm
 import base64
 from django.core.files.base import ContentFile
@@ -163,10 +163,128 @@ class CentresView(LoginRequiredMixin, View):
 
 
 class AttendanceView(LoginRequiredMixin, View):
-    template_name = 'esswebapp/pages/attendance/center-attendance.html'
+    template_name = 'esswebapp/pages/attendance/center-detail.html'
     
     def get(self, request):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+
+
+class CenterAttendanceView(LoginRequiredMixin, View):
+    """Center Attendance list page + paginated API with student counts and attendance data"""
+    template_name = 'esswebapp/pages/attendance/center-attendance.html'
+    
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._list_centers_attendance_api(request)
+        
+        # Render the HTML page
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def _get_centers_queryset(self):
+        """Get centers ordered by created_on desc with related data"""
+        return Center.objects.filter(
+            status=True
+        ).select_related(
+            'district', 'vidhan_sabha', 'panchayat', 'village'
+        ).order_by('-created_on')
+    
+    def _list_centers_attendance_api(self, request):
+        try:
+            # Get filter parameters
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', PAGE_SIZE))
+            search = request.GET.get('search', '').strip().lower()
+            
+            # Location filter parameters
+            district_id = request.GET.get('district_id')
+            vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
+            panchayat_id = request.GET.get('panchayat_id')
+            village_id = request.GET.get('village_id')
+            
+            # Date parameter for attendance (optional)
+            attendance_date = request.GET.get('date')
+            
+            queryset = self._get_centers_queryset()
+            
+            # Apply location filters
+            if district_id:
+                queryset = queryset.filter(district_id=district_id)
+            if vidhan_sabha_id:
+                queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+            if panchayat_id:
+                queryset = queryset.filter(panchayat_id=panchayat_id)
+            if village_id:
+                queryset = queryset.filter(village_id=village_id)
+            
+            # Apply search
+            if search:
+                queryset = queryset.filter(
+                    models.Q(center_name__icontains=search) |
+                    models.Q(address__icontains=search) |
+                    models.Q(district__name__icontains=search) |
+                    models.Q(vidhan_sabha__name__icontains=search) |
+                    models.Q(panchayat__name__icontains=search) |
+                    models.Q(village__name__icontains=search)
+                )
+            
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            centers_page = list(queryset[start:end])
+            center_ids = [c.id for c in centers_page]
+            
+            # Use single helper function for all attendance data
+            attendance_data = get_center_attendance_data(center_ids, attendance_date)
+            
+            items = [
+                self._serialize_center_attendance(c, attendance_data)
+                for c in centers_page
+            ]
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _serialize_center_attendance(self, center, attendance_data):
+        """Serialize center with attendance data for the list view."""
+        att = attendance_data.get(center.id, {})
+        
+        return {
+            'id': center.id,
+            'center_name': center.center_name,
+            'address': center.address,
+            'latitude': float(center.latitude) if center.latitude else None,
+            'longitude': float(center.longitude) if center.longitude else None,
+            'location_status': center.location_status,
+            'assigned_teachers': center.assigned_teachers,
+            'assigned_teacher_name': att.get('teacher_name'),
+            'assigned_regional_admin': center.assigned_regional_admin,
+            'assigned_regional_admin_name': att.get('regional_admin_name'),
+            'student_count': att.get('total_students', 0),
+            'attendance_pct': att.get('attendance_pct', 0),
+            'total_students': att.get('total_students', 0),
+            'present_students': att.get('present_students', 0),
+            'district_id': center.district_id,
+            'district_name': center.district.name if center.district else None,
+            'vidhan_sabha_id': center.vidhan_sabha_id,
+            'vidhan_sabha_name': center.vidhan_sabha.name if center.vidhan_sabha else None,
+            'panchayat_id': center.panchayat_id,
+            'panchayat_name': center.panchayat.name if center.panchayat else None,
+            'village_id': center.village_id,
+            'village_name': center.village.name if center.village else None,
+            'created_on': center.created_on.isoformat() if center.created_on else None,
+            'started_date': center.started_date.isoformat() if center.started_date else None,
+        }
 
 
 class SchoolDropDownView(LoginRequiredMixin, View):
@@ -429,6 +547,13 @@ class StudentsView(LoginRequiredMixin, View):
     def get(self, request):
         # Check if it's an AJAX request for JSON data
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            path = request.path
+            if 'attendance-history' in path:
+                return self._student_attendance_history_api(request)
+            elif 'monthly-attendance' in path:
+                return self._student_monthly_attendance_api(request)
+            elif 'daily-attendance' in path:
+                return self._student_daily_attendance_api(request)
             return self._list_students_api(request)
         
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
@@ -999,6 +1124,76 @@ class StudentsView(LoginRequiredMixin, View):
             student.save()
             
             return JsonResponse({'detail': 'Student deactivated successfully'})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _student_attendance_history_api(self, request):
+        """Get attendance history for a specific student"""
+        try:
+            student_id = request.GET.get('student_id')
+            if not student_id:
+                return JsonResponse({'detail': 'Student ID is required'}, status=400)
+            
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            
+            from esswebapp.helpers import get_student_attendance_history
+            history = get_student_attendance_history(student_id, start_date, end_date)
+            
+            return JsonResponse({
+                'student_id': student_id,
+                'history': [
+                    {'date': r['date'].isoformat() if hasattr(r['date'], 'isoformat') else str(r['date']), 'status': r['status']}
+                    for r in history
+                ]
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _student_monthly_attendance_api(self, request):
+        """Get monthly attendance summary for a specific student"""
+        try:
+            student_id = request.GET.get('student_id')
+            year = request.GET.get('year')
+            month = request.GET.get('month')
+            
+            if not student_id or not year or not month:
+                return JsonResponse({'detail': 'Student ID, year, and month are required'}, status=400)
+            
+            from esswebapp.helpers import get_student_monthly_attendance
+            summary = get_student_monthly_attendance(student_id, int(year), int(month))
+            
+            return JsonResponse({
+                'student_id': student_id,
+                'year': int(year),
+                'month': int(month),
+                'summary': summary
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _student_daily_attendance_api(self, request):
+        """Get day-wise attendance for a specific student for a given month"""
+        try:
+            student_id = request.GET.get('student_id')
+            year = request.GET.get('year')
+            month = request.GET.get('month')
+            
+            if not student_id or not year or not month:
+                return JsonResponse({'detail': 'Student ID, year, and month are required'}, status=400)
+            
+            from esswebapp.helpers import get_student_daily_attendance
+            daily = get_student_daily_attendance(student_id, int(year), int(month))
+            
+            return JsonResponse({
+                'student_id': student_id,
+                'year': int(year),
+                'month': int(month),
+                'daily': [
+                    {'day': d['day'], 'date': d['date'].isoformat() if hasattr(d['date'], 'isoformat') else str(d['date']), 'status': d['status']}
+                    for d in daily
+                ]
+            })
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
 
@@ -3396,6 +3591,100 @@ class CenterView(LoginRequiredMixin, View):
     def _serialize_center(self, center, name_map=None, student_counts=None):
         name_map = name_map or {}
         student_counts = student_counts or {}
+        
+        # Build teacher object with full details
+        teacher_obj = None
+        if center.assigned_teachers:
+            try:
+                teacher_user = User.objects.select_related('role', 'teacher').get(
+                    id=center.assigned_teachers, status=True, role__role_code='TEACHER'
+                )
+                try:
+                    teacher_profile = Teacher.objects.select_related(
+                        'district', 'vidhan_sabha', 'panchayat', 'village'
+                    ).get(user=teacher_user, status=True)
+                    teacher_obj = {
+                        'id': teacher_user.id,
+                        'teacher_guid_id': teacher_profile.teacher_guid_id,
+                        'name': teacher_user.name,
+                        'email': teacher_user.email,
+                        'phone': teacher_user.phone_number,
+                        'whatsapp': teacher_user.whats_app,
+                        'image': teacher_user.picture.url if teacher_user.picture else None,
+                        'dob': teacher_profile.date_of_birth.isoformat() if teacher_profile.date_of_birth and hasattr(teacher_profile.date_of_birth, 'isoformat') else (teacher_profile.date_of_birth if teacher_profile.date_of_birth else None),
+                        'age': teacher_profile.age,
+                        'gender': teacher_profile.gender,
+                        'enrollment_date': teacher_profile.enrollment_date.isoformat() if teacher_profile.enrollment_date and hasattr(teacher_profile.enrollment_date, 'isoformat') else (teacher_profile.enrollment_date if teacher_profile.enrollment_date else None),
+                        'qualification': teacher_profile.education,
+                        'guardian_name': teacher_profile.guardian_name,
+                        'guardian_number': teacher_profile.guardian_number,
+                        'address': teacher_profile.full_address,
+                        'district_id': teacher_profile.district_id,
+                        'district_name': teacher_profile.district.name if teacher_profile.district else None,
+                        'vidhan_sabha_id': teacher_profile.vidhan_sabha_id,
+                        'vidhan_sabha_name': teacher_profile.vidhan_sabha.name if teacher_profile.vidhan_sabha else None,
+                        'panchayat_id': teacher_profile.panchayat_id,
+                        'panchayat_name': teacher_profile.panchayat.name if teacher_profile.panchayat else None,
+                        'village_id': teacher_profile.village_id,
+                        'village_name': teacher_profile.village.name if teacher_profile.village else None,
+                    }
+                except Teacher.DoesNotExist:
+                    teacher_obj = {
+                        'id': teacher_user.id,
+                        'name': teacher_user.name,
+                        'email': teacher_user.email,
+                        'phone': teacher_user.phone_number,
+                        'whatsapp': teacher_user.whats_app,
+                        'image': teacher_user.picture.url if teacher_user.picture else None,
+                    }
+            except User.DoesNotExist:
+                pass
+        
+        # Build regional admin object with full details
+        regional_admin_obj = None
+        if center.assigned_regional_admin:
+            try:
+                ra_user = User.objects.select_related('role', 'regional_admin').get(
+                    id=center.assigned_regional_admin, status=True, role__role_code='REGIONAL_ADMIN'
+                )
+                try:
+                    ra_profile = RegionalAdmin.objects.select_related(
+                        'district', 'vidhan_sabha', 'panchayat', 'village'
+                    ).get(user=ra_user, status=True)
+                    regional_admin_obj = {
+                        'id': ra_user.id,
+                        'regional_admin_guid_id': ra_profile.regional_admin_guid_id,
+                        'name': ra_user.name,
+                        'email': ra_user.email,
+                        'phone': ra_user.phone_number,
+                        'whatsapp': ra_user.whats_app,
+                        'image': ra_user.picture.url if ra_user.picture else None,
+                        'dob': ra_profile.date_of_birth.isoformat() if ra_profile.date_of_birth and hasattr(ra_profile.date_of_birth, 'isoformat') else (ra_profile.date_of_birth if ra_profile.date_of_birth else None),
+                        'age': ra_profile.age,
+                        'gender': ra_profile.gender,
+                        'enrollment_date': ra_profile.enrollment_date.isoformat() if ra_profile.enrollment_date and hasattr(ra_profile.enrollment_date, 'isoformat') else (ra_profile.enrollment_date if ra_profile.enrollment_date else None),
+                        'address': ra_profile.full_address,
+                        'district_id': ra_profile.district_id,
+                        'district_name': ra_profile.district.name if ra_profile.district else None,
+                        'vidhan_sabha_id': ra_profile.vidhan_sabha_id,
+                        'vidhan_sabha_name': ra_profile.vidhan_sabha.name if ra_profile.vidhan_sabha else None,
+                        'panchayat_id': ra_profile.panchayat_id,
+                        'panchayat_name': ra_profile.panchayat.name if ra_profile.panchayat else None,
+                        'village_id': ra_profile.village_id,
+                        'village_name': ra_profile.village.name if ra_profile.village else None,
+                    }
+                except RegionalAdmin.DoesNotExist:
+                    regional_admin_obj = {
+                        'id': ra_user.id,
+                        'name': ra_user.name,
+                        'email': ra_user.email,
+                        'phone': ra_user.phone_number,
+                        'whatsapp': ra_user.whats_app,
+                        'image': ra_user.picture.url if ra_user.picture else None,
+                    }
+            except User.DoesNotExist:
+                pass
+        
         return {
             'id': center.id,
             'center_guid_id': center.center_guid_id,
@@ -3406,8 +3695,10 @@ class CenterView(LoginRequiredMixin, View):
             'location_status': center.location_status,
             'assigned_teachers': center.assigned_teachers,
             'assigned_teacher_name': name_map.get(center.assigned_teachers),
+            'assigned_teacher': teacher_obj,
             'assigned_regional_admin': center.assigned_regional_admin,
             'assigned_regional_admin_name': name_map.get(center.assigned_regional_admin),
+            'assigned_regional_admin': regional_admin_obj,
             'student_count': student_counts.get(center.id, 0),
             'class_status': center.class_status,
             'district_id': center.district_id,
@@ -3419,10 +3710,10 @@ class CenterView(LoginRequiredMixin, View):
             'village_id': center.village_id,
             'village_name': center.village.name if center.village else None,
             'created_by': center.created_by,
-            'created_on': center.created_on.isoformat() if center.created_on else None,
+            'created_on': center.created_on.isoformat() if center.created_on and hasattr(center.created_on, 'isoformat') else (center.created_on if center.created_on else None),
             'updated_by': center.updated_by,
-            'updated_on': center.updated_on.isoformat() if center.updated_on else None,
-            'started_date': center.started_date.isoformat() if center.started_date else None,
+            'updated_on': center.updated_on.isoformat() if center.updated_on and hasattr(center.updated_on, 'isoformat') else (center.updated_on if center.updated_on else None),
+            'started_date': center.started_date.isoformat() if center.started_date and hasattr(center.started_date, 'isoformat') else (center.started_date if center.started_date else None),
         }
     
     def _create_center(self, request):

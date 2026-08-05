@@ -14,7 +14,7 @@
 
 /* ================================================================
    MODULE STATE
-   Populated from the URL query string and localStorage on init.
+   Populated from the URL query string and API on init.
    ================================================================ */
 
 let currentCentre = null;    // centre object
@@ -26,6 +26,43 @@ let currentVs = null;
 let currentDistrict = null;
 let currentSchool = null;    // school object (or null)
 let openedStudent = null;    // student currently shown in the profile modal
+let centreStudentsCache = []; // cached students for attendance calculations
+
+// Pagination state for students tab
+let studentsPage = 1;
+let studentsPageSize = AppConfig.pageSize;
+let studentsTotalPages = 1;
+let studentsTotalCount = 0;
+let studentsSearchTerm = '';
+
+/* ================================================================
+   HELPER: Convert snake_case API fields to camelCase for JS
+   ================================================================ */
+function convertStaffFields(obj) {
+    if (!obj) return null;
+    return {
+        ...obj,
+        teacherGuidId: obj.teacher_guid_id ?? obj.regional_admin_guid_id,
+        regionalAdminGuidId: obj.regional_admin_guid_id,
+        phoneNumber: obj.phone_number,
+        whatsApp: obj.whats_app,
+        dateOfBirth: obj.date_of_birth ?? obj.dob,
+        enrollmentDate: obj.enrollment_date,
+        fullName: obj.name,
+        guardianName: obj.guardian_name,
+        guardianNumber: obj.guardian_number,
+        fullAddress: obj.full_address ?? obj.address,
+        districtId: obj.district_id,
+        districtName: obj.district_name,
+        vidhanSabhaId: obj.vidhan_sabha_id,
+        vidhanSabhaName: obj.vidhan_sabha_name,
+        panchayatId: obj.panchayat_id,
+        panchayatName: obj.panchayat_name,
+        villageId: obj.village_id,
+        villageName: obj.village_name,
+        profileImage: obj.image ?? obj.picture,
+    };
+}
 
 /* Render shared shell (sidebar + topbar) */
 renderShell({
@@ -41,7 +78,7 @@ renderShell({
    INITIALIZATION
    ================================================================ */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     // Read the centre id from the URL. If missing/invalid, bail out.
     const params = new URLSearchParams(window.location.search);
     const centreId = params.get('id');
@@ -52,27 +89,58 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    const centre = findRecord('centres', centreId);
+    // Fetch centre from API
+    let centre;
+    try {
+        showGlobalLoader('Loading centre...');
+        const url = `${getUrl('centres')}?id=${centreId}`;
+        const response = await apiFetch(url);
+        centre = response;
+    } catch (error) {
+        console.error('Failed to load centre:', error);
+        showToast('Failed to load centre details', 'danger');
+        return;
+    } finally {
+        hideGlobalLoader();
+    }
+
     if (!centre) {
         document.getElementById('detail-hero-title').textContent = 'Centre not found';
         showToast('This centre no longer exists.', 'danger');
         return;
     }
 
-    // Resolve every related record once, up front.
-    currentCentre    = centre;
-    currentTeacher   = centre.teacherId       ? findRecord('teachers', centre.teacherId)             : null;
-    currentAdmin     = centre.regionalAdminId ? findRecord('regionalAdmins', centre.regionalAdminId) : null;
-    currentVillage   = centre.villageId       ? findRecord('villages', centre.villageId)             : null;
-    currentPanchayat = centre.panchayatId     ? findRecord('panchayats', centre.panchayatId)         : null;
-    currentVs        = centre.vidhanSabhaId   ? findRecord('vidhanSabhas', centre.vidhanSabhaId)    : null;
-    currentDistrict  = centre.districtId      ? findRecord('districts', centre.districtId)           : null;
+    // Resolve related records from API data (already includes names)
+    currentCentre = centre;
+    currentDistrict = centre.district_name ? { id: centre.district_id, name: centre.district_name } : null;
+    currentVs = centre.vidhan_sabha_name ? { id: centre.vidhan_sabha_id, name: centre.vidhan_sabha_name } : null;
+    currentPanchayat = centre.panchayat_name ? { id: centre.panchayat_id, name: centre.panchayat_name } : null;
+    currentVillage = centre.village_name ? { id: centre.village_id, name: centre.village_name } : null;
+
+    // Use full teacher and regional admin objects from API response
+    // Convert snake_case API fields to camelCase for JS
+    currentTeacher = centre.assigned_teacher ? convertStaffFields(centre.assigned_teacher) : null;
+    currentAdmin = centre.assigned_regional_admin ? convertStaffFields(centre.assigned_regional_admin) : null;
 
     renderHero();
     renderInfoTab();
     renderStaffTab();
     renderStudentTable();
     initAnalytics();
+
+    // Pagination event handlers for students tab
+    document.getElementById('prev-page').addEventListener('click', () => {
+        if (studentsPage > 1) {
+            studentsPage--;
+            renderStudentTable();
+        }
+    });
+    document.getElementById('next-page').addEventListener('click', () => {
+        if (studentsPage < studentsTotalPages) {
+            studentsPage++;
+            renderStudentTable();
+        }
+    });
 
     // Wire modal backdrops so clicking outside the modal box closes it.
     // (The click handlers are set inline in HTML for each backdrop id.)
@@ -82,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
    TAB SWITCHING
    ================================================================ */
 
-function switchTab(tabId) {
+async function switchTab(tabId) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
@@ -92,7 +160,7 @@ function switchTab(tabId) {
     if (tabPanel)  tabPanel.classList.add('active');
 
     // Analytics needs a redraw on first show so bars are sized correctly.
-    if (tabId === 'analytics') renderAnalytics();
+    if (tabId === 'analytics') await renderAnalytics();
 }
 
 /* ================================================================
@@ -100,7 +168,7 @@ function switchTab(tabId) {
    ================================================================ */
 
 function renderHero() {
-    document.getElementById('detail-hero-title').textContent = currentCentre.name;
+    document.getElementById('detail-hero-title').textContent = currentCentre.center_name;
     const location = [
         currentVillage && currentVillage.name,
         currentPanchayat && currentPanchayat.name,
@@ -115,11 +183,11 @@ function renderHero() {
 
 function renderInfoTab() {
     const grid = document.getElementById('info-grid');
-    const students = getRecords('students').filter(s => s.centreId === currentCentre.id);
+    const studentCount = currentCentre.student_count || 0;
 
     const rows = [
-        { label: 'Centre Name',       value: currentCentre.name },
-        { label: 'Start Date',        value: formatDate(currentCentre.startDate) },
+        { label: 'Centre Name',       value: currentCentre.center_name },
+        { label: 'Start Date',        value: formatDate(currentCentre.started_date) },
         { label: 'District',          value: currentDistrict ? currentDistrict.name : '—' },
         { label: 'Vidhan Sabha',      value: currentVs ? currentVs.name : '—' },
         { label: 'Panchayat',         value: currentPanchayat ? currentPanchayat.name : '—' },
@@ -132,8 +200,8 @@ function renderInfoTab() {
         },
         { label: 'Regional Admin',    value: currentAdmin ? currentAdmin.name : 'Unassigned' },
         { label: 'Teacher',           value: currentTeacher ? currentTeacher.name : 'Unassigned' },
-        { label: 'Total Students',    value: `${students.length} enrolled` },
-        { label: 'Created On',        value: formatDate(currentCentre.createdAt) }
+        { label: 'Total Students',    value: `${studentCount} enrolled` },
+        { label: 'Created On',        value: formatDate(currentCentre.created_on) }
     ];
 
     grid.innerHTML = rows.map(r => `
@@ -152,13 +220,41 @@ function renderStaffTab() {
     const grid = document.getElementById('staff-grid');
     const cards = [];
 
-    if (currentTeacher) cards.push(buildStaffCard(currentTeacher, 'Teacher', true));
-    else                cards.push(emptyStaffCard('Teacher'));
+    if (currentTeacher) {
+        cards.push(buildStaffCard(currentTeacher, 'Teacher', true));
+    } else if (currentCentre?.assigned_teachers) {
+        // Teacher is assigned but details still loading
+        cards.push(loadingStaffCard('Teacher'));
+    } else {
+        cards.push(emptyStaffCard('Teacher'));
+    }
 
-    if (currentAdmin)   cards.push(buildStaffCard(currentAdmin, 'Regional Admin', false));
-    else                cards.push(emptyStaffCard('Regional Admin'));
+    if (currentAdmin) {
+        cards.push(buildStaffCard(currentAdmin, 'Regional Admin', false));
+    } else if (currentCentre?.assigned_regional_admin) {
+        // Admin is assigned but details still loading
+        cards.push(loadingStaffCard('Regional Admin'));
+    } else {
+        cards.push(emptyStaffCard('Regional Admin'));
+    }
 
     grid.innerHTML = cards.join('');
+}
+
+function loadingStaffCard(role) {
+    return `
+        <div class="staff-card">
+            <div class="staff-card-header">
+                <div class="staff-card-avatar"><div class="avatar-loading"></div></div>
+                <div>
+                    <div class="staff-card-title">${role}</div>
+                    <div class="staff-card-role">Loading...</div>
+                </div>
+            </div>
+            <div class="staff-card-body">
+                <div class="staff-loading">Loading details...</div>
+            </div>
+        </div>`;
 }
 
 function buildStaffCard(person, role, isTeacher) {
@@ -230,85 +326,115 @@ function emptyStaffCard(role) {
    ================================================================ */
 
 function renderStudentTable() {
+    const searchInput = document.getElementById('student-search');
+    const searchTerm = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    studentsSearchTerm = searchTerm;
+    studentsPage = 1; // Reset to first page on new search
+
+    // Fetch students from API for this centre
+    loadCentreStudents(searchTerm, studentsPage);
+}
+
+async function loadCentreStudents(searchTerm = '', page = 1) {
     const tbody = document.getElementById('student-table-body');
-    const searchTerm = document.getElementById('student-search').value.trim().toLowerCase();
-    const centreStudents = getRecords('students').filter(s => s.centreId === currentCentre.id);
+    showGlobalLoader('Loading students...');
+    
+    studentsPage = page;
+    
+    try {
+        const params = new URLSearchParams({
+            page: page,
+            page_size: studentsPageSize,
+            center_id: currentCentre.id
+        });
+        if (searchTerm) params.set('search', searchTerm);
 
-    // Apply search across roll no + name
-    const filtered = searchTerm
-        ? centreStudents.filter(s =>
-            (s.name && s.name.toLowerCase().includes(searchTerm)) ||
-            (s.rollNo && String(s.rollNo).toLowerCase().includes(searchTerm))
-        )
-        : centreStudents;
+        const url = `${getUrl('students')}?${params}`;
+        const response = await apiFetch(url);
+        
+        const students = response?.results || response || [];
+        const totalCount = response?.count || students.length;
+        const totalPages = Math.ceil(totalCount / studentsPageSize);
+        
+        studentsTotalCount = totalCount;
+        studentsTotalPages = totalPages;
 
-    document.getElementById('student-count').textContent =
-        `${centreStudents.length} student${centreStudents.length === 1 ? '' : 's'}`;
+        // Cache students for attendance calculations
+        centreStudentsCache = students;
 
-    if (filtered.length === 0) {
-        tbody.innerHTML = `
-            <tr><td colspan="6" class="table-empty">
-                ${searchTerm ? 'No students match your search.' : 'No students enrolled at this centre yet.'}
-            </td></tr>
-        `;
-        return;
-    }
+        document.getElementById('student-count').textContent =
+            `${totalCount} student${totalCount === 1 ? '' : 's'}`;
 
-    tbody.innerHTML = filtered.map(student => {
-        const avgAttendance = computeStudentAveragePct(student.id);
-        const attendanceClass = avgAttendance < 60 ? 'low' : avgAttendance < 80 ? 'medium' : '';
-        const isActive = student.active !== false; // default active
+        // Update pagination UI
+        updateStudentPaginationUI(students.length);
 
-        const avatarInner = student.image
-            ? `<img src="${student.image}" alt="${escapeHtml(student.name)}">`
-            : getInitials(student.name);
+        if (students.length === 0) {
+            tbody.innerHTML = `
+                <tr><td colspan="6" class="table-empty">
+                    ${searchTerm ? 'No students match your search.' : 'No students enrolled at this centre yet.'}
+                </td></tr>
+            `;
+            return;
+        }
 
-        return `
-            <tr>
-                <td><strong>#${escapeHtml(student.rollNo || '—')}</strong></td>
-                <td>
-                    <div class="student-avatar-cell">
-                        <div class="avatar">${avatarInner}</div>
-                        <div class="student-avatar-cell-info">
-                            <div class="student-avatar-cell-name">${escapeHtml(student.name)}</div>
-                            <div class="student-avatar-cell-roll">${escapeHtml(student.activeClass || 'No class')}</div>
+        // Fetch attendance summaries for all students in batch
+        await loadStudentAttendanceSummaries(students);
+
+        tbody.innerHTML = students.map(student => {
+            const avgAttendance = student.attendance_pct || 0;
+            const attendanceClass = avgAttendance < 60 ? 'low' : avgAttendance < 80 ? 'medium' : '';
+            const isActive = student.status !== false; // default active
+
+            const avatarInner = student.profile_image
+                ? `<img src="${student.profile_image}" alt="${escapeHtml(student.full_name)}">`
+                : getInitials(student.full_name);
+
+            return `
+                <tr>
+                    <td><strong>#${escapeHtml(student.roll_number || '—')}</strong></td>
+                    <td>
+                        <div class="student-avatar-cell">
+                            <div class="avatar">${avatarInner}</div>
+                            <div class="student-avatar-cell-info">
+                                <div class="student-avatar-cell-name">${escapeHtml(student.full_name)}</div>
+                                <div class="student-avatar-cell-roll">${escapeHtml(student.active_class_status ? 'Active' : 'No class')}</div>
+                            </div>
                         </div>
-                    </div>
-                </td>
-                <td>
-                    <div class="attendance-pct">
-                        <div class="attendance-pct-bar">
-                            <div class="attendance-pct-fill ${attendanceClass}" style="width:${avgAttendance}%;"></div>
+                    </td>
+                    <td>
+                        <div class="attendance-pct">
+                            <div class="attendance-pct-bar">
+                                <div class="attendance-pct-fill ${attendanceClass}" style="width:${avgAttendance}%;"></div>
+                            </div>
+                            <span>${avgAttendance}%</span>
                         </div>
-                        <span>${avgAttendance}%</span>
-                    </div>
-                </td>
-                <td>${formatDate(student.joiningDate) || '—'}</td>
-                <td>
-                    <label class="toggle">
-                        <input type="checkbox" ${isActive ? 'checked' : ''}
-                               onchange="toggleStudentStatus('${student.id}', this.checked)">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </td>
-                <td>
-                    <div class="table-actions">
-                        <button class="btn-icon" title="Edit"
-                                onclick="editStudent('${student.id}')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                 stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-                            </svg>
-                        </button>
-                        <button class="btn-icon" title="Attendance"
-                                onclick="openAttendanceModal('${student.id}')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                                 stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="3" y="4" width="18" height="18" rx="2"/>
-                                <path d="M16 2v4M8 2v4M3 10h18"/>
-                            </svg>
+                    </td>
+                    <td>${formatDate(student.joining_date) || '—'}</td>
+                    <td>
+                        <label class="toggle">
+                            <input type="checkbox" ${isActive ? 'checked' : ''}
+                                   onchange="toggleStudentStatus('${student.id}', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </td>
+                    <td>
+                        <div class="table-actions">
+                            <button class="btn-icon" title="Edit"
+                                    onclick="editStudent('${student.id}')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                     stroke="currentColor" stroke-width="2"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon" title="Attendance"
+                                    onclick="openAttendanceModal('${student.id}')">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                     stroke="currentColor" stroke-width="2"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                                    <path d="M16 2v4M8 2v4M3 10h18"/>
+                                </svg>
                         </button>
                         <button class="btn-icon" title="View Profile"
                                 onclick="openStudentModal('${student.id}')">
@@ -324,11 +450,88 @@ function renderStudentTable() {
             </tr>
         `;
     }).join('');
+} catch (error) {
+    console.error('Failed to load centre students:', error);
+    showToast('Failed to load students', 'danger');
+    tbody.innerHTML = `
+        <tr><td colspan="6" class="table-empty">Error loading students</td></tr>
+    `;
+} finally {
+    hideGlobalLoader();
+}
+}
+
+function updateStudentPaginationUI(currentPageCount) {
+    const start = (studentsPage - 1) * studentsPageSize + 1;
+    const end = Math.min(studentsPage * studentsPageSize, studentsTotalCount);
+    
+    document.getElementById('pagination-start').textContent = studentsTotalCount > 0 ? start : 0;
+    document.getElementById('pagination-end').textContent = end;
+    document.getElementById('pagination-total').textContent = studentsTotalCount;
+    
+    const prevBtn = document.getElementById('prev-page');
+    const nextBtn = document.getElementById('next-page');
+    prevBtn.disabled = studentsPage <= 1;
+    nextBtn.disabled = studentsPage >= studentsTotalPages;
+    
+    // Page numbers
+    const pageNumbers = document.getElementById('page-numbers');
+    if (pageNumbers) {
+        let html = '';
+        const maxPagesToShow = 5;
+        let startPage = Math.max(1, studentsPage - Math.floor(maxPagesToShow / 2));
+        let endPage = Math.min(studentsTotalPages, startPage + maxPagesToShow - 1);
+        
+        if (endPage - startPage + 1 < maxPagesToShow) {
+            startPage = Math.max(1, endPage - maxPagesToShow + 1);
+        }
+        
+        for (let p = startPage; p <= endPage; p++) {
+            html += `<button class="btn btn-sm ${p === studentsPage ? 'btn-primary' : 'btn-secondary'}" onclick="loadCentreStudents(studentsSearchTerm, ${p})">${p}</button>`;
+        }
+        pageNumbers.innerHTML = html;
+    }
+}
+
+async function loadStudentAttendanceSummaries(students) {
+    // Fetch monthly attendance for the current month for all students
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1;
+    
+    // We'll fetch summaries in parallel for all students
+    const promises = students.map(async (student) => {
+        try {
+            const url = `${getUrl('student-monthly-attendance')}?student_id=${student.id}&year=${year}&month=${month}`;
+            const response = await apiFetch(url);
+            if (response?.summary) {
+                student.attendance_pct = response.summary.percentage || 0;
+            }
+        } catch (e) {
+            console.warn(`Failed to fetch attendance for student ${student.id}:`, e);
+            student.attendance_pct = 0;
+        }
+    });
+    
+    await Promise.all(promises);
 }
 
 function toggleStudentStatus(studentId, isActive) {
-    updateRecord('students', studentId, { active: isActive });
-    showToast(`Student marked ${isActive ? 'active' : 'inactive'}.`, 'success');
+    // Use the students API to update student status
+    apiFetch(getUrl('students'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: studentId, status: isActive })
+    })
+    .then(() => {
+        showToast(`Student marked ${isActive ? 'active' : 'inactive'}.`, 'success');
+    })
+    .catch(error => {
+        console.error('Failed to update student status:', error);
+        showToast('Failed to update student status', 'danger');
+        // Reload to get correct state
+        loadCentreStudents();
+    });
 }
 
 function editStudent(studentId) {
@@ -340,16 +543,41 @@ function editStudent(studentId) {
    STUDENT PROFILE MODAL (eye icon)
    ================================================================ */
 
-function openStudentModal(studentId) {
-    const student = findRecord('students', studentId);
+async function openStudentModal(studentId) {
+    // Fetch student from API
+    let student;
+    try {
+        showGlobalLoader('Loading student...');
+        const url = `${getUrl('students')}?id=${studentId}`;
+        const response = await apiFetch(url);
+        student = response;
+    } catch (error) {
+        console.error('Failed to load student:', error);
+        showToast('Failed to load student details', 'danger');
+        return;
+    } finally {
+        hideGlobalLoader();
+    }
+
     if (!student) return;
 
     openedStudent = student;
 
-    const school   = student.schoolId ? findRecord('schools', student.schoolId) : null;
-    const photo    = student.image
-        ? `<img src="${student.image}" alt="${escapeHtml(student.name)}">`
-        : getInitials(student.name);
+    // Fetch school name if school_id is available
+    let schoolName = '—';
+    if (student.school_id) {
+        try {
+            const schoolUrl = `${getUrl('school-details-list')}?id=${student.school_id}`;
+            const schoolResponse = await apiFetch(schoolUrl);
+            schoolName = schoolResponse?.schoolName || schoolResponse?.school_name || '—';
+        } catch (e) {
+            console.warn('Failed to fetch school name:', e);
+        }
+    }
+
+    const photo = student.profile_image
+        ? `<img src="${student.profile_image}" alt="${escapeHtml(student.full_name)}">`
+        : getInitials(student.full_name);
 
     const body = document.getElementById('student-modal-body');
     body.innerHTML = `
@@ -357,12 +585,12 @@ function openStudentModal(studentId) {
         <div class="student-detail-hero">
             <div class="student-detail-photo">${photo}</div>
             <div class="student-detail-hero-info">
-                <h2>${escapeHtml(student.name)}</h2>
-                <div class="roll">Roll No: #${escapeHtml(student.rollNo || '—')}</div>
+                <h2>${escapeHtml(student.full_name)}</h2>
+                <div class="roll">Roll No: #${escapeHtml(student.roll_number || '—')}</div>
                 <div class="meta">
                     <span>${escapeHtml(student.gender || '—')}</span>
                     <span>Age: ${escapeHtml(String(student.age || '—'))}</span>
-                    <span>Class: ${escapeHtml(student.activeClass || '—')}</span>
+                    <span>Class: ${escapeHtml(student.active_class_status ? 'Active' : 'No class')}</span>
                 </div>
             </div>
         </div>
@@ -371,12 +599,12 @@ function openStudentModal(studentId) {
         <div class="student-detail-section">
             <h3>Personal Details</h3>
             <div class="info-grid">
-                <div class="info-item"><div class="info-label">Date of Birth</div><div class="info-value">${escapeHtml(formatDate(student.dob) || '—')}</div></div>
-                <div class="info-item"><div class="info-label">Joining Date</div><div class="info-value">${escapeHtml(formatDate(student.joiningDate) || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Date of Birth</div><div class="info-value">${escapeHtml(formatDate(student.date_of_birth) || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Joining Date</div><div class="info-value">${escapeHtml(formatDate(student.joining_date) || '—')}</div></div>
                 <div class="info-item"><div class="info-label">Category</div><div class="info-value">${escapeHtml(student.category || '—')}</div></div>
-                <div class="info-item"><div class="info-label">BPL</div><div class="info-value">${escapeHtml(student.bpl || '—')}</div></div>
-                <div class="info-item"><div class="info-label">Address</div><div class="info-value">${escapeHtml(student.address || '—')}</div></div>
-                <div class="info-item"><div class="info-label">School</div><div class="info-value">${escapeHtml(school ? school.name : '—')}</div></div>
+                <div class="info-item"><div class="info-label">BPL</div><div class="info-value">${escapeHtml(student.bpl ? 'Yes' : 'No')}</div></div>
+                <div class="info-item"><div class="info-label">Address</div><div class="info-value">${escapeHtml(student.full_address || '—')}</div></div>
+                <div class="info-item"><div class="info-label">School</div><div class="info-value">${escapeHtml(schoolName)}</div></div>
             </div>
         </div>
 
@@ -384,12 +612,12 @@ function openStudentModal(studentId) {
         <div class="student-detail-section">
             <h3>Family Details</h3>
             <div class="info-grid">
-                <div class="info-item"><div class="info-label">Father's Name</div><div class="info-value">${escapeHtml(student.fatherName || '—')}</div></div>
-                <div class="info-item"><div class="info-label">Father's Mobile</div><div class="info-value">${escapeHtml(student.fatherMobile || '—')}</div></div>
-                <div class="info-item"><div class="info-label">Father's Occupation</div><div class="info-value">${escapeHtml(student.fatherOccupation || '—')}</div></div>
-                <div class="info-item"><div class="info-label">Mother's Name</div><div class="info-value">${escapeHtml(student.motherName || '—')}</div></div>
-                <div class="info-item"><div class="info-label">Mother's Mobile</div><div class="info-value">${escapeHtml(student.motherMobile || '—')}</div></div>
-                <div class="info-item"><div class="info-label">Mother's Occupation</div><div class="info-value">${escapeHtml(student.motherOccupation || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Father's Name</div><div class="info-value">${escapeHtml(student.father_name || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Father's Mobile</div><div class="info-value">${escapeHtml(student.father_mobile_number || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Father's Occupation</div><div class="info-value">${escapeHtml(student.father_occupation || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Mother's Name</div><div class="info-value">${escapeHtml(student.mother_name || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Mother's Mobile</div><div class="info-value">${escapeHtml(student.mother_mobile_number || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Mother's Occupation</div><div class="info-value">${escapeHtml(student.mother_occupation || '—')}</div></div>
             </div>
         </div>
 
@@ -397,8 +625,8 @@ function openStudentModal(studentId) {
         <div class="student-detail-section">
             <h3>Contact</h3>
             <div class="info-grid">
-                <div class="info-item"><div class="info-label">Contact Number</div><div class="info-value">${escapeHtml(student.contactNumber || '—')}</div></div>
-                <div class="info-item"><div class="info-label">WhatsApp</div><div class="info-value">${escapeHtml(student.whatsapp || '—')}</div></div>
+                <div class="info-item"><div class="info-label">Contact Number</div><div class="info-value">${escapeHtml(student.contact || '—')}</div></div>
+                <div class="info-item"><div class="info-label">WhatsApp</div><div class="info-value">${escapeHtml(student.whats_app || '—')}</div></div>
             </div>
         </div>
 
@@ -406,7 +634,7 @@ function openStudentModal(studentId) {
         <div class="student-detail-section">
             <h3>Centre</h3>
             <div class="info-grid">
-                <div class="info-item"><div class="info-label">Centre</div><div class="info-value">${escapeHtml(currentCentre.name)}</div></div>
+                <div class="info-item"><div class="info-label">Centre</div><div class="info-value">${escapeHtml(currentCentre.center_name)}</div></div>
                 <div class="info-item"><div class="info-label">Village</div><div class="info-value">${escapeHtml(currentVillage ? currentVillage.name : '—')}</div></div>
                 <div class="info-item"><div class="info-label">Teacher</div><div class="info-value">${escapeHtml(currentTeacher ? currentTeacher.name : '—')}</div></div>
                 <div class="info-item"><div class="info-label">Regional Admin</div><div class="info-value">${escapeHtml(currentAdmin ? currentAdmin.name : '—')}</div></div>
@@ -445,7 +673,7 @@ function openIdCardModal() {
         : getInitials(student.name);
 
     // Compact QR payload — enough to identify the student uniquely.
-    const qrPayload = `ESS-STUDENT|${student.rollNo || student.id}|${student.name}|${currentCentre.name}`;
+    const qrPayload = `ESS-STUDENT|${student.rollNo || student.id}|${student.name}|${currentCentre.center_name}`;
     const qrSvg = buildQrSvg(qrPayload, 90);
 
     // Logo path is relative to /pages/attendance/ (this page's directory)
@@ -469,7 +697,7 @@ function openIdCardModal() {
                     <div class="id-card-roll">Roll No: #${escapeHtml(student.rollNo || '—')}</div>
                     <div class="id-card-info-row"><strong>Class:</strong> ${escapeHtml(student.activeClass || '—')}</div>
                     <div class="id-card-info-row"><strong>DOB:</strong> ${escapeHtml(formatDate(student.dob) || '—')}</div>
-                    <div class="id-card-info-row"><strong>Centre:</strong> ${escapeHtml(currentCentre.name)}</div>
+                    <div class="id-card-info-row"><strong>Centre:</strong> ${escapeHtml(currentCentre.center_name)}</div>
                     <div class="id-card-info-row"><strong>Father:</strong> ${escapeHtml(student.fatherName || '—')}</div>
                 </div>
             </div>
@@ -572,16 +800,30 @@ function collectStyleSheets() {
 
 let attendanceStudentId = null;
 
-function openAttendanceModal(studentId) {
-    const student = findRecord('students', studentId);
+async function openAttendanceModal(studentId) {
+    // Fetch student from API
+    let student;
+    try {
+        showGlobalLoader('Loading student...');
+        const url = `${getUrl('students')}?id=${studentId}`;
+        const response = await apiFetch(url);
+        student = response;
+    } catch (error) {
+        console.error('Failed to load student:', error);
+        showToast('Failed to load student details', 'danger');
+        return;
+    } finally {
+        hideGlobalLoader();
+    }
+
     if (!student) return;
 
     attendanceStudentId = studentId;
 
     document.getElementById('attendance-modal-title').textContent =
-        `Attendance - ${student.name}`;
+        `Attendance - ${student.full_name || student.name}`;
     document.getElementById('attendance-modal-subtitle').textContent =
-        `Roll No #${student.rollNo || '—'}`;
+        `Roll No #${student.roll_number || student.rollNo || '—'}`;
 
     // Default filter values: day-wise for current month
     const today = new Date();
@@ -616,100 +858,144 @@ function renderAttendanceData() {
     }
 }
 
-function renderDayWiseAttendance(monthValue) {
+async function renderDayWiseAttendance(monthValue) {
     // Parse the selected month
     const [year, month] = monthValue.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
     const today = new Date();
 
     // Column headers for the day-wise table
     document.getElementById('att-col-1').textContent = 'Date';
     document.getElementById('att-col-2').textContent = 'Attendance';
 
-    let present = 0, absent = 0, total = 0;
-    const rows = [];
+    showGlobalLoader('Loading attendance...');
+    
+    try {
+        const url = `${getUrl('student-daily-attendance')}?student_id=${attendanceStudentId}&year=${year}&month=${month}`;
+        const response = await apiFetch(url);
+        
+        let present = 0, absent = 0, total = 0;
+        const rows = [];
+        
+        if (response?.daily) {
+            for (const day of response.daily) {
+                const date = new Date(day.date);
+                // Don't render days in the future
+                if (date > today) continue;
+                // Skip Sundays
+                if (date.getDay() === 0) continue;
+                
+                total++;
+                if (day.status === 'Present') present++; else absent++;
 
-    // Iterate from day 1 to the last day of the selected month
-    for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(year, month - 1, day);
-        // Don't render days in the future
-        if (date > today) continue;
-        // Skip Sundays (typical school off-day)
-        if (date.getDay() === 0) continue;
+                rows.push(`
+                    <tr>
+                        <td>${formatDate(day.date)}</td>
+                        <td>
+                            ${day.status === 'Present'
+                                ? '<span class="badge badge-success">Present</span>'
+                                : '<span class="badge badge-danger">Absent</span>'}
+                        </td>
+                    </tr>
+                `);
+            }
+        }
 
-        const status = fakeAttendanceFor(attendanceStudentId, date);
-        total++;
-        if (status === 'Present') present++; else absent++;
+        const pct = total ? Math.round((present / total) * 100) : 0;
+        renderAttendanceSummary(present, absent, pct);
 
-        rows.push(`
-            <tr>
-                <td>${formatDate(date.toISOString())}</td>
-                <td>
-                    ${status === 'Present'
-                        ? '<span class="badge badge-success">Present</span>'
-                        : '<span class="badge badge-danger">Absent</span>'}
-                </td>
-            </tr>
-        `);
+        document.getElementById('att-table-body').innerHTML =
+            rows.length
+                ? rows.reverse().join('')  // newest first
+                : `<tr><td colspan="2" class="table-empty">No attendance in this month yet.</td></tr>`;
+    } catch (e) {
+        console.error('Failed to fetch daily attendance:', e);
+        showToast('Failed to load attendance data', 'danger');
+        document.getElementById('att-table-body').innerHTML =
+            `<tr><td colspan="2" class="table-empty">Error loading attendance data.</td></tr>`;
+    } finally {
+        hideGlobalLoader();
     }
-
-    const pct = total ? Math.round((present / total) * 100) : 0;
-    renderAttendanceSummary(present, absent, pct);
-
-    document.getElementById('att-table-body').innerHTML =
-        rows.length
-            ? rows.reverse().join('')  // newest first
-            : `<tr><td colspan="2" class="table-empty">No attendance in this month yet.</td></tr>`;
 }
 
-function renderMonthWiseAttendance() {
+async function renderMonthWiseAttendance() {
     // Column headers for the month-wise table
     document.getElementById('att-col-1').textContent = 'Month';
     document.getElementById('att-col-2').textContent = 'Attendance %';
 
-    let totalP = 0, totalA = 0;
-    const rows = [];
-    const today = new Date();
-
-    // Last 6 months, newest first
-    for (let i = 0; i < 6; i++) {
-        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-
-        let p = 0, a = 0;
-        for (let day = 1; day <= daysInMonth; day++) {
-            const d = new Date(date.getFullYear(), date.getMonth(), day);
-            if (d > today) continue;
-            if (d.getDay() === 0) continue;
-            const status = fakeAttendanceFor(attendanceStudentId, d);
-            if (status === 'Present') p++; else a++;
+    showGlobalLoader('Loading attendance...');
+    
+    try {
+        const url = `${getUrl('student-attendance-history')}?student_id=${attendanceStudentId}`;
+        const response = await apiFetch(url);
+        
+        let totalP = 0, totalA = 0;
+        const rows = [];
+        const today = new Date();
+        
+        if (response?.history) {
+            // Group by month
+            const monthlyMap = {};
+            for (const record of response.history) {
+                const date = new Date(record.date);
+                if (date > today) continue;
+                if (date.getDay() === 0) continue;
+                
+                const year = date.getFullYear();
+                const month = date.getMonth();
+                const key = `${year}-${month}`;
+                
+                if (!monthlyMap[key]) {
+                    monthlyMap[key] = { year, month, present: 0, absent: 0, total: 0 };
+                }
+                monthlyMap[key].total++;
+                if (record.status === 'Present') {
+                    monthlyMap[key].present++;
+                } else {
+                    monthlyMap[key].absent++;
+                }
+            }
+            
+            // Sort by month (newest first) and take last 6 months
+            const sortedMonths = Object.values(monthlyMap)
+                .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month))
+                .slice(0, 6);
+            
+            for (const m of sortedMonths) {
+                const pct = m.total ? Math.round((m.present / m.total) * 100) : 0;
+                const label = new Date(m.year, m.month, 1).toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
+                
+                rows.push(`
+                    <tr>
+                        <td>${escapeHtml(label)}</td>
+                        <td>
+                            <div class="attendance-pct">
+                                <div class="attendance-pct-bar">
+                                    <div class="attendance-pct-fill ${pct < 60 ? 'low' : pct < 80 ? 'medium' : ''}" style="width:${pct}%;"></div>
+                                </div>
+                                <span>${pct}% (${m.present}/${m.total})</span>
+                            </div>
+                        </td>
+                    </tr>
+                `);
+                
+                totalP += m.present;
+                totalA += m.absent;
+            }
         }
 
-        totalP += p; totalA += a;
-        const monthTotal = p + a;
-        const pct = monthTotal ? Math.round((p / monthTotal) * 100) : 0;
-        const label = date.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
+        const total = totalP + totalA;
+        const totalPct = total ? Math.round((totalP / total) * 100) : 0;
+        renderAttendanceSummary(totalP, totalA, totalPct);
 
-        rows.push(`
-            <tr>
-                <td>${escapeHtml(label)}</td>
-                <td>
-                    <div class="attendance-pct">
-                        <div class="attendance-pct-bar">
-                            <div class="attendance-pct-fill ${pct < 60 ? 'low' : pct < 80 ? 'medium' : ''}" style="width:${pct}%;"></div>
-                        </div>
-                        <span>${pct}% (${p}/${monthTotal})</span>
-                    </div>
-                </td>
-            </tr>
-        `);
+        document.getElementById('att-table-body').innerHTML = rows.join('');
+    } catch (e) {
+        console.error('Failed to fetch monthly attendance:', e);
+        showToast('Failed to load attendance data', 'danger');
+        document.getElementById('att-table-body').innerHTML =
+            `<tr><td colspan="2" class="table-empty">Error loading attendance data.</td></tr>`;
+    } finally {
+        hideGlobalLoader();
     }
-
-    const total = totalP + totalA;
-    const totalPct = total ? Math.round((totalP / total) * 100) : 0;
-    renderAttendanceSummary(totalP, totalA, totalPct);
-
-    document.getElementById('att-table-body').innerHTML = rows.join('');
 }
 
 function renderAttendanceSummary(present, absent, pct) {
@@ -730,36 +1016,6 @@ function renderAttendanceSummary(present, absent, pct) {
 }
 
 /* ================================================================
-   FAKE ATTENDANCE GENERATOR
-   ----------------------------------------------------------------
-   Deterministic pseudo-random Present/Absent per (student, date).
-   Real attendance comes from the mobile app; this stands in for
-   the UI so the interface is usable in the demo.
-   ================================================================ */
-
-function fakeAttendanceFor(studentId, date) {
-    const key = `${studentId}-${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
-    let hash = 0;
-    for (let i = 0; i < key.length; i++) {
-        hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
-    }
-    // ~85% present bias
-    return (Math.abs(hash) % 100) < 85 ? 'Present' : 'Absent';
-}
-
-function computeStudentAveragePct(studentId) {
-    const today = new Date();
-    let p = 0, total = 0;
-    for (let i = 0; i < 30; i++) {
-        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
-        if (d.getDay() === 0) continue;
-        total++;
-        if (fakeAttendanceFor(studentId, d) === 'Present') p++;
-    }
-    return total ? Math.round((p / total) * 100) : 0;
-}
-
-/* ================================================================
    TAB 4 - ANALYTICS
    ================================================================ */
 
@@ -770,12 +1026,15 @@ function initAnalytics() {
     document.getElementById('analytics-date').value = iso;
 }
 
-function renderAnalytics() {
-    const mode = document.getElementById('analytics-mode').value;
-    const dateStr = document.getElementById('analytics-date').value;
-    const refDate = dateStr ? new Date(dateStr) : new Date();
+async function renderAnalytics() {
+    showGlobalLoader('Loading analytics...');
+    try {
+        const mode = document.getElementById('analytics-mode').value;
+        const dateStr = document.getElementById('analytics-date').value;
+        const refDate = dateStr ? new Date(dateStr) : new Date();
 
-    const centreStudents = getRecords('students').filter(s => s.centreId === currentCentre.id);
+    // Use cached students from the centre detail page
+    const centreStudents = centreStudentsCache || [];
 
     const bars = [];
     const labels = [];
@@ -788,7 +1047,7 @@ function renderAnalytics() {
 
         for (let i = 13; i >= 0; i--) {
             const d = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate() - i);
-            const pct = averagePercentageForCentreOnDate(centreStudents, d);
+            const pct = await averagePercentageForCentreOnDate(centreStudents, d);
             bars.push(pct);
             labels.push(d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
         }
@@ -800,7 +1059,7 @@ function renderAnalytics() {
 
         for (let i = 11; i >= 0; i--) {
             const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
-            const pct = averagePercentageForCentreInMonth(centreStudents, d);
+            const pct = await averagePercentageForCentreInMonth(centreStudents, d);
             bars.push(pct);
             labels.push(d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }));
         }
@@ -816,36 +1075,55 @@ function renderAnalytics() {
     document.getElementById('analytics-labels').innerHTML = labels.map(l => `
         <div class="analytics-label">${escapeHtml(l)}</div>
     `).join('');
+    } finally {
+        hideGlobalLoader();
+    }
 }
 
-function averagePercentageForCentreOnDate(students, date) {
+async function averagePercentageForCentreOnDate(students, date) {
     if (students.length === 0 || date.getDay() === 0) return 0;
-    let present = 0;
-    students.forEach(s => { if (fakeAttendanceFor(s.id, date) === 'Present') present++; });
-    return Math.round((present / students.length) * 100);
+    
+    try {
+        const dateStr = date.toISOString().split('T')[0];
+        const params = new URLSearchParams({
+            center_id: currentCentre.id,
+            date: dateStr
+        });
+        const url = `${getUrl('attendance')}?${params}`;
+        const response = await apiFetch(url);
+        
+        const centres = response?.results || [];
+        const centreData = centres.find(c => c.id === currentCentre.id);
+        if (centreData && centreData.total_students > 0) {
+            return Math.round((centreData.present_students / centreData.total_students) * 100);
+        }
+    } catch (e) {
+        console.warn('Failed to fetch attendance for date:', e);
+    }
+    return 0;
 }
 
-function averagePercentageForCentreInMonth(students, monthDate) {
+async function averagePercentageForCentreInMonth(students, monthDate) {
     if (students.length === 0) return 0;
     const year = monthDate.getFullYear();
     const month = monthDate.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = new Date();
 
-    let totalMarks = 0;
-    let presentMarks = 0;
+    let totalPct = 0;
+    let dayCount = 0;
 
     for (let day = 1; day <= daysInMonth; day++) {
         const d = new Date(year, month, day);
-        if (d > today) continue;
+        if (d > today) break;
         if (d.getDay() === 0) continue;
-        students.forEach(s => {
-            totalMarks++;
-            if (fakeAttendanceFor(s.id, d) === 'Present') presentMarks++;
-        });
+
+        const pct = await averagePercentageForCentreOnDate(students, d);
+        totalPct += pct;
+        dayCount++;
     }
 
-    return totalMarks ? Math.round((presentMarks / totalMarks) * 100) : 0;
+    return dayCount ? Math.round(totalPct / dayCount) : 0;
 }
 
 /* ================================================================

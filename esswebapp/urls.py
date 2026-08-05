@@ -14,7 +14,7 @@ urlpatterns = [
     # Protected routes (require login)
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('centres/', CenterView.as_view(), name='centres'),
-    path('attendance/', AttendanceView.as_view(), name='attendance'),
+    path('attendance/', CenterAttendanceView.as_view(), name='attendance'),
     path('students/', StudentsView.as_view(), name='students'),
     path('students/school-dropdown-list/', SchoolDropDownView.as_view(), name='school-dropdown-list'),
     path('school-details-list/', SchoolListView.as_view(), name='school-details-list'),
@@ -34,5 +34,10 @@ urlpatterns = [
     
     # Attendance center detail page
     path('attendance/center-detail/', AttendanceView.as_view(), name='center-detail'),
+    
+    # Student attendance history APIs
+    path('students/attendance-history/', StudentsView.as_view(), name='student-attendance-history'),
+    path('students/monthly-attendance/', StudentsView.as_view(), name='student-monthly-attendance'),
+    path('students/daily-attendance/', StudentsView.as_view(), name='student-daily-attendance'),
     
 ]

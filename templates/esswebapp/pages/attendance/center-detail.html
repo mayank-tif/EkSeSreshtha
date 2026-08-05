@@ -1,207 +1,188 @@
+{% extends "esswebapp/base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Centre Detail - Ek Se Sreshtha</title>
 
-    <!-- Google Font -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+{% block title %}Centre Detail - Ek Se Sreshtha{% endblock %}
 
-    <!-- Stylesheets: tokens -> base -> components -> layout -> page -->
-    <link rel="stylesheet" href="{% static 'esswebapp/css/variables.css' %}">
-    <link rel="stylesheet" href="{% static 'esswebapp/css/base.css' %}">
-    <link rel="stylesheet" href="{% static 'esswebapp/css/components.css' %}">
-    <link rel="stylesheet" href="{% static 'esswebapp/css/layout.css' %}">
+{% block extra-css %}
     <link rel="stylesheet" href="{% static 'esswebapp/css/attendance.css' %}">
-</head>
-<body
-    data-user-session='{{ user|default:"{}"|safe }}'
-    data-url-dashboard="{% url 'esswebapp:dashboard' %}"
-    data-url-centres="{% url 'esswebapp:centres' %}"
-    data-url-attendance="{% url 'esswebapp:attendance' %}"
-    data-url-students="{% url 'esswebapp:students' %}"
-    data-url-users="{% url 'esswebapp:users' %}"
-    data-url-logout="{% url 'esswebapp:logout' %}"
-    data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
-    data-url-district="{% url 'esswebapp:district' %}"
-    data-url-vidhan-sabha="{% url 'esswebapp:vidhan-sabha' %}"
-    data-url-panchayat="{% url 'esswebapp:panchayat' %}"
-    data-url-village="{% url 'esswebapp:village' %}"
-    data-url-super-admin="{% url 'esswebapp:super-admin' %}"
-    data-url-regional-admin="{% url 'esswebapp:regional-admin' %}"
-    data-url-teacher="{% url 'esswebapp:teacher' %}"
-    data-url-student-registration="{% url 'esswebapp:student-registration' %}"
-    data-url-school-dropdown-list="{% url 'esswebapp:school-dropdown-list' %}"
->
+{% endblock %}
+
+{% block page-content %}
+    <!-- ============================================================
+         CENTRE HERO BANNER
+         Shows the centre name, location, and a back link.
+         Filled in by center-detail.js.
+         ============================================================ -->
+    <div class="detail-hero" id="detail-hero">
+        <div class="detail-hero-icon">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 21h18M4 21V10l8-6 8 6v11M9 21v-6h6v6"/>
+            </svg>
+        </div>
+        <div class="detail-hero-info">
+            <h2 id="detail-hero-title">Loading...</h2>
+            <p id="detail-hero-subtitle"></p>
+        </div>
+        <a class="detail-hero-back" href="{% url 'esswebapp:attendance' %}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            All Centres
+        </a>
+    </div>
 
     <!-- ============================================================
-         APP SHELL
+         TAB BAR
+         Four tabs. Content panels below are toggled by JS.
          ============================================================ -->
-    <div id="app-shell">
+    <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="info" onclick="switchTab('info')">
+            Centre Info
+        </button>
+        <button class="tab" data-tab="staff" onclick="switchTab('staff')">
+            Staff
+        </button>
+        <button class="tab" data-tab="students" onclick="switchTab('students')">
+            Students
+        </button>
+        <button class="tab" data-tab="analytics" onclick="switchTab('analytics')">
+            Analytics
+        </button>
+    </div>
 
-        <!-- ============================================================
-             CENTRE HERO BANNER
-             Shows the centre name, location, and a back link.
-             Filled in by center-detail.js.
-             ============================================================ -->
-        <div class="detail-hero" id="detail-hero">
-            <div class="detail-hero-icon">
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M3 21h18M4 21V10l8-6 8 6v11M9 21v-6h6v6"/>
-                </svg>
-            </div>
-            <div class="detail-hero-info">
-                <h2 id="detail-hero-title">Loading...</h2>
-                <p id="detail-hero-subtitle"></p>
-            </div>
-            <a class="detail-hero-back" href="{% url 'esswebapp:attendance' %}">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M19 12H5M12 19l-7-7 7-7"/>
-                </svg>
-                All Centres
-            </a>
-        </div>
-
-        <!-- ============================================================
-             TAB BAR
-             Four tabs. Content panels below are toggled by JS.
-             ============================================================ -->
-        <div class="tabs" role="tablist">
-            <button class="tab active" data-tab="info" onclick="switchTab('info')">
-                Centre Info
-            </button>
-            <button class="tab" data-tab="staff" onclick="switchTab('staff')">
-                Staff
-            </button>
-            <button class="tab" data-tab="students" onclick="switchTab('students')">
-                Students
-            </button>
-            <button class="tab" data-tab="analytics" onclick="switchTab('analytics')">
-                Analytics
-            </button>
-        </div>
-
-        <!-- ============================================================
-             TAB 1 - CENTRE INFO
-             Displays every field of the centre.
-             ============================================================ -->
-        <div class="tab-content active tab-panel" id="tab-info">
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h2 class="card-title">Centre Information</h2>
-                        <p class="card-subtitle">Details about this educational centre.</p>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="info-grid" id="info-grid"></div>
+    <!-- ============================================================
+         TAB 1 - CENTRE INFO
+         Displays every field of the centre.
+         ============================================================ -->
+    <div class="tab-content active tab-panel" id="tab-info">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Centre Information</h2>
+                    <p class="card-subtitle">Details about this educational centre.</p>
                 </div>
             </div>
+            <div class="card-body">
+                <div class="info-grid" id="info-grid"></div>
+            </div>
         </div>
+    </div>
 
-        <!-- ============================================================
-             TAB 2 - STAFF (Teacher + Regional Admin cards)
-             ============================================================ -->
-        <div class="tab-content tab-panel" id="tab-staff">
-            <div class="staff-grid" id="staff-grid"></div>
-        </div>
+    <!-- ============================================================
+         TAB 2 - STAFF (Teacher + Regional Admin cards)
+         ============================================================ -->
+    <div class="tab-content tab-panel" id="tab-staff">
+        <div class="staff-grid" id="staff-grid"></div>
+    </div>
 
-        <!-- ============================================================
-             TAB 3 - STUDENTS
-             Search bar + table of assigned students.
-             ============================================================ -->
-        <div class="tab-content tab-panel" id="tab-students">
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h2 class="card-title">Students Enrolled</h2>
-                        <p class="card-subtitle">
-                            <span class="record-count" id="student-count">0 students</span>
-                        </p>
-                    </div>
-                    <div class="search-bar">
-                        <input type="text" class="form-input" id="student-search"
-                               placeholder="Search students..." oninput="renderStudentTable()">
-                    </div>
+    <!-- ============================================================
+         TAB 3 - STUDENTS
+         Search bar + table of assigned students.
+         ============================================================ -->
+    <div class="tab-content tab-panel" id="tab-students">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Students Enrolled</h2>
+                    <p class="card-subtitle">
+                        <span class="record-count" id="student-count">0 students</span>
+                    </p>
                 </div>
-                <div class="card-body">
-                    <div class="table-wrapper">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th style="width:120px;">Roll No</th>
-                                    <th>Name</th>
-                                    <th style="width:180px;">Avg Attendance</th>
-                                    <th style="width:130px;">Joining Date</th>
-                                    <th style="width:130px;">Status</th>
-                                    <th style="width:160px;">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="student-table-body"></tbody>
-                        </table>
+                <div class="search-bar">
+                    <input type="text" class="form-input" id="student-search"
+                           placeholder="Search students..." oninput="renderStudentTable()">
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th style="width:120px;">Roll No</th>
+                                <th>Name</th>
+                                <th style="width:180px;">Avg Attendance</th>
+                                <th style="width:130px;">Joining Date</th>
+                                <th style="width:130px;">Status</th>
+                                <th style="width:160px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="student-table-body"></tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div class="pagination-wrapper">
+                    <div class="pagination-info">
+                        Showing <span id="pagination-start">0</span> to <span id="pagination-end">0</span> of <span id="pagination-total">0</span>
+                    </div>
+                    <div class="pagination-controls">
+                        <button class="btn btn-sm btn-secondary" id="prev-page" disabled>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                            Previous
+                        </button>
+                        <div class="page-numbers" id="page-numbers"></div>
+                        <button class="btn btn-sm btn-secondary" id="next-page" disabled>
+                            Next
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- ============================================================
-             TAB 4 - ANALYTICS
-             View mode toggle + date filter + CSS bar chart.
-             ============================================================ -->
-        <div class="tab-content tab-panel" id="tab-analytics">
-            <div class="card">
-                <div class="card-header">
-                    <div>
-                        <h2 class="card-title">Attendance Analytics</h2>
-                        <p class="card-subtitle">Track attendance trends for this centre over time.</p>
+    <!-- ============================================================
+         TAB 4 - ANALYTICS
+         View mode toggle + date filter + CSS bar chart.
+         ============================================================ -->
+    <div class="tab-content tab-panel" id="tab-analytics">
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <h2 class="card-title">Attendance Analytics</h2>
+                    <p class="card-subtitle">Track attendance trends for this centre over time.</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Filter row -->
+                <div class="analytics-toolbar">
+                    <div class="form-group">
+                        <label class="form-label" for="analytics-mode">View</label>
+                        <select id="analytics-mode" class="form-select" onchange="renderAnalytics()">
+                            <option value="day">Day-wise</option>
+                            <option value="month">Month-wise</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="analytics-date-group">
+                        <label class="form-label" for="analytics-date">Reference Date</label>
+                        <input type="date" id="analytics-date" class="form-input"
+                               onchange="renderAnalytics()">
                     </div>
                 </div>
-                <div class="card-body">
-                    <!-- Filter row -->
-                    <div class="analytics-toolbar">
-                        <div class="form-group">
-                            <label class="form-label" for="analytics-mode">View</label>
-                            <select id="analytics-mode" class="form-select" onchange="renderAnalytics()">
-                                <option value="day">Day-wise</option>
-                                <option value="month">Month-wise</option>
-                            </select>
-                        </div>
-                        <div class="form-group" id="analytics-date-group">
-                            <label class="form-label" for="analytics-date">Reference Date</label>
-                            <input type="date" id="analytics-date" class="form-input"
-                                   onchange="renderAnalytics()">
-                        </div>
-                    </div>
 
-                    <!-- Chart -->
-                    <div class="analytics-chart">
-                        <div class="analytics-chart-title" id="analytics-chart-title">
-                            Attendance Trend
-                        </div>
-                        <div class="analytics-chart-subtitle" id="analytics-chart-subtitle">
-                            Loading...
-                        </div>
-                        <div class="analytics-bars" id="analytics-bars"></div>
-                        <div class="analytics-labels" id="analytics-labels"></div>
-                        <div class="analytics-legend">
-                            <div class="analytics-legend-item">
-                                <span class="analytics-legend-swatch"></span>
-                                Attendance %
-                            </div>
+                <!-- Chart -->
+                <div class="analytics-chart">
+                    <div class="analytics-chart-title" id="analytics-chart-title">
+                        Attendance Trend
+                    </div>
+                    <div class="analytics-chart-subtitle" id="analytics-chart-subtitle">
+                        Loading...
+                    </div>
+                    <div class="analytics-bars" id="analytics-bars"></div>
+                    <div class="analytics-labels" id="analytics-labels"></div>
+                    <div class="analytics-legend">
+                        <div class="analytics-legend-item">
+                            <span class="analytics-legend-swatch"></span>
+                            Attendance %
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-
     </div>
 
     <!-- ============================================================
@@ -297,18 +278,8 @@
         </div>
     </div>
 
-    <!-- ============================================================
-         SCRIPTS
-         ============================================================ -->
-    <script src="{% static 'esswebapp/js/common.js' %}"></script>
-    <script src="{% static 'esswebapp/js/sidebar.js' %}"></script>
+{% endblock %}
+
+{% block extra-js %}
     <script src="{% static 'esswebapp/js/center-detail.js' %}"></script>
-    <script>
-        renderShell({
-            title: 'Centre Detail',
-            active: 'attendance',
-            breadcrumbs: [{label: 'Attendance'}, {label: 'Centre Detail'}]
-        });
-    </script>
-</body>
-</html>
+{% endblock %}

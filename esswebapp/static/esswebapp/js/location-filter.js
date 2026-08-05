@@ -99,6 +99,7 @@ function initLocationFilter(onChange) {
         if (districtId) {
             const vsList = await fetchVidhanSabhas(districtId);
             locationCache.vidhanSabhas[districtId] = vsList;
+            fillFilterSelect(vsSel, vsList, 'All Vidhan Sabhas');
         } else {
             // If no district selected, clear VS and below
             resetFilterSelect(vsSel, 'All Vidhan Sabhas');
@@ -114,6 +115,7 @@ function initLocationFilter(onChange) {
         if (vsId) {
             const pList = await fetchPanchayats(vsId);
             locationCache.panchayats[vsId] = pList;
+            fillFilterSelect(panchayatSel, pList, 'All Panchayats');
         } else {
             resetFilterSelect(panchayatSel, 'All Panchayats');
             resetFilterSelect(villageSel, 'All Villages');
@@ -127,6 +129,7 @@ function initLocationFilter(onChange) {
         if (pId) {
             const vList = await fetchVillages(pId);
             locationCache.villages[pId] = vList;
+            fillFilterSelect(villageSel, vList, 'All Villages');
         } else {
             resetFilterSelect(villageSel, 'All Villages');
         }
