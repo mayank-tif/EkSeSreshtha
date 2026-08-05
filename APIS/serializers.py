@@ -11,6 +11,46 @@ class GenerateAppTokenSerializer(serializers.Serializer):
     deviceid = serializers.CharField(max_length=250, required=True, allow_blank=False)
 
 
+class CenterAttendanceTokenSerializer(serializers.Serializer):
+    deviceid = serializers.CharField(max_length=250, required=True, allow_blank=False)
+
+
+class CenterAttendanceQuerySerializer(serializers.Serializer):
+    center_id = serializers.IntegerField(required=False, allow_null=True)
+    attendance_date = serializers.DateField(required=True)
+
+
+class CenterAttendanceStudentSerializer(serializers.Serializer):
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField(allow_null=True, required=False)
+    attendance_status = serializers.CharField(allow_null=True, required=False)
+    capture_type = serializers.CharField(allow_null=True, required=False)
+
+
+class CenterAttendanceTeacherSerializer(serializers.Serializer):
+    teacher_id = serializers.IntegerField()
+    teacher_name = serializers.CharField(allow_null=True, required=False)
+
+
+class CenterAttendanceCenterSerializer(serializers.Serializer):
+    center_id = serializers.IntegerField()
+    center_name = serializers.CharField(allow_null=True, required=False)
+    district = serializers.CharField(allow_null=True, required=False)
+    vidhan_sabha = serializers.CharField(allow_null=True, required=False)
+    panchayat = serializers.CharField(allow_null=True, required=False)
+    village = serializers.CharField(allow_null=True, required=False)
+    latitude = serializers.DecimalField(max_digits=10, decimal_places=7, allow_null=True, required=False)
+    longitude = serializers.DecimalField(max_digits=10, decimal_places=7, allow_null=True, required=False)
+    created_at = serializers.DateField(allow_null=True, required=False)
+
+
+class CenterAttendanceResponseSerializer(serializers.Serializer):
+    center = CenterAttendanceCenterSerializer()
+    teacher = CenterAttendanceTeacherSerializer()
+    attendance_date = serializers.DateField()
+    students = CenterAttendanceStudentSerializer(many=True)
+
+
 
 def format_dotnet_datetime(value):
     if not value:

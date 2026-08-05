@@ -1,7 +1,6 @@
 from django.db import models
 
 
-
 class District(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     district_guid_id = models.CharField(db_column="DistrictGuidId", max_length=36, unique=True)
@@ -27,14 +26,7 @@ class VidhanSabha(models.Model):
     vidhan_sabha_guid_id = models.CharField(db_column="VidhanSabhaGuidId", unique=True, max_length=36)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    district = models.ForeignKey(
-        District, 
-        db_column="DistrictId", 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        related_name='vidhan_sabhas'
-    )
+    district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='vidhan_sabhas')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -56,22 +48,8 @@ class Panchayat(models.Model):
     panchayat_guid_id = models.CharField(db_column="PanchayatGuidId", unique=True, max_length=36)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='panchayats'
-    )
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='panchayats'
-    )
+    district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='panchayats')
+    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='panchayats')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -91,33 +69,12 @@ class Panchayat(models.Model):
 
 class Village(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
-    village_guid_id = models.CharField(db_column="VillageGuidId",max_length=36, unique=True)
+    village_guid_id = models.CharField(db_column="VillageGuidId", max_length=36, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='villages'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='villages'
-    )
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='villages'
-    )
+    district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='villages')
+    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='villages')
+    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='villages')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -139,7 +96,7 @@ class Village(models.Model):
 class School(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     school_name = models.CharField(db_column="SchoolName", max_length=50, null=True, blank=True)
-    status= models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -158,7 +115,7 @@ class School(models.Model):
 class SchoolName(models.Model):
     id = models.IntegerField(db_column="Id", primary_key=True)
     school_name = models.CharField(db_column="SchoolName", max_length=50, unique=True)
-    status= models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -195,80 +152,17 @@ class Center(models.Model):
     #   NOTE: Different from ClassModel.status (which is Integer 1/2/3)
     # ============================================================
     class_status = models.BooleanField(db_column="ClassStatus", null=True, blank=True)
-    
-    # location_status (CharField): GPS LOCATION VERIFICATION STATUS (Mobile App Enhancement)
-    #   'PENDING' = Center registered but GPS not yet verified by coordinator
-    #   'VERIFIED' = Coordinator visited and verified GPS coordinates
-    #   Used in: QR attendance validation (Center must be VERIFIED)
-    #   Set by: CenterSaveView (if GPS provided) or CenterVerifyLocationView
-    # ============================================================
-    location_status = models.CharField(
-        max_length=20,
-        choices=[
-            ('PENDING', 'Location Verification Pending'),
-            ('VERIFIED', 'Location Verified'),
-        ],
-        default='PENDING',
-        db_column="LocationStatus"
-    )
-    
+    location_status = models.CharField(max_length=20, choices=[('PENDING', 'Location Verification Pending'), ('VERIFIED', 'Location Verified')], default='PENDING', db_column="LocationStatus")
     assigned_teachers = models.IntegerField(db_column="AssignedTeachers", null=True, blank=True)
     assigned_regional_admin = models.IntegerField(db_column="AssignedRegionalAdmin", null=True, blank=True)
-    
-    # GPS Location
-    latitude = models.DecimalField(
-        max_digits=10, decimal_places=7, 
-        null=True, blank=True,
-        db_column="Latitude"
-    )
-    longitude = models.DecimalField(
-        max_digits=10, decimal_places=7, 
-        null=True, blank=True,
-        db_column="Longitude"
-    )
-    
-    # Audit Trail
-    location_verified_at = models.DateTimeField(
-        null=True, blank=True, db_column="LocationVerifiedAt"
-    )
-    location_verified_by = models.ForeignKey(
-        'User', null=True, blank=True, 
-        on_delete=models.SET_NULL, db_column="LocationVerifiedBy"
-    )
-    
-    # Foreign Keys
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='centers'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='centers'
-    )
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='centers'
-    )
-    village = models.ForeignKey(
-        Village,
-        db_column="VillageId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='centers'
-    )
+    latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, db_column="Latitude")
+    longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, db_column="Longitude")
+    location_verified_at = models.DateTimeField(null=True, blank=True, db_column="LocationVerifiedAt")
+    location_verified_by = models.ForeignKey('User', null=True, blank=True, on_delete=models.SET_NULL, db_column="LocationVerifiedBy")
+    district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='centers')
+    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='centers')
+    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='centers')
+    village = models.ForeignKey(Village, db_column="VillageId", on_delete=models.SET_NULL, null=True, blank=True, related_name='centers')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -293,12 +187,12 @@ class Center(models.Model):
 
     def __str__(self):
         return self.center_name or str(self.id)
-    
-    
+
+
 class Role(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     role_name = models.CharField(db_column="RoleName", max_length=50, unique=True)
-    role_code = models.CharField(db_column="RoleCode", max_length=20, unique=True)  # SUPER_ADMIN, REGIONAL_ADMIN, TEACHER
+    role_code = models.CharField(db_column="RoleCode", max_length=20, unique=True)
     description = models.CharField(db_column="Description", max_length=100, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
@@ -327,16 +221,7 @@ class User(models.Model):
     updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    
-    # Foreign Keys
-    role = models.ForeignKey(
-        Role,
-        db_column="RoleId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='users'
-    )
+    role = models.ForeignKey(Role, db_column="RoleId", on_delete=models.SET_NULL, null=True, blank=True, related_name='users')
 
     class Meta:
         db_table = "Users"
@@ -369,14 +254,7 @@ class User(models.Model):
 class SuperAdmin(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     super_admin_guid_id = models.CharField(db_column="SuperAdminGuidId", max_length=36, unique=True)
-    
-    user = models.OneToOneField(
-        User,
-        db_column="UserId",
-        on_delete=models.CASCADE,
-        related_name='super_admin'
-    )
-    
+    user = models.OneToOneField(User, db_column="UserId", on_delete=models.CASCADE, related_name='super_admin')
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
@@ -388,10 +266,10 @@ class SuperAdmin(models.Model):
 
     def __str__(self):
         return f"SuperAdmin: {self.user.name if self.user else ''}"
-        
-        
+
 
 class ClassModel(models.Model):
+    CLASS_STATUS_CHOICES = [(1, 'Active'), (2, 'Completed'), (3, 'Cancelled')]
     id = models.AutoField(db_column="Id", primary_key=True)
     class_enrolment_id = models.CharField(db_column="ClassEnrolmentId", max_length=50, null=True, blank=True, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
@@ -425,16 +303,7 @@ class ClassModel(models.Model):
     #   Used for: Additional class sub-status tracking
     # ============================================================
     sub_status = models.IntegerField(db_column="SubStatus")
-    
-    # session_closed (BooleanField): SESSION CLOSURE FLAG (NEW - Mobile App Enhancement)
-    #   True  = Class session has been formally closed by teacher with photo
-    #   False = Session still open or not yet closed
-    #   Used in: ClassEndSessionView, prevents duplicate closure
-    # ============================================================
-    session_closed = models.BooleanField(
-        default=False, db_column="SessionClosed"
-    )
-    
+    session_closed = models.BooleanField(default=False, db_column="SessionClosed")
     total_students = models.IntegerField(db_column="TotalStudents", null=True, blank=True)
     avilable_students = models.IntegerField(db_column="AvilableStudents", null=True, blank=True)
     started_date = models.DateTimeField(db_column="StartedDate", null=True, blank=True)
@@ -443,31 +312,11 @@ class ClassModel(models.Model):
     cancel_by = models.IntegerField(db_column="CancelBy", null=True, blank=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
     cancel_date = models.DateTimeField(db_column="CancelDate", null=True, blank=True)
-    
-    # Session Closure Fields
-    classroom_photo_url = models.CharField(
-        max_length=500, null=True, blank=True, db_column="ClassroomPhotoUrl"
-    )
-    present_count = models.IntegerField(
-        default=0, db_column="PresentCount"
-    )
-    absent_count = models.IntegerField(
-        default=0, db_column="AbsentCount"
-    )
-    closed_by = models.ForeignKey(
-        'User', null=True, blank=True, 
-        on_delete=models.SET_NULL, db_column="ClosedBy"
-    )
-    
-    # Foreign Keys
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='classes'
-    )
+    classroom_photo_url = models.CharField(max_length=500, null=True, blank=True, db_column="ClassroomPhotoUrl")
+    present_count = models.IntegerField(default=0, db_column="PresentCount")
+    absent_count = models.IntegerField(default=0, db_column="AbsentCount")
+    closed_by = models.ForeignKey('User', null=True, blank=True, on_delete=models.SET_NULL, db_column="ClosedBy")
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='classes')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -498,40 +347,10 @@ class ClassDetail(models.Model):
     class_guid_id = models.CharField(db_column="ClassGuidId", max_length=36, unique=True)
     sccan_time_spam = models.BinaryField(db_column="SccanTimeSpam", null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    
-    # Foreign Keys
-    student = models.ForeignKey(
-        'Student',
-        db_column="StudentId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='class_details'
-    )
-    teacher = models.ForeignKey(
-        'Teacher',
-        db_column="TeacherId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='class_details'
-    )
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='class_details'
-    )
-    class_obj = models.ForeignKey(
-        ClassModel,
-        db_column="ClassId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='class_details'
-    )
+    student = models.ForeignKey('Student', db_column="StudentId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
+    teacher = models.ForeignKey('Teacher', db_column="TeacherId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
+    class_obj = models.ForeignKey(ClassModel, db_column="ClassId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -565,46 +384,11 @@ class RegionalAdmin(models.Model):
     assigned_teacher_status = models.BooleanField(db_column="AssignedTeacherStatus", null=True, blank=True)
     assigned_regional_admin_status = models.BooleanField(db_column="AssignedRegionalAdminStatus", null=True, blank=True)
     enrollment_date = models.DateTimeField(db_column="EnrollmentDate", null=True, blank=True)
-    
-    user = models.OneToOneField(
-        User,
-        db_column="UserId",
-        on_delete=models.CASCADE,
-        related_name='regional_admin'
-    )
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='regional_admins'
-    )
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='regional_admins'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='regional_admins'
-    )
-    village = models.ForeignKey(
-        Village,
-        db_column="VillageId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='regional_admins'
-    )
-    
+    user = models.OneToOneField(User, db_column="UserId", on_delete=models.CASCADE, related_name='regional_admin')
+    district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
+    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
+    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
+    village = models.ForeignKey(Village, db_column="VillageId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
@@ -638,54 +422,12 @@ class Teacher(models.Model):
     assigned_teacher_status = models.BooleanField(db_column="AssignedTeacherStatus", null=True, blank=True)
     assigned_regional_admin_status = models.BooleanField(db_column="AssignedRegionalAdminStatus", null=True, blank=True)
     enrollment_date = models.DateTimeField(db_column="EnrollmentDate", null=True, blank=True)
-    
-    user = models.OneToOneField(
-        User,
-        db_column="UserId",
-        on_delete=models.CASCADE,
-        related_name='teacher'
-    )
-    district = models.ForeignKey(
-        District,
-        db_column="DistrictId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='teachers'
-    )
-    vidhan_sabha = models.ForeignKey(
-        VidhanSabha,
-        db_column="VidhanSabhaId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='teachers'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='teachers'
-    )
-    village = models.ForeignKey(
-        Village,
-        db_column="VillageId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='teachers'
-    )
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='teachers'
-    )
-    
+    user = models.OneToOneField(User, db_column="UserId", on_delete=models.CASCADE, related_name='teacher')
+    district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='teachers')
+    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='teachers')
+    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='teachers')
+    village = models.ForeignKey(Village, db_column="VillageId", on_delete=models.SET_NULL, null=True, blank=True, related_name='teachers')
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='teachers')
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
@@ -702,7 +444,6 @@ class Teacher(models.Model):
 
     def __str__(self):
         return f"Teacher: {self.user.name if self.user else ''}"
-
 
 
 class Student(models.Model):
@@ -736,11 +477,9 @@ class Student(models.Model):
     category = models.CharField(db_column="Category", max_length=50, null=True, blank=True)
     father_mobile_number = models.CharField(db_column="FatherMobileNumber", max_length=50, null=True, blank=True)
     roll_number = models.IntegerField(db_column="roll_number", null=True, blank=True)
-    
-    # Foreign Keys
     district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
-    panchayat = models.ForeignKey(Panchayat,db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     village = models.ForeignKey(Village, db_column="VillageId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     school = models.ForeignKey(School, db_column="SchoolId", on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
@@ -777,16 +516,7 @@ class Holidays(models.Model):
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     start_date = models.DateTimeField(db_column="StartDate", null=True, blank=True)
     end_date = models.DateTimeField(db_column="EndDate", null=True, blank=True)
-    
-    # Foreign Keys
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='holidays'
-    )
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='holidays')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -806,22 +536,8 @@ class Holidays(models.Model):
 
 class HolidayCenter(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
-    holiday = models.ForeignKey(
-        Holidays,
-        db_column="HolidayId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='holiday_centers'
-    )
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='holiday_centers'
-    )
+    holiday = models.ForeignKey(Holidays, db_column="HolidayId", on_delete=models.SET_NULL, null=True, blank=True, related_name='holiday_centers')
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='holiday_centers')
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
@@ -882,16 +598,7 @@ class CenterAssignUser(models.Model):
     type = models.IntegerField(db_column="Type", null=True, blank=True)
     date = models.DateTimeField(db_column="Date", null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    
-    # Foreign Keys
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='center_assign_users'
-    )
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='center_assign_users')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -911,16 +618,7 @@ class CenterLog(models.Model):
     reason = models.CharField(db_column="Reason", max_length=50, null=True, blank=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    
-    # Foreign Keys
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='center_logs'
-    )
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='center_logs')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -941,16 +639,7 @@ class ClassCancelByTeacher(models.Model):
     ending_date = models.DateTimeField(db_column="EndingDate", null=True, blank=True)
     reason = models.CharField(db_column="Reason", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    
-    # Foreign Keys
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='class_cancel_by_teachers'
-    )
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_cancel_by_teachers')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -988,24 +677,8 @@ class RegionalAdminPanchayat(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     panchayat_name = models.CharField(db_column="PanchayatName", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    
-    # Foreign Keys
-    regional_admin = models.ForeignKey(
-        RegionalAdmin,
-        db_column="RegionalAdminId",  # Column name in database
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name='regional_admin_panchayats'
-    )
-    panchayat = models.ForeignKey(
-        Panchayat,
-        db_column="PanchayatId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='regional_admin_panchayats'
-    )
+    regional_admin = models.ForeignKey(RegionalAdmin, db_column="RegionalAdminId", on_delete=models.CASCADE, null=True, blank=True, related_name='regional_admin_panchayats')
+    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admin_panchayats')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -1018,68 +691,27 @@ class RegionalAdminPanchayat(models.Model):
             models.Index(fields=['panchayat'], name='idx_regadmpnhyt_panchayat'),
         ]
 
+
 class StudentAttendance(models.Model):
+    ATTENDANCE_TYPE_CHOICES = [
+        ('AUTO', 'QR Auto Scan'), 
+        ('MANUAL', 'Manual Fallback'), 
+        ('REGULAR', 'Regular')
+    ]
     id = models.AutoField(db_column="Id", primary_key=True)
     scan_date = models.DateTimeField(db_column="ScanDate", null=True, blank=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
     type = models.BooleanField(db_column="Type", null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    
-    # Attendance Type & Location
-    ATTENDANCE_TYPE_CHOICES = [
-        ('AUTO', 'QR Auto Scan'),
-        ('MANUAL', 'Manual Fallback'),
-        ('REGULAR', 'Regular')
-    ]
-    attendance_type = models.CharField(
-        max_length=20,
-        choices=ATTENDANCE_TYPE_CHOICES,
-        default='QR_AUTO',
-        db_column="AttendanceType"
-    )
-    captured_latitude = models.DecimalField(
-        max_digits=10, decimal_places=7, 
-        null=True, blank=True, db_column="CapturedLatitude"
-    )
-    captured_longitude = models.DecimalField(
-        max_digits=10, decimal_places=7, 
-        null=True, blank=True, db_column="CapturedLongitude"
-    )
-    location_verified = models.BooleanField(
-        default=False, null=True, blank=True, db_column="LocationVerified"
-    )
-    manual_reason = models.TextField(
-        null=True, blank=True, db_column="ManualReason"
-    )
-    device_info = models.CharField(
-        max_length=200, null=True, blank=True, db_column="DeviceInfo"
-    )
-    
-    # Foreign Keys
-    class_obj = models.ForeignKey(
-        ClassModel,
-        db_column="ClassId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='attendances'
-    )
-    student = models.ForeignKey(
-        Student,
-        db_column="StudentId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='attendances'
-    )
-    center = models.ForeignKey(
-        Center,
-        db_column="CenterId",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='attendances'
-    )
+    attendance_type = models.CharField(max_length=20, choices=ATTENDANCE_TYPE_CHOICES, default='QR_AUTO', db_column="AttendanceType")
+    captured_latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, db_column="CapturedLatitude")
+    captured_longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, db_column="CapturedLongitude")
+    location_verified = models.BooleanField(default=False, null=True, blank=True, db_column="LocationVerified")
+    manual_reason = models.TextField(null=True, blank=True, db_column="ManualReason")
+    device_info = models.CharField(max_length=200, null=True, blank=True, db_column="DeviceInfo")
+    class_obj = models.ForeignKey(ClassModel, db_column="ClassId", on_delete=models.SET_NULL, null=True, blank=True, related_name='attendances')
+    student = models.ForeignKey(Student, db_column="StudentId", on_delete=models.SET_NULL, null=True, blank=True, related_name='attendances')
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='attendances')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -1168,19 +800,18 @@ class TestTable(models.Model):
 
     def __str__(self):
         return self.name or str(self.id)
-    
-    
+
 
 class ActivityLog(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
-    action = models.CharField(db_column="Action", max_length=50, null=True, blank=True)  # CREATE, UPDATE, DELETE
-    module = models.CharField(db_column="Module", max_length=50, null=True, blank=True)  # User, Center, Student, etc.
+    action = models.CharField(db_column="Action", max_length=50, null=True, blank=True)
+    module = models.CharField(db_column="Module", max_length=50, null=True, blank=True)
     record_id = models.IntegerField(db_column="RecordId", null=True, blank=True)
-    data = models.TextField(db_column="Data", null=True, blank=True)  # JSON data of changes
+    data = models.TextField(db_column="Data", null=True, blank=True)
     ip_address = models.CharField(db_column="IpAddress", max_length=50, null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    
+
     class Meta:
         db_table = "ActivityLog"
         indexes = [
@@ -1192,15 +823,13 @@ class ActivityLog(models.Model):
 
 class StudentManualAttendanceLimit(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
-    student = models.ForeignKey(
-        Student, on_delete=models.CASCADE, db_column="StudentId"
-    )
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, db_column="StudentId")
     year = models.IntegerField(db_column="Year")
-    month = models.IntegerField(db_column="Month")  # 1-12
+    month = models.IntegerField(db_column="Month")
     count = models.IntegerField(default=0, db_column="Count")
     created_at = models.DateTimeField(auto_now_add=True, db_column="CreatedAt")
     updated_at = models.DateTimeField(auto_now=True, db_column="UpdatedAt")
-    
+
     class Meta:
         db_table = "StudentManualAttendanceLimit"
         unique_together = ('student', 'year', 'month')
@@ -1211,27 +840,15 @@ class StudentManualAttendanceLimit(models.Model):
 
 class CenterLocationVerification(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
-    center = models.ForeignKey(
-        Center, on_delete=models.CASCADE, db_column="CenterId"
-    )
-    verified_by = models.ForeignKey(
-        'User', on_delete=models.SET_NULL, null=True, db_column="VerifiedBy"
-    )
-    old_latitude = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True, db_column="OldLatitude"
-    )
-    old_longitude = models.DecimalField(
-        max_digits=10, decimal_places=7, null=True, blank=True, db_column="OldLongitude"
-    )
-    new_latitude = models.DecimalField(
-        max_digits=10, decimal_places=7, db_column="NewLatitude"
-    )
-    new_longitude = models.DecimalField(
-        max_digits=10, decimal_places=7, db_column="NewLongitude"
-    )
+    center = models.ForeignKey(Center, on_delete=models.CASCADE, db_column="CenterId")
+    verified_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, db_column="VerifiedBy")
+    old_latitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, db_column="OldLatitude")
+    old_longitude = models.DecimalField(max_digits=10, decimal_places=7, null=True, blank=True, db_column="OldLongitude")
+    new_latitude = models.DecimalField(max_digits=10, decimal_places=7, db_column="NewLatitude")
+    new_longitude = models.DecimalField(max_digits=10, decimal_places=7, db_column="NewLongitude")
     verified_at = models.DateTimeField(auto_now_add=True, db_column="VerifiedAt")
     notes = models.TextField(null=True, blank=True, db_column="Notes")
-    
+
     class Meta:
         db_table = "CenterLocationVerification"
         indexes = [

@@ -1,9 +1,10 @@
+from collections import defaultdict
 from decimal import Decimal
 import json
 import logging
 from datetime import datetime, timedelta
 import uuid
-from django.db.models import OuterRef, Subquery, Count
+from django.db.models import OuterRef, Prefetch, Subquery, Count
 from .models import *
 from django.db import IntegrityError, connection, transaction
 from .utils import *
@@ -4786,9 +4787,10 @@ def get_all_student_with_avg_attendance(center_id):
         for student in student_queryset:
             student_id = student['id']
             
-            # Count attendance records for this student
+            # Count attendance records for this student AT THIS CENTER
             attendance_count = StudentAttendance.objects.filter(
-                student_id=student_id
+                student_id=student_id,
+                center_id=center_id
             ).count()
             
             # Calculate average attendance percentage
@@ -5895,4 +5897,110 @@ def end_class_session(class_id, photo_url, class_obj, teacher_id=0):
         
     except Exception as e:
         logger.error(f"ClassHelper : EndClassSession : {str(e)}")
+        raise e
+
+def get_center_attendance_data(center_id, attendance_date):
+    """
+    Get center attendance data for a specific date and optional center.
+    Returns data in the format specified for external API consumption.
+    If center_id is provided, returns single center data.
+    If center_id is None, returns list of all centers with attendance data.
+    """
+    logger.info(f"CenterAttendanceHelper : GetCenterAttendanceData : Started for center_id={center_id}, date={attendance_date}")
+    
+    try:
+        # Build the query for attendance
+        attendance_query = StudentAttendance.objects.filter(
+            scan_date__date=attendance_date,
+            status=True
+        ).select_related(
+            'center',
+            'class_obj'
+        ).defer('student__roll_number')
+        
+        # Prefetch student separately to avoid roll_number issue
+        attendance_query = attendance_query.prefetch_related(
+            Prefetch('student', queryset=Student.objects.defer('roll_number'))
+        )
+        
+        if center_id:
+            attendance_query = attendance_query.filter(center_id=center_id)
+        
+        attendance_records = list(attendance_query)
+        
+        if not attendance_records:
+            logger.info(f"No attendance records found for center_id={center_id}, date={attendance_date}")
+            return None
+        
+        # Group records by center
+        center_records = defaultdict(list)
+        for record in attendance_records:
+            if record.center:
+                center_records[record.center.id].append(record)
+        
+        # Build response for each center
+        centers_data = []
+        for c_id, records in center_records.items():
+            center = records[0].center
+            
+            # Get teacher assigned to the center
+            teacher_name = None
+            if center.assigned_teachers:
+                try:
+                    teacher = User.objects.get(id=center.assigned_teachers)
+                    teacher_name = teacher.name
+                except User.DoesNotExist:
+                    pass
+            
+            # Build center data
+            center_data = {
+                'center_id': center.id,
+                'center_name': center.center_name,
+                'district': center.district.name if center.district else None,
+                'vidhan_sabha': center.vidhan_sabha.name if center.vidhan_sabha else None,
+                'panchayat': center.panchayat.name if center.panchayat else None,
+                'village': center.village.name if center.village else None,
+                'latitude': center.latitude,
+                'longitude': center.longitude,
+                'created_at': center.created_date.date() if center.created_date else None
+            }
+            
+            # Build teacher data
+            teacher_data = {
+                'teacher_id': center.assigned_teachers,
+                'teacher_name': teacher_name
+            }
+            
+            # Build students data
+            students_data = []
+            for record in records:
+                student = record.student
+                if student:
+                    # Determine capture type
+                    capture_type = 'QR' if record.attendance_type == 'AUTO' else 'Manual'
+                    
+                    students_data.append({
+                        'student_id': student.id,
+                        'student_name': student.full_name,
+                        'attendance_status': 'Present' if record.type else 'Absent',
+                        'capture_type': capture_type
+                    })
+            
+            centers_data.append({
+                'center': center_data,
+                'teacher': teacher_data,
+                'attendance_date': attendance_date,
+                'students': students_data
+            })
+        
+        logger.info(f"CenterAttendanceHelper : GetCenterAttendanceData : End - Found {len(centers_data)} centers")
+        
+        # If center_id was provided, return single object (backward compatibility)
+        # Otherwise return list of all centers
+        if center_id:
+            return centers_data[0] if centers_data else None
+        return centers_data
+        
+    except Exception as e:
+        logger.error(f"CenterAttendanceHelper : GetCenterAttendanceData : {str(e)}")
         raise e

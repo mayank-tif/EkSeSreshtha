@@ -102,6 +102,67 @@ class GenerateAppTokenView(TokenObtainPairView):
         return Response({"access_token": str(token)}, status=status.HTTP_200_OK)
 
 
+@method_decorator(csrf_exempt, name="dispatch")
+class GenerateCenterAttendanceTokenView(TokenObtainPairView):
+    """Issues the short-lived application token for Center Attendance API after validating API headers."""
+    serializer_class = api_serializers.CenterAttendanceTokenSerializer
+
+    def post(self, request, *args, **kwargs):
+        logger.info("GenerateCenterAttendanceTokenView : Post : Started")
+        serializer = self.get_serializer(data=request.data)
+        username = request.headers.get("Username")
+        password = request.headers.get("Password")
+        print("Username:", username, "Password:", password, FI_API_USERNAME, FI_API_PASSWORD)  # Debugging line
+
+        if username != FI_API_USERNAME  or password != FI_API_PASSWORD :
+            return Response({"message": "Invalid username or password"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        serializer.is_valid(raise_exception=True)
+        user = DummyUser(username)
+        token = AccessToken.for_user(user)
+        token["deviceid"] = request.data.get("deviceid")
+        token["username"] = username
+        token.set_exp(lifetime=timedelta(minutes=10))  # Token valid for 10 minutes
+        logger.info("GenerateCenterAttendanceTokenView : Post : Token generated successfully")
+        return Response({"access_token": str(token)}, status=status.HTTP_200_OK)
+
+
+class CenterAttendanceView(APIView):
+    """Returns center attendance data for a specific date and optional center."""
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        # Validate JWT token from Authorization header
+        logger.info("CenterAttendanceView : Post : Started")
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return Response({"message": "JWT token not provided or invalid."}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        token = auth_header.split(' ')[1]
+        jwt_authenticator = JWTAuthentication()
+        try:
+            validated_token = jwt_authenticator.get_validated_token(token)
+        except Exception as e:
+            return Response({"message": "Invalid or expired token."}, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Validate request body
+        serializer = api_serializers.CenterAttendanceQuerySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        center_id = serializer.validated_data.get('center_id')
+        attendance_date = serializer.validated_data.get('attendance_date')
+        
+        # Get center attendance data
+        data = get_center_attendance_data(center_id, attendance_date)
+        logger.info(f"CenterAttendanceView : Post : Retrieved data for center_id={center_id}, attendance_date={attendance_date}")
+        
+        if data is None:
+            return Response({"message": "No attendance data found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        return Response(data, status=status.HTTP_200_OK)
+
+
 class ModelSaveView(DotNetAPIView):
     """Generic class-based create/update view for simple model-backed POST endpoints."""
     model = None
@@ -3417,7 +3478,7 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                     "ErrorCode": -14
                 }, status=status.HTTP_400_BAD_REQUEST)
             print("common", attendance_data)
-            result = save_student_attendance(attendance_data, is_automatic=False, is_manual=False)
+            result = save_student_attendance(attendance_data, is_automatic=False, is_manual=True)
 
             logged_user_id = get_user_id_from_token(request)
             
