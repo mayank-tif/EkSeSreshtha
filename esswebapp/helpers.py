@@ -9,7 +9,7 @@ Current helpers:
 """
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.db import transaction
@@ -282,6 +282,8 @@ def get_center_attendance_data(center_ids, attendance_date=None):
     if not center_ids:
         return {}
     
+    print("center_ids", center_ids, attendance_date)
+    
     if attendance_date is None:
         attendance_date = datetime.now().date()
     elif isinstance(attendance_date, str):
@@ -290,23 +292,37 @@ def get_center_attendance_data(center_ids, attendance_date=None):
         except ValueError:
             attendance_date = datetime.now().date()
     
-    # 1. Get active student count per center
+    # 1. Get total enrolled students per center (all students assigned to center, regardless of status)
     student_counts = dict(
-        Student.objects.filter(center_id__in=center_ids, status=True)
+        Student.objects.filter(center_id__in=center_ids)
         .values('center_id').annotate(cnt=Count('id'))
         .values_list('center_id', 'cnt')
     )
+    print("student_counts", student_counts)
     
     # 2. Get present student count per center from StudentAttendance
-    present_counts = dict(
-        StudentAttendance.objects.filter(
-            center_id__in=center_ids,
-            scan_date__date=attendance_date,
-            status=True
-        ).values('center_id').annotate(
-            present_cnt=Count('id', distinct=True)
-        ).values_list('center_id', 'present_cnt')
-    )
+    # Count DISTINCT enrolled students who were present
+    present_records = StudentAttendance.objects.filter(
+        center_id__in=center_ids,
+        scan_date__date=attendance_date,
+        status=True,
+        type=True  # present
+    ).values('center_id', 'student_id').distinct()
+    
+    # Filter to only count students actually enrolled in each center
+    enrolled_ids_by_center = {}
+    students = Student.objects.filter(center_id__in=center_ids).values('id', 'center_id')
+    for s in students:
+        enrolled_ids_by_center.setdefault(s['center_id'], set()).add(s['id'])
+    
+    present_counts = {}
+    for r in present_records:
+        c_id = r['center_id']
+        stu_id = r['student_id']
+        if c_id in enrolled_ids_by_center and stu_id in enrolled_ids_by_center[c_id]:
+            present_counts[c_id] = present_counts.get(c_id, 0) + 1
+    
+    print("present_counts", present_counts)
     
     # 3. Get teacher and regional admin names in bulk
     user_ids = []

@@ -1031,50 +1031,62 @@ async function renderAnalytics() {
     try {
         const mode = document.getElementById('analytics-mode').value;
         const dateStr = document.getElementById('analytics-date').value;
+        const hasDate = !!dateStr;
         const refDate = dateStr ? new Date(dateStr) : new Date();
 
-    // Use cached students from the centre detail page
-    const centreStudents = centreStudentsCache || [];
+        // Use cached students from the centre detail page
+        const centreStudents = centreStudentsCache || [];
 
-    const bars = [];
-    const labels = [];
+        const bars = [];
+        const labels = [];
 
-    if (mode === 'day') {
-        // Last 14 days ending at refDate
-        document.getElementById('analytics-chart-title').textContent = 'Daily Attendance';
-        document.getElementById('analytics-chart-subtitle').textContent =
-            `Percentage of enrolled students present each day (last 14 days).`;
+        if (mode === 'day') {
+            if (hasDate) {
+                // Show only the selected day
+                document.getElementById('analytics-chart-title').textContent = 'Daily Attendance';
+                document.getElementById('analytics-chart-subtitle').textContent =
+                    `Attendance for ${refDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+                
+                const pct = await averagePercentageForCentreOnDate(centreStudents, refDate);
+                bars.push(pct);
+                labels.push(refDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
+            } else {
+                // Last 14 days ending at refDate
+                document.getElementById('analytics-chart-title').textContent = 'Daily Attendance';
+                document.getElementById('analytics-chart-subtitle').textContent =
+                    `Percentage of enrolled students present each day (last 14 days).`;
 
-        for (let i = 13; i >= 0; i--) {
-            const d = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate() - i);
-            const pct = await averagePercentageForCentreOnDate(centreStudents, d);
-            bars.push(pct);
-            labels.push(d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
+                for (let i = 13; i >= 0; i--) {
+                    const d = new Date(refDate.getFullYear(), refDate.getMonth(), refDate.getDate() - i);
+                    const pct = await averagePercentageForCentreOnDate(centreStudents, d);
+                    bars.push(pct);
+                    labels.push(d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }));
+                }
+            }
+        } else {
+            // Month mode: always show last 12 months
+            document.getElementById('analytics-chart-title').textContent = 'Monthly Attendance';
+            document.getElementById('analytics-chart-subtitle').textContent =
+                `Average attendance percentage per month (last 12 months).`;
+
+            for (let i = 11; i >= 0; i--) {
+                const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
+                const pct = await averagePercentageForCentreInMonth(centreStudents, d);
+                bars.push(pct);
+                labels.push(d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }));
+            }
         }
-    } else {
-        // Last 12 months ending at refDate
-        document.getElementById('analytics-chart-title').textContent = 'Monthly Attendance';
-        document.getElementById('analytics-chart-subtitle').textContent =
-            `Average attendance percentage per month (last 12 months).`;
 
-        for (let i = 11; i >= 0; i--) {
-            const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
-            const pct = await averagePercentageForCentreInMonth(centreStudents, d);
-            bars.push(pct);
-            labels.push(d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }));
-        }
-    }
+        document.getElementById('analytics-bars').innerHTML = bars.map(v => `
+            <div class="analytics-bar">
+                <div class="analytics-bar-value">${v}%</div>
+                <div class="analytics-bar-fill" style="height:${v}%;"></div>
+            </div>
+        `).join('');
 
-    document.getElementById('analytics-bars').innerHTML = bars.map(v => `
-        <div class="analytics-bar">
-            <div class="analytics-bar-value">${v}%</div>
-            <div class="analytics-bar-fill" style="height:${v}%;"></div>
-        </div>
-    `).join('');
-
-    document.getElementById('analytics-labels').innerHTML = labels.map(l => `
-        <div class="analytics-label">${escapeHtml(l)}</div>
-    `).join('');
+        document.getElementById('analytics-labels').innerHTML = labels.map(l => `
+            <div class="analytics-label">${escapeHtml(l)}</div>
+        `).join('');
     } finally {
         hideGlobalLoader();
     }

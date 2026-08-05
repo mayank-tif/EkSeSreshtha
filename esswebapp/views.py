@@ -202,6 +202,9 @@ class CenterAttendanceView(LoginRequiredMixin, View):
             panchayat_id = request.GET.get('panchayat_id')
             village_id = request.GET.get('village_id')
             
+            # Single center filter (for centre detail page)
+            center_id = request.GET.get('center_id')
+            
             # Date parameter for attendance (optional)
             attendance_date = request.GET.get('date')
             
@@ -216,6 +219,10 @@ class CenterAttendanceView(LoginRequiredMixin, View):
                 queryset = queryset.filter(panchayat_id=panchayat_id)
             if village_id:
                 queryset = queryset.filter(village_id=village_id)
+            
+            # Apply center_id filter if provided
+            if center_id:
+                queryset = queryset.filter(id=center_id)
             
             # Apply search
             if search:
@@ -763,6 +770,11 @@ class StudentsView(LoginRequiredMixin, View):
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', 20))
             search = request.GET.get('search', '').strip().lower()
+            
+            # Center filter (for centre detail page)
+            center_id = request.GET.get('center_id')
+            if center_id:
+                queryset = queryset.filter(center_id=center_id)
             
             # Location filters
             district_id = request.GET.get('district_id')
