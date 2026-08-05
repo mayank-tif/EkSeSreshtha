@@ -40,4 +40,7 @@ urlpatterns = [
     path('students/monthly-attendance/', StudentsView.as_view(), name='student-monthly-attendance'),
     path('students/daily-attendance/', StudentsView.as_view(), name='student-daily-attendance'),
     
+    # Center attendance APIs
+    path('attendance/center-monthly-attendance/', CenterMonthlyAttendanceView.as_view(), name='center-monthly-attendance'),
+    
 ]

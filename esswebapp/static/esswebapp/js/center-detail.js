@@ -536,7 +536,8 @@ function toggleStudentStatus(studentId, isActive) {
 
 function editStudent(studentId) {
     // The student registration page supports edit mode via ?id=
-    window.location.href = `../students/student-registration.html?id=${studentId}`;
+    // Open in new tab
+    window.open(`${getUrl('student-registration')}?id=${studentId}`, '_blank');
 }
 
 /* ================================================================
@@ -1071,7 +1072,7 @@ async function renderAnalytics() {
 
             for (let i = 11; i >= 0; i--) {
                 const d = new Date(refDate.getFullYear(), refDate.getMonth() - i, 1);
-                const pct = await averagePercentageForCentreInMonth(centreStudents, d);
+                const pct = await averagePercentageForCentreInMonthOptimized(d);
                 bars.push(pct);
                 labels.push(d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }));
             }
@@ -1111,6 +1112,29 @@ async function averagePercentageForCentreOnDate(students, date) {
         }
     } catch (e) {
         console.warn('Failed to fetch attendance for date:', e);
+    }
+    return 0;
+}
+
+async function averagePercentageForCentreInMonthOptimized(monthDate) {
+    if (!currentCentre) return 0;
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth() + 1; // 1-based
+    
+    try {
+        const params = new URLSearchParams({
+            center_id: currentCentre.id,
+            year: year,
+            month: month
+        });
+        const url = `${getUrl('center-monthly-attendance')}?${params}`;
+        const response = await apiFetch(url);
+        
+        if (response?.summary) {
+            return response.summary.attendance_pct || 0;
+        }
+    } catch (e) {
+        console.warn('Failed to fetch monthly attendance:', e);
     }
     return 0;
 }

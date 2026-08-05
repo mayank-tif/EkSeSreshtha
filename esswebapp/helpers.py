@@ -363,6 +363,122 @@ def get_center_attendance_data(center_ids, attendance_date=None):
     return result
 
 
+def get_center_monthly_attendance(center_ids, year, month):
+    """
+    Get monthly attendance summary for centers using single query.
+    
+    Args:
+        center_ids: List of center IDs
+        year: Year (e.g., 2026)
+        month: Month (1-12)
+    
+    Returns:
+        dict mapping center_id -> {
+            'total_students': int (enrolled students),
+            'present_students': int (distinct students present at least once in month),
+            'attendance_pct': int (percentage),
+            'working_days': int (Mon-Sat in month up to today),
+            'teacher_name': str,
+            'regional_admin_name': str,
+        }
+    """
+    from calendar import monthrange
+    from datetime import datetime
+    print("get_center_monthly_attendance", center_ids, year, month)
+    
+    logger.info(f"WebCenterAttendanceHelper : GetCenterMonthlyAttendance : Started for {len(center_ids)} centers, {year}-{month}")
+    
+    if not center_ids:
+        return {}
+    
+    start_date = datetime(year, month, 1).date()
+    days_in_month = monthrange(year, month)[1]
+    end_date = datetime(year, month, days_in_month).date()
+    today = datetime.now().date()
+    if end_date > today:
+        end_date = today
+    
+    # Count working days (Mon-Sat) in the period
+    working_days = 0
+    current = start_date
+    while current <= end_date:
+        if current.weekday() < 6:  # Mon-Sat
+            working_days += 1
+        current += timedelta(days=1)
+    
+    # 1. Get total enrolled students per center
+    student_counts = dict(
+        Student.objects.filter(center_id__in=center_ids, status=True)
+        .values('center_id').annotate(cnt=Count('id'))
+        .values_list('center_id', 'cnt')
+    )
+    print("student_counts", student_counts)
+    
+    # 2. Get daily present student counts per center (sum of daily present students)
+    daily_present = StudentAttendance.objects.filter(
+        center_id__in=center_ids,
+        scan_date__date__gte=start_date,
+        scan_date__date__lte=end_date,
+        status=True,
+        type=True
+    ).values('center_id', 'scan_date__date').annotate(
+        daily_present=Count('student_id', distinct=True)
+    )
+    print("daily_present", list(daily_present))
+    
+    # Filter to only count students actually enrolled in each center
+    enrolled_ids_by_center = {}
+    students = Student.objects.filter(center_id__in=center_ids, status=True).values('id', 'center_id')
+    for s in students:
+        enrolled_ids_by_center.setdefault(s['center_id'], set()).add(s['id'])
+    
+    # Sum up daily present counts per center
+    present_counts = {}
+    for r in daily_present:
+        c_id = r['center_id']
+        # We need to verify students are enrolled - but since we filter by center_id in query,
+        # and attendance records already have center_id, they should be enrolled
+        present_counts[c_id] = present_counts.get(c_id, 0) + r['daily_present']
+    
+    # 3. Get teacher and regional admin names
+    user_ids = []
+    centers = Center.objects.filter(id__in=center_ids, status=True).select_related()
+    for c in centers:
+        if c.assigned_teachers:
+            user_ids.append(c.assigned_teachers)
+        if c.assigned_regional_admin:
+            user_ids.append(c.assigned_regional_admin)
+    
+    name_map = {}
+    if user_ids:
+        name_map = dict(User.objects.filter(id__in=set(user_ids), status=True).values_list('id', 'name'))
+    
+    # 4. Build result
+    result = {}
+    for center_id in center_ids:
+        total = student_counts.get(center_id, 0)
+        present = present_counts.get(center_id, 0)
+        # Percentage = total student-days present / (total students * working_days) * 100
+        max_possible = total * working_days
+        pct = int((present / max_possible * 100)) if max_possible > 0 else 0
+        
+        center = Center.objects.filter(id=center_id, status=True).first()
+        teacher_name = name_map.get(center.assigned_teachers) if center else None
+        regional_admin_name = name_map.get(center.assigned_regional_admin) if center else None
+        
+        result[center_id] = {
+            'total_students': total,
+            'present_students': present,
+            'attendance_pct': min(pct, 100),
+            'working_days': working_days,
+            'teacher_name': teacher_name,
+            'regional_admin_name': regional_admin_name,
+        }
+    
+    logger.info(f"WebCenterAttendanceHelper : GetCenterMonthlyAttendance : End - {len(result)} centers")
+    return result
+
+
 # ==================================================================
 # STUDENT ATTENDANCE HISTORY HELPERS
 # ==================================================================
@@ -436,26 +552,40 @@ def get_student_monthly_attendance(student_id, year, month):
         month: Month (1-12)
     
     Returns:
-        dict with 'present', 'absent', 'total_days', 'percentage'
+        dict with 'present', 'absent', 'total_days', 'working_days', 'percentage'
     """
     from calendar import monthrange
     
     start_date = datetime(year, month, 1).date()
     days_in_month = monthrange(year, month)[1]
     end_date = datetime(year, month, days_in_month).date()
+    today = datetime.now().date()
+    if end_date > today:
+        end_date = today
+    
+    # Count working days (Mon-Sat) in the period
+    working_days = 0
+    current = start_date
+    while current <= end_date:
+        if current.weekday() < 6:  # Mon-Sat
+            working_days += 1
+        current += timedelta(days=1)
     
     history = get_student_attendance_history(student_id, start_date, end_date)
     
     present = sum(1 for r in history if r['status'] == 'Present')
     absent = sum(1 for r in history if r['status'] == 'Absent')
-    total = present + absent
-    pct = int((present / total * 100)) if total > 0 else 0
+    total_recorded = present + absent
+    
+    # Percentage based on working days, not just recorded days
+    pct = int((present / working_days * 100)) if working_days > 0 else 0
     
     return {
         'present': present,
         'absent': absent,
-        'total_days': total,
-        'percentage': pct
+        'total_days': total_recorded,
+        'working_days': working_days,
+        'percentage': min(pct, 100)
     }
 
 

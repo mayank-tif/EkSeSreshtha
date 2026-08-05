@@ -169,11 +169,45 @@ class AttendanceView(LoginRequiredMixin, View):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
 
 
+class CenterMonthlyAttendanceView(LoginRequiredMixin, View):
+    """Center monthly attendance summary page + API endpoint"""    
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return self._center_monthly_attendance_api(request)
+        
+        # Render the HTML page
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def _center_monthly_attendance_api(self, request):
+        """Get monthly attendance summary for a center using single query."""
+        try:
+            center_id = request.GET.get('center_id')
+            year = request.GET.get('year')
+            month = request.GET.get('month')
+            
+            if not center_id or not year or not month:
+                return JsonResponse({'detail': 'Center ID, year, and month are required'}, status=400)
+            
+            from esswebapp.helpers import get_center_monthly_attendance
+            result = get_center_monthly_attendance([int(center_id)], int(year), int(month))
+            
+            return JsonResponse({
+                'center_id': int(center_id),
+                'year': int(year),
+                'month': int(month),
+                'summary': result.get(int(center_id), {})
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
 class CenterAttendanceView(LoginRequiredMixin, View):
     """Center Attendance list page + paginated API with student counts and attendance data"""
     template_name = 'esswebapp/pages/attendance/center-attendance.html'
     
     def get(self, request):
+        print("request", request.path, request.GET)
         # Check if it's an AJAX request for JSON data
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return self._list_centers_attendance_api(request)
