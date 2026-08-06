@@ -199,8 +199,6 @@ def _update_center(center_id, center_data, current_user_id):
         logger.error(f"WebCenterHelper : Center not found with ID: {center_id}")
         return None
     
-    print("update ", center_data, center_id)
-
     old_teacher_id = center.assigned_teachers
     old_regional_admin_id = center.assigned_regional_admin
 
@@ -254,7 +252,6 @@ def _update_center(center_id, center_data, current_user_id):
 
 
 def _create_center(center_data, current_user_id):
-    print("create", center_data)
     """Create a new center."""
     latitude = center_data.get('Latitude')
     longitude = center_data.get('Longitude')
@@ -262,7 +259,6 @@ def _create_center(center_data, current_user_id):
 
     teacher_user_id = center_data.get('AssignedTeachers')
     regional_admin_user_id = center_data.get('AssignedRegionalAdmin')
-    print('teacher_user_id', teacher_user_id, regional_admin_user_id)
 
     center = Center(
         center_guid_id=str(uuid.uuid4()),
@@ -443,6 +439,104 @@ def get_user_accessible_center_ids(request):
     return []  # Default: no access
 
 
+def get_regional_admin_assignments(user_id):
+    """
+    Get location assignments for a Regional Admin directly from RegionalAdmin model.
+    Returns dict with district_ids, vidhan_sabha_ids, panchayat_ids, village_ids.
+    Returns None for Super Admin (meaning all).
+    """
+    from APIS.models import RegionalAdmin
+    try:
+        ra = RegionalAdmin.objects.filter(user_id=user_id, status=True).first()
+        if not ra:
+            return {'district_ids': [], 'vidhan_sabha_ids': [], 'panchayat_ids': [], 'village_ids': []}
+                
+        return {
+            'district_ids': [ra.district_id] if ra.district_id else [],
+            'vidhan_sabha_ids': [ra.vidhan_sabha_id] if ra.vidhan_sabha_id else [],
+            'panchayat_ids': [ra.panchayat_id] if ra.panchayat_id else [],
+            'village_ids': [ra.village_id] if ra.village_id else [],
+        }
+    except Exception:
+        return {'district_ids': [], 'vidhan_sabha_ids': [], 'panchayat_ids': [], 'village_ids': []}
+
+
+def get_user_accessible_district_ids(request):
+    """Get district IDs accessible by the current user."""
+    user_data = request.session.get('user')
+    if not user_data:
+        return []
+    
+    role_code = user_data.get('role_code')
+    user_id = user_data.get('user_id')
+    
+    if role_code == 'SUPER_ADMIN':
+        return None  # All districts
+    
+    if role_code == 'REGIONAL_ADMIN':
+        assignments = get_regional_admin_assignments(user_id)
+        return assignments['district_ids']
+    
+    return []
+
+
+def get_user_accessible_vidhan_sabha_ids(request):
+    """Get vidhan sabha IDs accessible by the current user."""
+    user_data = request.session.get('user')
+    if not user_data:
+        return []
+    
+    role_code = user_data.get('role_code')
+    user_id = user_data.get('user_id')
+    
+    if role_code == 'SUPER_ADMIN':
+        return None
+    
+    if role_code == 'REGIONAL_ADMIN':
+        assignments = get_regional_admin_assignments(user_id)
+        return assignments['vidhan_sabha_ids']
+    
+    return []
+
+
+def get_user_accessible_panchayat_ids(request):
+    """Get panchayat IDs accessible by the current user."""
+    user_data = request.session.get('user')
+    if not user_data:
+        return []
+    
+    role_code = user_data.get('role_code')
+    user_id = user_data.get('user_id')
+    
+    if role_code == 'SUPER_ADMIN':
+        return None
+    
+    if role_code == 'REGIONAL_ADMIN':
+        assignments = get_regional_admin_assignments(user_id)
+        return assignments['panchayat_ids']
+    
+    return []
+
+
+def get_user_accessible_village_ids(request):
+    """Get village IDs accessible by the current user."""
+    user_data = request.session.get('user')
+    if not user_data:
+        return []
+    
+    role_code = user_data.get('role_code')
+    user_id = user_data.get('user_id')
+    
+    if role_code == 'SUPER_ADMIN':
+        return None
+    
+    if role_code == 'REGIONAL_ADMIN':
+        assignments = get_regional_admin_assignments(user_id)
+        return assignments['village_ids']
+    
+    return []
+
+
 def can_access_module(request, module_name):
     """
     Check if user can access a specific module.
@@ -581,9 +675,7 @@ def get_center_attendance_data(center_ids, attendance_date=None):
     
     if not center_ids:
         return {}
-    
-    print("center_ids", center_ids, attendance_date)
-    
+        
     if attendance_date is None:
         attendance_date = datetime.now().date()
     elif isinstance(attendance_date, str):
@@ -598,7 +690,6 @@ def get_center_attendance_data(center_ids, attendance_date=None):
         .values('center_id').annotate(cnt=Count('id'))
         .values_list('center_id', 'cnt')
     )
-    print("student_counts", student_counts)
     
     # 2. Get present student count per center from StudentAttendance
     # Count DISTINCT enrolled students who were present
@@ -621,9 +712,7 @@ def get_center_attendance_data(center_ids, attendance_date=None):
         stu_id = r['student_id']
         if c_id in enrolled_ids_by_center and stu_id in enrolled_ids_by_center[c_id]:
             present_counts[c_id] = present_counts.get(c_id, 0) + 1
-    
-    print("present_counts", present_counts)
-    
+        
     # 3. Get teacher and regional admin names in bulk
     user_ids = []
     centers = Center.objects.filter(id__in=center_ids).select_related()
@@ -684,7 +773,6 @@ def get_center_monthly_attendance(center_ids, year, month):
     """
     from calendar import monthrange
     from datetime import datetime
-    print("get_center_monthly_attendance", center_ids, year, month)
     
     logger.info(f"WebCenterAttendanceHelper : GetCenterMonthlyAttendance : Started for {len(center_ids)} centers, {year}-{month}")
     
@@ -712,7 +800,6 @@ def get_center_monthly_attendance(center_ids, year, month):
         .values('center_id').annotate(cnt=Count('id'))
         .values_list('center_id', 'cnt')
     )
-    print("student_counts", student_counts)
     
     # 2. Get daily present student counts per center (sum of daily present students)
     daily_present = StudentAttendance.objects.filter(
@@ -724,7 +811,6 @@ def get_center_monthly_attendance(center_ids, year, month):
     ).values('center_id', 'scan_date__date').annotate(
         daily_present=Count('student_id', distinct=True)
     )
-    print("daily_present", list(daily_present))
     
     # Filter to only count students actually enrolled in each center
     enrolled_ids_by_center = {}

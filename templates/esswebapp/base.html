@@ -74,8 +74,8 @@
             {% endblock %}
         </div>
         <script>
-    window.USER_SESSION = {{ request.session.user|default:"{}"|jsonify|safe }};
-</script>
+    		window.USER_SESSION = {{ request.session.user|default:"{}"|jsonify|safe }};
+		</script>
 
         <!-- Scripts -->
         <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>

@@ -615,7 +615,17 @@ class DistrictDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = District.objects.filter(status=True).order_by('name')
+            # Get accessible district IDs for this user
+            district_ids = get_user_accessible_district_ids(request)
+            print("district_ids", district_ids)
+            
+            queryset = District.objects.filter(status=True)
+            
+            if district_ids is not None:
+                # Regional Admin - filter by assigned districts
+                queryset = queryset.filter(id__in=district_ids)
+            
+            queryset = queryset.order_by('name')
             
             districts = list(queryset.values('id', 'name'))
             
@@ -636,12 +646,21 @@ class VidhanSabhaDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = VidhanSabha.objects.filter(status=True).order_by('name')
+            # Get accessible vidhan sabha IDs for this user
+            vs_ids = get_user_accessible_vidhan_sabha_ids(request)
+            
+            queryset = VidhanSabha.objects.filter(status=True)
+            
+            if vs_ids is not None:
+                # Regional Admin - filter by assigned vidhan sabhas
+                queryset = queryset.filter(id__in=vs_ids)
             
             # Optional district filter for cascading dropdowns
             district_id = request.GET.get('district_id')
             if district_id:
                 queryset = queryset.filter(district_id=district_id)
+            
+            queryset = queryset.order_by('name')
             
             vidhan_sabhas = list(queryset.values('id', 'name'))
             
@@ -662,12 +681,25 @@ class PanchayatDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = Panchayat.objects.filter(status=True).order_by('name')
+            # Get accessible panchayat IDs for this user
+            panchayat_ids = get_user_accessible_panchayat_ids(request)
             
-            # Optional vidhan_sabha filter for cascading dropdowns
+            queryset = Panchayat.objects.filter(status=True)
+            
+            if panchayat_ids is not None:
+                # Regional Admin - filter by assigned panchayats
+                queryset = queryset.filter(id__in=panchayat_ids)
+            
+            # Optional filters for cascading dropdowns (respect hierarchy)
+            district_id = request.GET.get('district_id')
+            if district_id:
+                queryset = queryset.filter(district_id=district_id)
+            
             vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
             if vidhan_sabha_id:
                 queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+            
+            queryset = queryset.order_by('name')
             
             panchayats = list(queryset.values('id', 'name'))
             
@@ -688,12 +720,29 @@ class VillageDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = Village.objects.filter(status=True).order_by('name')
+            # Get accessible village IDs for this user
+            village_ids = get_user_accessible_village_ids(request)
             
-            # Optional panchayat filter for cascading dropdowns
+            queryset = Village.objects.filter(status=True)
+            
+            if village_ids is not None:
+                # Regional Admin - filter by assigned villages
+                queryset = queryset.filter(id__in=village_ids)
+            
+            # Optional filters for cascading dropdowns (respect hierarchy)
+            district_id = request.GET.get('district_id')
+            if district_id:
+                queryset = queryset.filter(district_id=district_id)
+            
+            vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
+            if vidhan_sabha_id:
+                queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+            
             panchayat_id = request.GET.get('panchayat_id')
             if panchayat_id:
                 queryset = queryset.filter(panchayat_id=panchayat_id)
+            
+            queryset = queryset.order_by('name')
             
             villages = list(queryset.values('id', 'name'))
             
