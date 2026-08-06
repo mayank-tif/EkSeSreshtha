@@ -132,7 +132,7 @@ function renderAttendanceChart(dailyData) {
         const value = item.percentage || 0;
         return `
             <div class="chart-bar-group">
-                <div class="chart-bar" style="height: ${value}%">
+                <div class="chart-bar" style="height: ${value}% !important;">
                     <span class="chart-bar-value">${value}%</span>
                 </div>
                 <div class="chart-bar-label">${item.day}</div>

@@ -1,0 +1,55 @@
+{% extends "esswebapp/base.html" %}
+{% load static %}
+
+{% block title %}Access Denied - Ek Se Sreshtha{% endblock %}
+
+{% block page-content %}
+<div class="access-denied-page">
+    <div class="access-denied-content">
+        <div class="access-denied-icon">
+            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+            </svg>
+        </div>
+        <h1>Access Denied</h1>
+        <p class="access-denied-message">You don't have permission to access this page.</p>
+        <p class="access-denied-hint">Please contact your administrator if you believe this is an error.</p>
+        <a href="{% url 'esswebapp:dashboard' %}" class="btn btn-primary">Go to Dashboard</a>
+    </div>
+</div>
+
+<style>
+.access-denied-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    padding: var(--space-6);
+}
+.access-denied-content {
+    text-align: center;
+    max-width: 400px;
+}
+.access-denied-icon {
+    color: var(--danger);
+    margin-bottom: var(--space-5);
+}
+.access-denied-content h1 {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--gray-900);
+    margin-bottom: var(--space-3);
+}
+.access-denied-message {
+    font-size: var(--text-lg);
+    color: var(--gray-600);
+    margin-bottom: var(--space-2);
+}
+.access-denied-hint {
+    font-size: var(--text-sm);
+    color: var(--gray-400);
+    margin-bottom: var(--space-6);
+}
+</style>
+{% endblock %}

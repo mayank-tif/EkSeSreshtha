@@ -54,6 +54,36 @@ class LoginRequiredMixin:
         # Attach user data to request
         request.web_user = user_data
         return super().dispatch(request, *args, **kwargs)
+
+
+class PermissionRequiredMixin:
+    """Mixin to check module-level permissions for Regional Admin"""
+    required_module = None  # Override in subclass: 'centres', 'students', etc.
+    
+    def dispatch(self, request, *args, **kwargs):
+        # First check login
+        user_data = request.session.get('user')
+        if not user_data:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'detail': 'Authentication required'}, status=401)
+            return redirect('esswebapp:login')
+        
+        role_code = user_data.get('role_code')
+        if role_code not in ['SUPER_ADMIN', 'REGIONAL_ADMIN']:
+            request.session.flush()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'detail': 'Unauthorized'}, status=401)
+            return redirect('esswebapp:login')
+        
+        # Check module permission
+        if self.required_module:
+            if not can_access_module(request, self.required_module):
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'detail': 'Permission denied'}, status=403)
+                return render(request, 'esswebapp/403.html', status=403)
+        
+        request.web_user = user_data
+        return super().dispatch(request, *args, **kwargs)
     
 
 class LoginView(View):
@@ -163,8 +193,9 @@ class RootRedirectView(View):
 
 
 # Protected views using LoginRequiredMixin
-class DashboardView(LoginRequiredMixin, View):
+class DashboardView(PermissionRequiredMixin, View):
     template_name = 'esswebapp/pages/dashboard.html'
+    required_module = 'dashboard'
     
     def get(self, request):
         # Check if it's an AJAX request for JSON data
@@ -181,19 +212,22 @@ class DashboardView(LoginRequiredMixin, View):
     
     def _dashboard_stats_api(self, request):
         """Return dashboard statistics."""
-        from datetime import datetime
-        
         now = datetime.now()
         start_of_month = datetime(now.year, now.month, 1)
         
+        # Get filtered querysets based on user role
+        centers_qs = get_user_accessible_centers_queryset(request)
+        students_qs = get_user_accessible_students_queryset(request)
+        teachers_qs = get_user_accessible_teachers_queryset(request)
+        
         stats = {
-            'centres': Center.objects.filter(status=True).count(),
-            'students': Student.objects.filter(status=True).count(),
-            'teachers': Teacher.objects.filter(status=True).count(),
-            'districts': District.objects.filter(status=True).count(),
-            'centres_this_month': Center.objects.filter(status=True, created_on__gte=start_of_month).count(),
-            'students_this_month': Student.objects.filter(status=True, created_on__gte=start_of_month).count(),
-            'teachers_this_month': Teacher.objects.filter(status=True, created_on__gte=start_of_month).count(),
+            'centres': centers_qs.count(),
+            'students': students_qs.count(),
+            'teachers': teachers_qs.count(),
+            'districts': District.objects.filter(status=True).count(),  # Districts not center-specific
+            'centres_this_month': centers_qs.filter(created_on__gte=start_of_month).count(),
+            'students_this_month': students_qs.filter(created_on__gte=start_of_month).count(),
+            'teachers_this_month': teachers_qs.filter(created_on__gte=start_of_month).count(),
             'districts_this_month': District.objects.filter(status=True, created_on__gte=start_of_month).count(),
         }
         return JsonResponse(stats)
@@ -202,7 +236,18 @@ class DashboardView(LoginRequiredMixin, View):
         """Return recent activity feed from ActivityLog."""
         
         limit = int(request.GET.get('limit', 4))
-        activities = ActivityLog.objects.select_related().order_by('-created_on')[:limit]
+        
+        # Get current user ID for filtering
+        user_id = request.web_user.get('user_id')
+        role_code = request.web_user.get('role_code')
+        
+        queryset = ActivityLog.objects.select_related()
+        
+        # Regional Admin only sees their own activities
+        if role_code == 'REGIONAL_ADMIN':
+            queryset = queryset.filter(user_id=user_id)
+        
+        activities = queryset.order_by('-created_on')[:limit]
         
         data = []
         for a in activities:
@@ -243,14 +288,17 @@ class DashboardView(LoginRequiredMixin, View):
         """Return daily attendance data for a date range."""
         print("start_date, end_date", start_date, end_date)
         
-        # Get all centers
-        centers = Center.objects.filter(status=True)
-        center_ids = list(centers.values_list('id', flat=True))
+        # Get accessible center IDs for this user
+        center_ids = get_user_accessible_center_ids(request)
+        
+        if center_ids is None:
+            # Super admin - all centers
+            center_ids = list(Center.objects.filter(status=True).values_list('id', flat=True))
         
         if not center_ids:
             return JsonResponse({'results': []})
         
-        # Total enrolled students across all centers
+        # Total enrolled students across accessible centers
         total_students = Student.objects.filter(center_id__in=center_ids, status=True).count()
         print("total_students", total_students)
         
@@ -293,32 +341,66 @@ class DashboardView(LoginRequiredMixin, View):
     
     def _dashboard_attendance_yearly(self, request, start_date, end_date):
         """Return monthly attendance data for the year."""
+        # Get accessible center IDs for this user
+        center_ids = get_user_accessible_center_ids(request)
         
-        centers = Center.objects.filter(status=True)
-        center_ids = list(centers.values_list('id', flat=True))
+        if center_ids is None:
+            # Super admin - all centers
+            center_ids = list(Center.objects.filter(status=True).values_list('id', flat=True))
         
         if not center_ids:
             return JsonResponse({'results': []})
         
         total_students = Student.objects.filter(center_id__in=center_ids, status=True).count()
         
-        # Get monthly present counts
-        monthly_present = StudentAttendance.objects.filter(
+        # Get daily present counts per center per day
+        daily_present = StudentAttendance.objects.filter(
             center_id__in=center_ids,
             scan_date__date__gte=start_date,
             scan_date__date__lte=end_date,
             status=True,
             type=True
-        ).values('scan_date__date').annotate(
-            present=Count('student_id', distinct=True)
+        ).values('center_id', 'scan_date__date').annotate(
+            daily_present=Count('student_id', distinct=True)
         )
         
-        # Aggregate by month
-        present_by_month = {}
-        for item in monthly_present:
+        # Get working days per month (Mon-Sat)
+        from calendar import monthrange
+        month_data = {}
+        current = datetime(start_date.year, 1, 1).date()
+        while current <= end_date:
+            month_key = f'{current.year}-{current.month:02d}'
+            if month_key not in month_data:
+                days_in_month = monthrange(current.year, current.month)[1]
+                month_end = datetime(current.year, current.month, days_in_month).date()
+                if month_end > end_date:
+                    month_end = end_date
+                
+                # Count working days (Mon-Sat) in this month up to month_end
+                working_days = 0
+                d = datetime(current.year, current.month, 1).date()
+                while d <= month_end:
+                    if d.weekday() < 6:  # Mon-Sat
+                        working_days += 1
+                    d += timedelta(days=1)
+                
+                month_data[month_key] = {
+                    'working_days': working_days,
+                    'present': 0
+                }
+            
+            # Move to next month
+            if current.month == 12:
+                current = datetime(current.year + 1, 1, 1).date()
+            else:
+                current = datetime(current.year, current.month + 1, 1).date()
+        
+        # Sum daily present counts per month
+        for item in daily_present:
             date_val = item['scan_date__date']
             month_key = f'{date_val.year}-{date_val.month:02d}'
-            present_by_month[month_key] = present_by_month.get(month_key, 0) + item['present']
+            if month_key in month_data:
+                month_data[month_key]['present'] += item['daily_present']
         
         monthly_data = []
         current = datetime(start_date.year, 1, 1).date()
@@ -327,15 +409,21 @@ class DashboardView(LoginRequiredMixin, View):
         
         while current <= end_date:
             month_key = f'{current.year}-{current.month:02d}'
-            present = present_by_month.get(month_key, 0)
-            pct = int((present / total_students * 100)) if total_students > 0 else 0
+            data = month_data.get(month_key, {'working_days': 0, 'present': 0})
+            working_days = data['working_days']
+            present = data['present']
+            
+            # Percentage = present / (total_students * working_days) * 100
+            max_possible = total_students * working_days
+            pct = int((present / max_possible * 100)) if max_possible > 0 else 0
             
             monthly_data.append({
                 'day': month_names[current.month - 1],
                 'date': current.isoformat(),
                 'percentage': min(pct, 100),
                 'present': present,
-                'total': total_students
+                'total': total_students,
+                'working_days': working_days
             })
             
             # Move to next month
@@ -347,22 +435,26 @@ class DashboardView(LoginRequiredMixin, View):
         return JsonResponse({'results': monthly_data})
 
 
-class CentresView(LoginRequiredMixin, View):
+class CentresView(PermissionRequiredMixin, View):
     template_name = 'esswebapp/pages/centres/educational-centre.html'
+    required_module = 'centres'
     
     def get(self, request):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
 
 
-class AttendanceView(LoginRequiredMixin, View):
+class AttendanceView(PermissionRequiredMixin, View):
     template_name = 'esswebapp/pages/attendance/center-detail.html'
+    required_module = 'attendance'
     
     def get(self, request):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
 
 
-class CenterMonthlyAttendanceView(LoginRequiredMixin, View):
+class CenterMonthlyAttendanceView(PermissionRequiredMixin, View):
     """Center monthly attendance summary page + API endpoint"""    
+    required_module = 'attendance'
+    
     def get(self, request):
         # Check if it's an AJAX request for JSON data
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -381,7 +473,11 @@ class CenterMonthlyAttendanceView(LoginRequiredMixin, View):
             if not center_id or not year or not month:
                 return JsonResponse({'detail': 'Center ID, year, and month are required'}, status=400)
             
-            from esswebapp.helpers import get_center_monthly_attendance
+            # Check if user has access to this center
+            accessible_center_ids = get_user_accessible_center_ids(request)
+            if accessible_center_ids is not None and int(center_id) not in accessible_center_ids:
+                return JsonResponse({'detail': 'Permission denied'}, status=403)
+            
             result = get_center_monthly_attendance([int(center_id)], int(year), int(month))
             
             return JsonResponse({
@@ -394,9 +490,10 @@ class CenterMonthlyAttendanceView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class CenterAttendanceView(LoginRequiredMixin, View):
+class CenterAttendanceView(PermissionRequiredMixin, View):
     """Center Attendance list page + paginated API with student counts and attendance data"""
     template_name = 'esswebapp/pages/attendance/center-attendance.html'
+    required_module = 'attendance'
     
     def get(self, request):
         print("request", request.path, request.GET)
@@ -409,9 +506,7 @@ class CenterAttendanceView(LoginRequiredMixin, View):
     
     def _get_centers_queryset(self):
         """Get centers ordered by created_on desc with related data"""
-        return Center.objects.filter(
-            status=True
-        ).select_related(
+        return get_user_accessible_centers_queryset(self.request).select_related(
             'district', 'vidhan_sabha', 'panchayat', 'village'
         ).order_by('-created_on')
     
@@ -568,7 +663,17 @@ class DistrictDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = District.objects.filter(status=True).order_by('name')
+            # Get accessible district IDs for this user
+            district_ids = get_user_accessible_district_ids(request)
+            print("district_ids", district_ids)
+            
+            queryset = District.objects.filter(status=True)
+            
+            if district_ids is not None:
+                # Regional Admin - filter by assigned districts
+                queryset = queryset.filter(id__in=district_ids)
+            
+            queryset = queryset.order_by('name')
             
             districts = list(queryset.values('id', 'name'))
             
@@ -589,12 +694,21 @@ class VidhanSabhaDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = VidhanSabha.objects.filter(status=True).order_by('name')
+            # Get accessible vidhan sabha IDs for this user
+            vs_ids = get_user_accessible_vidhan_sabha_ids(request)
+            
+            queryset = VidhanSabha.objects.filter(status=True)
+            
+            if vs_ids is not None:
+                # Regional Admin - filter by assigned vidhan sabhas
+                queryset = queryset.filter(id__in=vs_ids)
             
             # Optional district filter for cascading dropdowns
             district_id = request.GET.get('district_id')
             if district_id:
                 queryset = queryset.filter(district_id=district_id)
+            
+            queryset = queryset.order_by('name')
             
             vidhan_sabhas = list(queryset.values('id', 'name'))
             
@@ -615,12 +729,25 @@ class PanchayatDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = Panchayat.objects.filter(status=True).order_by('name')
+            # Get accessible panchayat IDs for this user
+            panchayat_ids = get_user_accessible_panchayat_ids(request)
             
-            # Optional vidhan_sabha filter for cascading dropdowns
+            queryset = Panchayat.objects.filter(status=True)
+            
+            if panchayat_ids is not None:
+                # Regional Admin - filter by assigned panchayats
+                queryset = queryset.filter(id__in=panchayat_ids)
+            
+            # Optional filters for cascading dropdowns (respect hierarchy)
+            district_id = request.GET.get('district_id')
+            if district_id:
+                queryset = queryset.filter(district_id=district_id)
+            
             vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
             if vidhan_sabha_id:
                 queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+            
+            queryset = queryset.order_by('name')
             
             panchayats = list(queryset.values('id', 'name'))
             
@@ -641,12 +768,29 @@ class VillageDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = Village.objects.filter(status=True).order_by('name')
+            # Get accessible village IDs for this user
+            village_ids = get_user_accessible_village_ids(request)
             
-            # Optional panchayat filter for cascading dropdowns
+            queryset = Village.objects.filter(status=True)
+            
+            if village_ids is not None:
+                # Regional Admin - filter by assigned villages
+                queryset = queryset.filter(id__in=village_ids)
+            
+            # Optional filters for cascading dropdowns (respect hierarchy)
+            district_id = request.GET.get('district_id')
+            if district_id:
+                queryset = queryset.filter(district_id=district_id)
+            
+            vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
+            if vidhan_sabha_id:
+                queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+            
             panchayat_id = request.GET.get('panchayat_id')
             if panchayat_id:
                 queryset = queryset.filter(panchayat_id=panchayat_id)
+            
+            queryset = queryset.order_by('name')
             
             villages = list(queryset.values('id', 'name'))
             
@@ -886,16 +1030,18 @@ class ClassListView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class StudentRegistrationView(LoginRequiredMixin, View):
+class StudentRegistrationView(PermissionRequiredMixin, View):
     """View for student registration page"""
     template_name = 'esswebapp/pages/students/student-registration.html'
+    required_module = 'students'
     
     def get(self, request):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
 
 
-class StudentsView(LoginRequiredMixin, View):
+class StudentsView(PermissionRequiredMixin, View):
     template_name = 'esswebapp/pages/students/student-list.html'
+    required_module = 'students'
     
     def get(self, request):
         # Check if it's an AJAX request for JSON data
@@ -1006,7 +1152,7 @@ class StudentsView(LoginRequiredMixin, View):
     
     def _get_students_queryset(self):
         """Get students with related data"""
-        return Student.objects.select_related(
+        return get_user_accessible_students_queryset(self.request).select_related(
             'center', 'school', 'district', 'vidhan_sabha', 'panchayat', 'village'
         ).order_by('-created_on')
     
@@ -1076,7 +1222,6 @@ class StudentsView(LoginRequiredMixin, View):
                 if '-' in date_val and len(date_val) == 10:
                     parts = date_val.split('-')
                     if len(parts[0]) == 2:  # DD-MM-YYYY
-                        from datetime import datetime
                         return datetime.strptime(date_val, '%d-%m-%Y').date().isoformat()
                     elif len(parts[0]) == 4:  # YYYY-MM-DD
                         return date_val
@@ -1508,7 +1653,6 @@ class StudentsView(LoginRequiredMixin, View):
             start_date = request.GET.get('start_date')
             end_date = request.GET.get('end_date')
             
-            from esswebapp.helpers import get_student_attendance_history
             history = get_student_attendance_history(student_id, start_date, end_date)
             
             return JsonResponse({
@@ -1531,7 +1675,6 @@ class StudentsView(LoginRequiredMixin, View):
             if not student_id or not year or not month:
                 return JsonResponse({'detail': 'Student ID, year, and month are required'}, status=400)
             
-            from esswebapp.helpers import get_student_monthly_attendance
             summary = get_student_monthly_attendance(student_id, int(year), int(month))
             
             return JsonResponse({
@@ -1553,7 +1696,6 @@ class StudentsView(LoginRequiredMixin, View):
             if not student_id or not year or not month:
                 return JsonResponse({'detail': 'Student ID, year, and month are required'}, status=400)
             
-            from esswebapp.helpers import get_student_daily_attendance
             daily = get_student_daily_attendance(student_id, int(year), int(month))
             
             return JsonResponse({
@@ -1569,8 +1711,9 @@ class StudentsView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class UsersView(LoginRequiredMixin, View):
+class UsersView(PermissionRequiredMixin, View):
     template_name = 'esswebapp/pages/users/super-admin.html'
+    required_module = 'users'
     
     def get(self, request):
         # Only super admins can access users page
@@ -1579,9 +1722,10 @@ class UsersView(LoginRequiredMixin, View):
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
 
 
-class SuperAdminView(LoginRequiredMixin, View):
+class SuperAdminView(PermissionRequiredMixin, View):
     """Super Admin management page + API endpoints"""
     template_name = 'esswebapp/pages/users/super-admin.html'
+    required_module = 'users'
     
     def get(self, request):
         # Check if it's an AJAX request for JSON data
@@ -1917,9 +2061,10 @@ class SuperAdminView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class RegionalAdminView(LoginRequiredMixin, View):
+class RegionalAdminView(PermissionRequiredMixin, View):
     """Regional Admin management page + API endpoints"""
     template_name = 'esswebapp/pages/users/regional-admin.html'
+    required_module = 'users'
     
     def get(self, request):
         # Check if it's an AJAX request for JSON data
@@ -2414,9 +2559,10 @@ class RegionalAdminView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class DistrictView(LoginRequiredMixin, View):
+class DistrictView(PermissionRequiredMixin, View):
     """District management page + API endpoints"""
     template_name = 'esswebapp/pages/constituency/district.html'
+    required_module = 'constituency'
     
     def get(self, request):
         # Check if it's an AJAX request for JSON data
@@ -2651,9 +2797,10 @@ class DistrictView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class VidhanSabhaView(LoginRequiredMixin, View):
+class VidhanSabhaView(PermissionRequiredMixin, View):
     """Vidhan Sabha management page + API endpoints"""
     template_name = 'esswebapp/pages/constituency/vidhan-sabha.html'
+    required_module = 'constituency'
     
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -2881,9 +3028,10 @@ class VidhanSabhaView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class PanchayatView(LoginRequiredMixin, View):
+class PanchayatView(PermissionRequiredMixin, View):
     """Panchayat management page + API endpoints"""
     template_name = 'esswebapp/pages/constituency/panchayat.html'
+    required_module = 'constituency'
     
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -3136,9 +3284,10 @@ class PanchayatView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class VillageView(LoginRequiredMixin, View):
+class VillageView(PermissionRequiredMixin, View):
     """Village management page + API endpoints"""
     template_name = 'esswebapp/pages/constituency/village.html'
+    required_module = 'constituency'
     
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -3396,9 +3545,10 @@ class VillageView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
                 
        
-class TeacherView(LoginRequiredMixin, View):
+class TeacherView(PermissionRequiredMixin, View):
     """Teacher management page + API endpoints"""
     template_name = 'esswebapp/pages/users/teacher.html'
+    required_module = 'teachers'
     
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -3416,9 +3566,7 @@ class TeacherView(LoginRequiredMixin, View):
     
     def _get_teachers_queryset(self):
         """Get teachers ordered by created_on desc"""
-        return User.objects.filter(
-            status=True, role__role_code='TEACHER'
-        ).select_related('role', 'teacher').order_by('-created_on')
+        return get_user_accessible_teachers_queryset(self.request).select_related('role', 'teacher').order_by('-created_on')
     
     def _list_teachers_api(self, request):
         try:
@@ -3907,9 +4055,10 @@ class TeacherView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
-class CenterView(LoginRequiredMixin, View):
+class CenterView(PermissionRequiredMixin, View):
     """Educational Center management page + API endpoints"""
     template_name = 'esswebapp/pages/centres/educational-centre.html'
+    required_module = 'centres'
     
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -3927,9 +4076,7 @@ class CenterView(LoginRequiredMixin, View):
     
     def _get_centers_queryset(self):
         """Get centers ordered by created_on desc"""
-        return Center.objects.filter(
-            status=True
-        ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by('-created_on')
+        return get_user_accessible_centers_queryset(self.request).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by('-created_on')
     
     def _get_user_names_map(self, user_ids):
         """Batch-fetch user names for the given ids (RA / teacher display)."""
@@ -4224,6 +4371,11 @@ class CenterView(LoginRequiredMixin, View):
             if not center_id:
                 return JsonResponse({'detail': 'ID is required'}, status=400)
             
+            # Check if user has access to this center
+            accessible_center_ids = get_user_accessible_center_ids(request)
+            if accessible_center_ids is not None and int(center_id) not in accessible_center_ids:
+                return JsonResponse({'detail': 'Permission denied'}, status=403)
+            
             # Transform data to PascalCase format expected by save_center helper
             center_data = {'Id': center_id}
             
@@ -4296,6 +4448,11 @@ class CenterView(LoginRequiredMixin, View):
             
             if not center_id:
                 return JsonResponse({'detail': 'Center ID is required'}, status=400)
+            
+            # Check if user has access to this center
+            accessible_center_ids = get_user_accessible_center_ids(request)
+            if accessible_center_ids is not None and int(center_id) not in accessible_center_ids:
+                return JsonResponse({'detail': 'Permission denied'}, status=403)
             
             try:
                 center = Center.objects.get(id=center_id, status=True)
