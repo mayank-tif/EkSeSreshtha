@@ -390,6 +390,170 @@ def _assign_new_regional_admin(center, current_user_id):
 
 
 # ==================================================================
+# RBAC HELPERS - Role-Based Access Control
+# ==================================================================
+
+def get_user_assigned_center_ids(user_id):
+    """
+    Get center IDs assigned to a user (via CenterAssignUser).
+    Used for Regional Admin to filter data by their centers.
+    
+    Args:
+        user_id: User ID
+    
+    Returns:
+        List of center IDs
+    """
+    if not user_id:
+        return []
+    
+    center_ids = list(CenterAssignUser.objects.filter(
+        users_id=user_id,
+        status=True
+    ).values_list('center_id', flat=True))
+    
+    return center_ids
+
+
+def get_user_accessible_center_ids(request):
+    """
+    Get center IDs accessible by the current user based on role.
+    Super Admin: All centers
+    Regional Admin: Only assigned centers
+    
+    Args:
+        request: Django request object
+    
+    Returns:
+        List of center IDs or None (None means all centers)
+    """
+    user_data = request.session.get('user')
+    if not user_data:
+        return []
+    
+    role_code = user_data.get('role_code')
+    user_id = user_data.get('user_id')
+    
+    if role_code == 'SUPER_ADMIN':
+        return None  # None means all centers
+    
+    if role_code == 'REGIONAL_ADMIN':
+        return get_user_assigned_center_ids(user_id)
+    
+    return []  # Default: no access
+
+
+def can_access_module(request, module_name):
+    """
+    Check if user can access a specific module.
+    
+    Args:
+        request: Django request object
+        module_name: Module to check (e.g., 'centres', 'students', 'teachers', 'attendance', 'constituency', 'users')
+    
+    Returns:
+        bool: True if access allowed
+    """
+    user_data = request.session.get('user')
+    if not user_data:
+        return False
+    
+    role_code = user_data.get('role_code')
+    
+    # Super admin has access to everything
+    if role_code == 'SUPER_ADMIN':
+        return True
+    
+    # Regional admin module permissions
+    regional_admin_modules = {
+        'dashboard': True,
+        'centres': True,        # Can view/edit assigned centers
+        'students': True,       # Can view/add/edit students in assigned centers
+        'teachers': True,       # Can view teachers in assigned centers
+        'attendance': True,     # Can view attendance for assigned centers
+        'constituency': False,  # NO access
+        'users': False,         # NO access
+    }
+    
+    return regional_admin_modules.get(module_name, False)
+
+
+def filter_queryset_by_user_centers(queryset, request, center_field='center_id'):
+    """
+    Filter a queryset by user's accessible centers.
+    
+    Args:
+        queryset: Django queryset
+        request: Django request object
+        center_field: Field name for center relation (default: 'center_id')
+    
+    Returns:
+        Filtered queryset
+    """
+    center_ids = get_user_accessible_center_ids(request)
+    
+    if center_ids is None:
+        # Super admin - no filtering
+        return queryset
+    
+    if not center_ids:
+        # No accessible centers - return empty
+        return queryset.none()
+    
+    # Filter by center_ids
+    filter_kwargs = {f'{center_field}__in': center_ids}
+    return queryset.filter(**filter_kwargs)
+
+
+def get_user_accessible_centers_queryset(request):
+    """
+    Get Center queryset filtered by user's accessible centers.
+    
+    Args:
+        request: Django request object
+    
+    Returns:
+        Filtered Center queryset
+    """
+    return filter_queryset_by_user_centers(Center.objects.filter(status=True), request, 'id')
+
+
+def get_user_accessible_students_queryset(request):
+    """
+    Get Student queryset filtered by user's accessible centers.
+    
+    Args:
+        request: Django request object
+    
+    Returns:
+        Filtered Student queryset
+    """
+    return filter_queryset_by_user_centers(Student.objects.filter(status=True), request, 'center_id')
+
+
+def get_user_accessible_teachers_queryset(request):
+    """
+    Get Teacher queryset filtered by user's accessible centers.
+    
+    Args:
+        request: Django request object
+    
+    Returns:
+        Filtered Teacher queryset
+    """
+    center_ids = get_user_accessible_center_ids(request)
+    
+    if center_ids is None:
+        return Teacher.objects.filter(status=True)
+    
+    if not center_ids:
+        return Teacher.objects.none()
+    
+    # Teachers are linked to centers via center field
+    return Teacher.objects.filter(center_id__in=center_ids, status=True)
+
+
+# ==================================================================
 # CENTER ATTENDANCE HELPERS
 # ==================================================================
 

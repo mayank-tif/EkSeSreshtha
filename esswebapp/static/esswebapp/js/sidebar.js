@@ -26,39 +26,44 @@
    Uses Django URL names (resolved at runtime via data attributes)
    ================================================================ */
 
-const NAV_ITEMS = [
+// Base navigation items for all roles
+const BASE_NAV_ITEMS = [
     {
         id: 'dashboard',
         label: 'Dashboard',
         icon: 'grid',
-        urlName: 'dashboard'
+        urlName: 'dashboard',
+        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     },
     {
         id: 'constituency',
         label: 'Constituency',
         icon: 'map',
         children: [
-            { id: 'district', label: 'District', urlName: 'district' },
-            { id: 'vidhan-sabha', label: 'Vidhan Sabha', urlName: 'vidhan-sabha' },
-            { id: 'panchayat', label: 'Panchayat', urlName: 'panchayat' },
-            { id: 'village', label: 'Village', urlName: 'village' }
-        ]
+            { id: 'district', label: 'District', urlName: 'district', roles: ['SUPER_ADMIN'] },
+            { id: 'vidhan-sabha', label: 'Vidhan Sabha', urlName: 'vidhan-sabha', roles: ['SUPER_ADMIN'] },
+            { id: 'panchayat', label: 'Panchayat', urlName: 'panchayat', roles: ['SUPER_ADMIN'] },
+            { id: 'village', label: 'Village', urlName: 'village', roles: ['SUPER_ADMIN'] }
+        ],
+        roles: ['SUPER_ADMIN']
     },
     {
         id: 'users',
         label: 'Users',
         icon: 'users',
         children: [
-            { id: 'super-admin', label: 'Super Admin', urlName: 'super-admin' },
-            { id: 'regional-admin', label: 'Regional Admin', urlName: 'regional-admin' },
-            { id: 'teacher', label: 'Teacher', urlName: 'teacher' }
-        ]
+            { id: 'super-admin', label: 'Super Admin', urlName: 'super-admin', roles: ['SUPER_ADMIN'] },
+            { id: 'regional-admin', label: 'Regional Admin', urlName: 'regional-admin', roles: ['SUPER_ADMIN'] },
+            { id: 'teacher', label: 'Teacher', urlName: 'teacher', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] }
+        ],
+        roles: ['SUPER_ADMIN']
     },
     {
         id: 'centres',
         label: 'Educational Centre',
         icon: 'building',
-        urlName: 'centres'
+        urlName: 'centres',
+        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     },
     {
         id: 'students',
@@ -66,17 +71,59 @@ const NAV_ITEMS = [
         icon: 'user-graduate',
         urlName: 'student-list',
         children: [
-            { id: 'student-list', label: 'Student List', urlName: 'students' },
-            { id: 'school-details-list', label: 'School List', urlName: 'school-details-list' }
-        ]
+            { id: 'student-list', label: 'Student List', urlName: 'students', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] },
+            { id: 'school-details-list', label: 'School List', urlName: 'school-details-list', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] }
+        ],
+        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     },
     {
         id: 'attendance',
         label: 'Center Attendance',
         icon: 'clipboard',
-        urlName: 'attendance'
+        urlName: 'attendance',
+        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     }
 ];
+
+/**
+ * Filter navigation items by user role
+ * @param {string} userRole - User role code (SUPER_ADMIN, REGIONAL_ADMIN)
+ * @returns {Array} - Filtered navigation items
+ */
+function getNavItemsForRole(userRole) {
+    return BASE_NAV_ITEMS.filter(item => {
+        // Check if parent item is accessible
+        if (item.roles && !item.roles.includes(userRole)) {
+            return false;
+        }
+        // Filter children if present
+        if (item.children) {
+            item.children = item.children.filter(child => 
+                child.roles && child.roles.includes(userRole)
+            );
+            // If no children left, don't show parent
+            if (item.children.length === 0) {
+                return false;
+            }
+        }
+        return true;
+    });
+}
+
+// Dynamic nav items - will be set after role is known
+let NAV_ITEMS = [];
+
+// Initialize NAV_ITEMS based on current user role
+(function initNavItems() {
+    try {
+        const session = window.USER_SESSION || {};
+        const userRole = session.role_code || 'SUPER_ADMIN';
+        NAV_ITEMS = getNavItemsForRole(userRole);
+    } catch (e) {
+        console.warn('Failed to initialize nav items:', e);
+        NAV_ITEMS = BASE_NAV_ITEMS; // fallback
+    }
+})();
 
 /* ================================================================
    ICON LIBRARY
@@ -176,8 +223,8 @@ function buildSidebar(activeId) {
         `;
     }).join('');
 
-    // Grab current user session from data attribute on body (set by Django template)
-    const session = JSON.parse(document.body.dataset.userSession || '{}');
+    // Grab current user session from global variable (set by Django template)
+    const session = window.USER_SESSION || {};
     const userName = session.name || 'Admin User';
     const userRole = session.role_code === 'SUPER_ADMIN' ? 'Super Admin' : 'Regional Admin';
     const userInitials = getInitials(userName);

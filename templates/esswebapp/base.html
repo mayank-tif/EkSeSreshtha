@@ -28,7 +28,8 @@
 </head>
 <body
 {% block body-attributes %}
-    data-user-session='{{ user|default:"{}"|safe }}'
+{% load json_filters %}
+
     data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
     data-url-dashboard="{% url 'esswebapp:dashboard' %}"
     data-url-login="{% url 'esswebapp:login' %}"
@@ -72,6 +73,9 @@
                 <!-- Page-specific content goes here -->
             {% endblock %}
         </div>
+        <script>
+    window.USER_SESSION = {{ request.session.user|default:"{}"|jsonify|safe }};
+</script>
 
         <!-- Scripts -->
         <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
