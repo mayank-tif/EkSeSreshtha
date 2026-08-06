@@ -236,7 +236,18 @@ class DashboardView(PermissionRequiredMixin, View):
         """Return recent activity feed from ActivityLog."""
         
         limit = int(request.GET.get('limit', 4))
-        activities = ActivityLog.objects.select_related().order_by('-created_on')[:limit]
+        
+        # Get current user ID for filtering
+        user_id = request.web_user.get('user_id')
+        role_code = request.web_user.get('role_code')
+        
+        queryset = ActivityLog.objects.select_related()
+        
+        # Regional Admin only sees their own activities
+        if role_code == 'REGIONAL_ADMIN':
+            queryset = queryset.filter(user_id=user_id)
+        
+        activities = queryset.order_by('-created_on')[:limit]
         
         data = []
         for a in activities:
@@ -342,23 +353,54 @@ class DashboardView(PermissionRequiredMixin, View):
         
         total_students = Student.objects.filter(center_id__in=center_ids, status=True).count()
         
-        # Get monthly present counts
-        monthly_present = StudentAttendance.objects.filter(
+        # Get daily present counts per center per day
+        daily_present = StudentAttendance.objects.filter(
             center_id__in=center_ids,
             scan_date__date__gte=start_date,
             scan_date__date__lte=end_date,
             status=True,
             type=True
-        ).values('scan_date__date').annotate(
-            present=Count('student_id', distinct=True)
+        ).values('center_id', 'scan_date__date').annotate(
+            daily_present=Count('student_id', distinct=True)
         )
         
-        # Aggregate by month
-        present_by_month = {}
-        for item in monthly_present:
+        # Get working days per month (Mon-Sat)
+        from calendar import monthrange
+        month_data = {}
+        current = datetime(start_date.year, 1, 1).date()
+        while current <= end_date:
+            month_key = f'{current.year}-{current.month:02d}'
+            if month_key not in month_data:
+                days_in_month = monthrange(current.year, current.month)[1]
+                month_end = datetime(current.year, current.month, days_in_month).date()
+                if month_end > end_date:
+                    month_end = end_date
+                
+                # Count working days (Mon-Sat) in this month up to month_end
+                working_days = 0
+                d = datetime(current.year, current.month, 1).date()
+                while d <= month_end:
+                    if d.weekday() < 6:  # Mon-Sat
+                        working_days += 1
+                    d += timedelta(days=1)
+                
+                month_data[month_key] = {
+                    'working_days': working_days,
+                    'present': 0
+                }
+            
+            # Move to next month
+            if current.month == 12:
+                current = datetime(current.year + 1, 1, 1).date()
+            else:
+                current = datetime(current.year, current.month + 1, 1).date()
+        
+        # Sum daily present counts per month
+        for item in daily_present:
             date_val = item['scan_date__date']
             month_key = f'{date_val.year}-{date_val.month:02d}'
-            present_by_month[month_key] = present_by_month.get(month_key, 0) + item['present']
+            if month_key in month_data:
+                month_data[month_key]['present'] += item['daily_present']
         
         monthly_data = []
         current = datetime(start_date.year, 1, 1).date()
@@ -367,15 +409,21 @@ class DashboardView(PermissionRequiredMixin, View):
         
         while current <= end_date:
             month_key = f'{current.year}-{current.month:02d}'
-            present = present_by_month.get(month_key, 0)
-            pct = int((present / total_students * 100)) if total_students > 0 else 0
+            data = month_data.get(month_key, {'working_days': 0, 'present': 0})
+            working_days = data['working_days']
+            present = data['present']
+            
+            # Percentage = present / (total_students * working_days) * 100
+            max_possible = total_students * working_days
+            pct = int((present / max_possible * 100)) if max_possible > 0 else 0
             
             monthly_data.append({
                 'day': month_names[current.month - 1],
                 'date': current.isoformat(),
                 'percentage': min(pct, 100),
                 'present': present,
-                'total': total_students
+                'total': total_students,
+                'working_days': working_days
             })
             
             # Move to next month

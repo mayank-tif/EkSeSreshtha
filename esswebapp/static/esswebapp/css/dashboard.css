@@ -142,27 +142,31 @@
 
 .chart-wrapper {
     overflow-x: auto;
+    overflow-y: visible; /* Allow tooltip to overflow vertically */
+    padding-top: var(--space-6); /* Extra space for tooltip */
     padding-bottom: var(--space-4);
     margin-bottom: calc(var(--space-4) * -1);
 }
 
 .attendance-chart {
     display: flex;
-    align-items: flex-end;
+    align-items: stretch;
     justify-content: space-between;
     gap: var(--space-2);
     height: 240px;
-    padding: var(--space-4) 0;
+    padding: var(--space-8) 0 var(--space-4); /* Extra top padding for tooltip */
     min-width: max-content; /* Allow horizontal scroll for many bars */
 }
 
 .chart-bar-group {
-    flex: 0 0 auto;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
+    justify-content: flex-end; /* Push bars to bottom */
     align-items: center;
     gap: var(--space-2);
     min-width: 44px; /* Minimum width for readability */
+    height: 100%; /* Fill chart height for percentage-based bars */
 }
 
 .chart-bar {

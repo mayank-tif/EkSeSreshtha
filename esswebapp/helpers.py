@@ -57,7 +57,7 @@ def log_web_activity(request, action, module, record_id=None, record_name=None, 
     """
     try:
         user_data = request.session.get('user')
-        user_id = user_data.get('id') if user_data else None
+        user_id = user_data.get('user_id') if user_data else None
         user_name = user_data.get('name') if user_data else None
         role = user_data.get('role_code') if user_data else None
         
@@ -403,10 +403,13 @@ def get_user_assigned_center_ids(user_id):
     if not user_id:
         return []
     
+    print("get_user_assigned_center_ids", user_id)  # --- IGNORE ---
+    
     center_ids = list(CenterAssignUser.objects.filter(
         users_id=user_id,
         status=True
     ).values_list('center_id', flat=True))
+    print("center_ids", center_ids)  # --- IGNORE ---
     
     return center_ids
 
