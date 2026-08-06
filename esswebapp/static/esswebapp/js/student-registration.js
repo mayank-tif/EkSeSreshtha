@@ -89,7 +89,7 @@ function handleStudentImageChange(event) {
 
 async function loadSchools() {
     try {
-        const data = await apiFetch(getUrl('school-dropdown-list') + '?page=1&page_size=1000');
+        const data = await fetchSchools({ page: 1, page_size: 1000 }, true);
         state.schools = data.results || data || [];
         const select = document.getElementById('student-school');
         select.innerHTML = '<option value="">Select school</option>' +
@@ -101,8 +101,8 @@ async function loadSchools() {
 
 async function loadCentres() {
     try {
-        const data = await fetchCentres({ page: 1, page_size: 1000 });
-        state.centres = data.results || data || [];
+        const data = await fetchCentresForDropdown(true);
+        state.centres = data;
 
         const optionsContainer = document.getElementById('centre-options');
         if (!optionsContainer) return;

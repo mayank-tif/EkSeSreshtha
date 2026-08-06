@@ -805,18 +805,24 @@ class TestTable(models.Model):
 class ActivityLog(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
+    user_name = models.CharField(db_column="UserName", max_length=100, null=True, blank=True)
+    role = models.CharField(db_column="Role", max_length=50, null=True, blank=True)
     action = models.CharField(db_column="Action", max_length=50, null=True, blank=True)
     module = models.CharField(db_column="Module", max_length=50, null=True, blank=True)
     record_id = models.IntegerField(db_column="RecordId", null=True, blank=True)
+    record_name = models.CharField(db_column="RecordName", max_length=200, null=True, blank=True)
+    message = models.TextField(db_column="Message", null=True, blank=True)
     data = models.TextField(db_column="Data", null=True, blank=True)
     ip_address = models.CharField(db_column="IpAddress", max_length=50, null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    user_agent = models.TextField(db_column="UserAgent", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", auto_now_add=True, null=True, blank=True)
 
     class Meta:
         db_table = "ActivityLog"
         indexes = [
             models.Index(fields=['user_id'], name='idx_activitylog_user'),
             models.Index(fields=['module'], name='idx_activitylog_module'),
+            models.Index(fields=['action'], name='idx_activitylog_action'),
             models.Index(fields=['created_on'], name='idx_activitylog_created_on'),
         ]
 

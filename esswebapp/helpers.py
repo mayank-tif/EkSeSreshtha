@@ -6,7 +6,13 @@ APIS app helpers so each can evolve independently.
 Current helpers:
     - save_center_web: create/update Center with assignment sync
       (optional lat/lng, ORM-based, session auth)
+    - Activity logging for web app admin actions (shared ActivityLog table)
+      Generates human-readable messages like:
+      - "New student Amit Kumar registered"
+      - "Teacher Mahesh Prasad added to the system"
+      - "Centre Urban Learning Hub was created"
 """
+import json
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -14,7 +20,7 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User
+from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User, ActivityLog
 from django.db.models import Count
 
 logger = logging.getLogger(__name__)
@@ -24,6 +30,136 @@ def _get_web_user_id(request):
     """Get current user id from the web session (set by LoginRequiredMixin)."""
     web_user = getattr(request, 'web_user', None) or {}
     return web_user.get('user_id')
+
+
+def get_client_ip(request):
+    """Get client IP address from request"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0].strip()
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+
+def log_web_activity(request, action, module, record_id=None, record_name=None, data=None):
+    """
+    Log user activity to ActivityLog model (shared by API and web app)
+    Generates human-readable messages for the activity feed.
+    
+    Args:
+        request: HTTP request object
+        action: Action performed (e.g., 'CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'ACTIVATE', 'DEACTIVATE')
+        module: Module name (e.g., 'Student', 'Teacher', 'Centre', 'District', 'VidhanSabha', 'Panchayat', 'Village', 'Auth')
+        record_id: Optional ID of the affected record
+        record_name: Optional name of the affected record (for display)
+        data: Optional additional data as dict
+    """
+    try:
+        user_data = request.session.get('user')
+        user_id = user_data.get('id') if user_data else None
+        user_name = user_data.get('name') if user_data else None
+        role = user_data.get('role_code') if user_data else None
+        
+        # Generate human-readable message
+        message = _generate_activity_message(action, module, record_name, user_name, data)
+        
+        ActivityLog.objects.create(
+            user_id=user_id,
+            user_name=user_name,
+            role=role,
+            action=action,
+            module=module,
+            record_id=record_id,
+            record_name=record_name,
+            message=message,
+            data=json.dumps(data) if data else None,
+            ip_address=get_client_ip(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500]
+        )
+    except Exception as e:
+        logger.error(f'Failed to log activity: {e}')
+
+
+def _generate_activity_message(action, module, record_name, user_name=None, data=None):
+    """Generate human-readable activity message."""
+    if not record_name:
+        record_name = 'record'
+    
+    module_display = {
+        'Student': 'student',
+        'Teacher': 'teacher',
+        'Centre': 'centre',
+        'District': 'district',
+        'VidhanSabha': 'vidhan sabha',
+        'Panchayat': 'panchayat',
+        'Village': 'village',
+        'Auth': '',
+    }.get(module, module.lower())
+    
+    action_messages = {
+        'CREATE': {
+            'Student': f'New student {record_name} registered',
+            'Teacher': f'Teacher {record_name} added to the system',
+            'Centre': f'Centre {record_name} was created',
+            'District': f'District {record_name} was created',
+            'VidhanSabha': f'Vidhan Sabha {record_name} was created',
+            'Panchayat': f'Panchayat {record_name} was created',
+            'Village': f'Village {record_name} was created',
+        },
+        'UPDATE': {
+            'Student': f'Student {record_name} was updated',
+            'Teacher': f'Teacher {record_name} was updated',
+            'Centre': f'Centre {record_name} was updated',
+            'District': f'District {record_name} was updated',
+            'VidhanSabha': f'Vidhan Sabha {record_name} was updated',
+            'Panchayat': f'Panchayat {record_name} was updated',
+            'Village': f'Village {record_name} was updated',
+        },
+        'DELETE': {
+            'Student': f'Student {record_name} was removed',
+            'Teacher': f'Teacher {record_name} was removed',
+            'Centre': f'Centre {record_name} was removed',
+            'District': f'District {record_name} was removed',
+            'VidhanSabha': f'Vidhan Sabha {record_name} was removed',
+            'Panchayat': f'Panchayat {record_name} was removed',
+            'Village': f'Village {record_name} was removed',
+        },
+        'ACTIVATE': {
+            'Student': f'Student {record_name} was activated',
+            'Teacher': f'Teacher {record_name} was activated',
+            'Centre': f'Centre {record_name} was activated',
+        },
+        'DEACTIVATE': {
+            'Student': f'Student {record_name} was deactivated',
+            'Teacher': f'Teacher {record_name} was deactivated',
+            'Centre': f'Centre {record_name} was deactivated',
+        },
+        'LOGIN': {
+            'Auth': f'{user_name or "User"} logged in',
+        },
+        'LOGOUT': {
+            'Auth': f'{user_name or "User"} logged out',
+        },
+    }
+    
+    # Get user_name from session for LOGIN/LOGOUT
+    # This is a fallback - ideally we'd pass it in
+    try:
+        from django.http import HttpRequest
+        # Can't access request here directly, so use generic message
+        pass
+    except:
+        pass
+    
+    if action in action_messages and module in action_messages[action]:
+        return action_messages[action][module]
+    
+    # Generic fallback
+    action_lower = action.lower()
+    if action_lower in ['create', 'update', 'delete', 'activate', 'deactivate']:
+        return f'{module_display} {record_name} was {action_lower}d'
+    return f'{action} {module_display} {record_name}'
 
 
 def save_center_web(center_data, request):
@@ -630,5 +766,3 @@ def get_student_daily_attendance(student_id, year, month):
         })
     
     return result
-
-

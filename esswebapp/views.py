@@ -39,11 +39,16 @@ class LoginRequiredMixin:
     def dispatch(self, request, *args, **kwargs):
         user_data = request.session.get('user')
         if not user_data:
+            # For AJAX requests, return 401 instead of redirect
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'detail': 'Authentication required'}, status=401)
             return redirect('esswebapp:login')
         
         role_code = user_data.get('role_code')
         if role_code not in ['SUPER_ADMIN', 'REGIONAL_ADMIN']:
             request.session.flush()
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'detail': 'Unauthorized'}, status=401)
             return redirect('esswebapp:login')
         
         # Attach user data to request
@@ -120,6 +125,9 @@ class LoginView(View):
         user.save(update_fields=['last_login_time'])
         print("user", user)
         
+        # Log successful login
+        log_web_activity(request, "LOGIN", "Auth", record_id=user.id, record_name=user.name)
+        
         return redirect('esswebapp:dashboard')
 
 
@@ -127,10 +135,18 @@ class LogoutView(View):
     """Handle web logout"""
     
     def get(self, request):
+        # Log logout before flushing session
+        user_data = request.session.get('user')
+        if user_data:
+            log_web_activity(request, 'LOGOUT', 'Auth', record_id=user_data.get('user_id'), record_name=user_data.get('name'))
         request.session.flush()
         return redirect('esswebapp:login')
     
     def post(self, request):
+        # Log logout before flushing session
+        user_data = request.session.get('user')
+        if user_data:
+            log_web_activity(request, 'LOGOUT', 'Auth', record_id=user_data.get('user_id'), record_name=user_data.get('name'))
         request.session.flush()
         return redirect('esswebapp:login')
 
@@ -151,8 +167,184 @@ class DashboardView(LoginRequiredMixin, View):
     template_name = 'esswebapp/pages/dashboard.html'
     
     def get(self, request):
-        print("dash")
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            action = request.GET.get('action')
+            if action == 'stats':
+                return self._dashboard_stats_api(request)
+            elif action == 'activity':
+                return self._dashboard_activity_api(request)
+            elif action == 'attendance':
+                return self._dashboard_attendance_api(request)
+        
         return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def _dashboard_stats_api(self, request):
+        """Return dashboard statistics."""
+        from datetime import datetime
+        
+        now = datetime.now()
+        start_of_month = datetime(now.year, now.month, 1)
+        
+        stats = {
+            'centres': Center.objects.filter(status=True).count(),
+            'students': Student.objects.filter(status=True).count(),
+            'teachers': Teacher.objects.filter(status=True).count(),
+            'districts': District.objects.filter(status=True).count(),
+            'centres_this_month': Center.objects.filter(status=True, created_on__gte=start_of_month).count(),
+            'students_this_month': Student.objects.filter(status=True, created_on__gte=start_of_month).count(),
+            'teachers_this_month': Teacher.objects.filter(status=True, created_on__gte=start_of_month).count(),
+            'districts_this_month': District.objects.filter(status=True, created_on__gte=start_of_month).count(),
+        }
+        return JsonResponse(stats)
+    
+    def _dashboard_activity_api(self, request):
+        """Return recent activity feed from ActivityLog."""
+        
+        limit = int(request.GET.get('limit', 4))
+        activities = ActivityLog.objects.select_related().order_by('-created_on')[:limit]
+        
+        data = []
+        for a in activities:
+            data.append({
+                'id': a.id,
+                'action': a.action,
+                'module': a.module,
+                'message': a.message,
+                'record_name': a.record_name,
+                'user_name': a.user_name,
+                'created_on': a.created_on.isoformat() if a.created_on else None,
+            })
+        
+        return JsonResponse({'results': data})
+    
+    def _dashboard_attendance_api(self, request):
+        """Return attendance data for chart based on selected range."""
+        # Get range parameter (7, 30, or 'year')
+        range_param = request.GET.get('range', '7')
+        
+        end_date = datetime.now().date()
+        
+        if range_param == 'year':
+            # This year - Jan 1 to today
+            start_date = datetime(end_date.year, 1, 1).date()
+            # Group by month for year view
+            return self._dashboard_attendance_yearly(request, start_date, end_date)
+        else:
+            # Days view - last N days
+            try:
+                days = int(range_param)
+            except ValueError:
+                days = 7
+            start_date = end_date - timedelta(days=days - 1)
+            return self._dashboard_attendance_daily(request, start_date, end_date)
+    
+    def _dashboard_attendance_daily(self, request, start_date, end_date):
+        """Return daily attendance data for a date range."""
+        print("start_date, end_date", start_date, end_date)
+        
+        # Get all centers
+        centers = Center.objects.filter(status=True)
+        center_ids = list(centers.values_list('id', flat=True))
+        
+        if not center_ids:
+            return JsonResponse({'results': []})
+        
+        # Total enrolled students across all centers
+        total_students = Student.objects.filter(center_id__in=center_ids, status=True).count()
+        print("total_students", total_students)
+        
+        # Get daily present counts
+        daily_present = StudentAttendance.objects.filter(
+            center_id__in=center_ids,
+            scan_date__date__gte=start_date,
+            scan_date__date__lte=end_date,
+            status=True,
+            type=True
+        ).values('scan_date__date').annotate(
+            present=Count('student_id', distinct=True)
+        )
+        print("daily_present", daily_present)
+        
+        # Convert to dict for easy lookup
+        present_by_date = {item['scan_date__date']: item['present'] for item in daily_present}
+        
+        # Build daily data
+        daily_data = []
+        current = start_date
+        while current <= end_date:
+            present = present_by_date.get(current, 0)
+            print("current", current, "present", present)
+            pct = int((present / total_students * 100)) if total_students > 0 else 0
+            print("pct", pct)
+            
+            daily_data.append({
+                'day': current.strftime('%a %d'),
+                'date': current.isoformat(),
+                'percentage': min(pct, 100),
+                'present': present,
+                'total': total_students
+            })
+            current += timedelta(days=1)
+            
+        print("daily_data", daily_data)
+        
+        return JsonResponse({'results': daily_data})
+    
+    def _dashboard_attendance_yearly(self, request, start_date, end_date):
+        """Return monthly attendance data for the year."""
+        
+        centers = Center.objects.filter(status=True)
+        center_ids = list(centers.values_list('id', flat=True))
+        
+        if not center_ids:
+            return JsonResponse({'results': []})
+        
+        total_students = Student.objects.filter(center_id__in=center_ids, status=True).count()
+        
+        # Get monthly present counts
+        monthly_present = StudentAttendance.objects.filter(
+            center_id__in=center_ids,
+            scan_date__date__gte=start_date,
+            scan_date__date__lte=end_date,
+            status=True,
+            type=True
+        ).values('scan_date__date').annotate(
+            present=Count('student_id', distinct=True)
+        )
+        
+        # Aggregate by month
+        present_by_month = {}
+        for item in monthly_present:
+            date_val = item['scan_date__date']
+            month_key = f'{date_val.year}-{date_val.month:02d}'
+            present_by_month[month_key] = present_by_month.get(month_key, 0) + item['present']
+        
+        monthly_data = []
+        current = datetime(start_date.year, 1, 1).date()
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        
+        while current <= end_date:
+            month_key = f'{current.year}-{current.month:02d}'
+            present = present_by_month.get(month_key, 0)
+            pct = int((present / total_students * 100)) if total_students > 0 else 0
+            
+            monthly_data.append({
+                'day': month_names[current.month - 1],
+                'date': current.isoformat(),
+                'percentage': min(pct, 100),
+                'present': present,
+                'total': total_students
+            })
+            
+            # Move to next month
+            if current.month == 12:
+                current = datetime(current.year + 1, 1, 1).date()
+            else:
+                current = datetime(current.year, current.month + 1, 1).date()
+        
+        return JsonResponse({'results': monthly_data})
 
 
 class CentresView(LoginRequiredMixin, View):
@@ -330,7 +522,7 @@ class CenterAttendanceView(LoginRequiredMixin, View):
 
 class SchoolDropDownView(LoginRequiredMixin, View):
     """API view for listing schools - used in dropdowns"""
-    
+
     def get(self, request):
         try:
             
@@ -341,6 +533,126 @@ class SchoolDropDownView(LoginRequiredMixin, View):
             items = [
                 {'id': s['id'], 'name': s['school_name']}
                 for s in schools_page
+            ]
+            
+            return JsonResponse({
+                'results': items,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class CenterDropDownView(LoginRequiredMixin, View):
+    """API view for listing centers - used in dropdowns"""
+
+    def get(self, request):
+        try:
+            queryset = Center.objects.filter(status=True).order_by('center_name')
+            
+            centers = list(queryset.values('id', 'center_name'))
+            
+            items = [
+                {'id': c['id'], 'name': c['center_name']}
+                for c in centers
+            ]
+            
+            return JsonResponse({
+                'results': items,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class DistrictDropDownView(LoginRequiredMixin, View):
+    """API view for listing districts - used in dropdowns"""
+
+    def get(self, request):
+        try:
+            queryset = District.objects.filter(status=True).order_by('name')
+            
+            districts = list(queryset.values('id', 'name'))
+            
+            items = [
+                {'id': d['id'], 'name': d['name']}
+                for d in districts
+            ]
+            
+            return JsonResponse({
+                'results': items,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class VidhanSabhaDropDownView(LoginRequiredMixin, View):
+    """API view for listing vidhan sabhas - used in dropdowns"""
+
+    def get(self, request):
+        try:
+            queryset = VidhanSabha.objects.filter(status=True).order_by('name')
+            
+            # Optional district filter for cascading dropdowns
+            district_id = request.GET.get('district_id')
+            if district_id:
+                queryset = queryset.filter(district_id=district_id)
+            
+            vidhan_sabhas = list(queryset.values('id', 'name'))
+            
+            items = [
+                {'id': v['id'], 'name': v['name']}
+                for v in vidhan_sabhas
+            ]
+            
+            return JsonResponse({
+                'results': items,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class PanchayatDropDownView(LoginRequiredMixin, View):
+    """API view for listing panchayats - used in dropdowns"""
+
+    def get(self, request):
+        try:
+            queryset = Panchayat.objects.filter(status=True).order_by('name')
+            
+            # Optional vidhan_sabha filter for cascading dropdowns
+            vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
+            if vidhan_sabha_id:
+                queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+            
+            panchayats = list(queryset.values('id', 'name'))
+            
+            items = [
+                {'id': p['id'], 'name': p['name']}
+                for p in panchayats
+            ]
+            
+            return JsonResponse({
+                'results': items,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class VillageDropDownView(LoginRequiredMixin, View):
+    """API view for listing villages - used in dropdowns"""
+
+    def get(self, request):
+        try:
+            queryset = Village.objects.filter(status=True).order_by('name')
+            
+            # Optional panchayat filter for cascading dropdowns
+            panchayat_id = request.GET.get('panchayat_id')
+            if panchayat_id:
+                queryset = queryset.filter(panchayat_id=panchayat_id)
+            
+            villages = list(queryset.values('id', 'name'))
+            
+            items = [
+                {'id': v['id'], 'name': v['name']}
+                for v in villages
             ]
             
             return JsonResponse({
@@ -664,6 +976,9 @@ class StudentsView(LoginRequiredMixin, View):
             
             # Create Student model directly
             student = Student.objects.create(**student_data)
+            
+            # Log activity
+            log_web_activity(request, 'CREATE', 'Student', record_id=student.id, record_name=student.full_name)
             
             return JsonResponse({
                 'status': True,
@@ -1103,6 +1418,9 @@ class StudentsView(LoginRequiredMixin, View):
             student.updated_on = datetime.now()
             student.save()
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'Student', record_id=student.id, record_name=student.full_name)
+            
             return JsonResponse({
                 'status': True,
                 'message': 'Student updated successfully',
@@ -1134,6 +1452,10 @@ class StudentsView(LoginRequiredMixin, View):
             student.updated_by = request.web_user.get('user_id')
             student.updated_on = datetime.now()
             student.save()
+            
+            # Log activity
+            action = 'ACTIVATE' if student.status else 'DEACTIVATE'
+            log_web_activity(request, action, 'Student', record_id=student.id, record_name=student.full_name)
             
             return JsonResponse({
                 'status': True,
@@ -1168,6 +1490,9 @@ class StudentsView(LoginRequiredMixin, View):
             student.updated_by = request.web_user.get('user_id')
             student.updated_on = datetime.now()
             student.save()
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'Student', record_id=student.id, record_name=student.full_name)
             
             return JsonResponse({'detail': 'Student deactivated successfully'})
         except Exception as e:
@@ -2223,6 +2548,9 @@ class DistrictView(LoginRequiredMixin, View):
                 updated_on=timezone.now()
             )
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'District', record_id=district.id, record_name=district.name)
+            
             # Return created district with related counts
             return JsonResponse({
                 'id': district.id,
@@ -2268,6 +2596,9 @@ class DistrictView(LoginRequiredMixin, View):
             district.updated_on = timezone.now()
             district.save(update_fields=['name', 'updated_by', 'updated_on'])
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'District', record_id=district.id, record_name=district.name)
+            
             # Return updated district with related counts
             return JsonResponse({
                 'id': district.id,
@@ -2305,10 +2636,14 @@ class DistrictView(LoginRequiredMixin, View):
                 return JsonResponse({'detail': 'District not found'}, status=404)
             
             # Soft delete - set status to False (0)
+            district_name = district.name
             district.status = False
             district.updated_by = request.web_user.get('user_id')
             district.updated_on = timezone.now()
             district.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'District', record_id=district.id, record_name=district_name)
             
             return JsonResponse({'detail': 'District deleted successfully'})
             
@@ -2444,6 +2779,9 @@ class VidhanSabhaView(LoginRequiredMixin, View):
                 updated_on=timezone.now()
             )
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'VidhanSabha', record_id=vs.id, record_name=vs.name)
+            
             return JsonResponse({
                 'id': vs.id,
                 'vidhan_sabha_guid_id': vs.vidhan_sabha_guid_id,
@@ -2490,6 +2828,9 @@ class VidhanSabhaView(LoginRequiredMixin, View):
             vs.updated_on = timezone.now()
             vs.save(update_fields=['name', 'district_id', 'updated_by', 'updated_on'])
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'VidhanSabha', record_id=vs.id, record_name=vs.name)
+            
             return JsonResponse({
                 'id': vs.id,
                 'vidhan_sabha_guid_id': vs.vidhan_sabha_guid_id,
@@ -2526,9 +2867,13 @@ class VidhanSabhaView(LoginRequiredMixin, View):
                 return JsonResponse({'detail': 'Vidhan Sabha not found'}, status=404)
             
             vs.status = False
+            vs_name = vs.name
             vs.updated_by = request.web_user.get('user_id')
             vs.updated_on = timezone.now()
             vs.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'VidhanSabha', record_id=vs.id, record_name=vs_name)
             
             return JsonResponse({'detail': 'Vidhan Sabha deleted successfully'})
             
@@ -2677,6 +3022,9 @@ class PanchayatView(LoginRequiredMixin, View):
                 updated_on=timezone.now()
             )
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'Panchayat', record_id=p.id, record_name=p.name)
+            
             return JsonResponse({
                 'id': p.id,
                 'panchayat_guid_id': p.panchayat_guid_id,
@@ -2731,6 +3079,9 @@ class PanchayatView(LoginRequiredMixin, View):
             p.updated_on = timezone.now()
             p.save(update_fields=['name', 'district_id', 'vidhan_sabha_id', 'updated_by', 'updated_on'])
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'Panchayat', record_id=p.id, record_name=p.name)
+            
             return JsonResponse({
                 'id': p.id,
                 'panchayat_guid_id': p.panchayat_guid_id,
@@ -2771,9 +3122,13 @@ class PanchayatView(LoginRequiredMixin, View):
                 return JsonResponse({'detail': 'Panchayat not found'}, status=404)
             
             p.status = False
+            p_name = p.name
             p.updated_by = request.web_user.get('user_id')
             p.updated_on = timezone.now()
             p.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'Panchayat', record_id=p.id, record_name=p_name)
             
             return JsonResponse({'detail': 'Panchayat deleted successfully'})
             
@@ -2921,6 +3276,9 @@ class VillageView(LoginRequiredMixin, View):
                 created_on=timezone.now(),
             )
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'Village', record_id=v.id, record_name=v.name)
+            
             return JsonResponse({
                 'id': v.id,
                 'village_guid_id': v.village_guid_id,
@@ -2980,6 +3338,9 @@ class VillageView(LoginRequiredMixin, View):
             v.updated_on = timezone.now()
             v.save(update_fields=['name', 'district_id', 'vidhan_sabha_id', 'panchayat_id', 'updated_by', 'updated_on'])
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'Village', record_id=v.id, record_name=v.name)
+            
             return JsonResponse({
                 'id': v.id,
                 'village_guid_id': v.village_guid_id,
@@ -3021,9 +3382,13 @@ class VillageView(LoginRequiredMixin, View):
                 return JsonResponse({'detail': 'Village not found'}, status=404)
             
             v.status = False
+            v_name = v.name
             v.updated_by = request.web_user.get('user_id')
             v.updated_on = timezone.now()
             v.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'Village', record_id=v.id, record_name=v_name)
             
             return JsonResponse({'detail': 'Village deleted successfully'})
             
@@ -3332,6 +3697,9 @@ class TeacherView(LoginRequiredMixin, View):
                 created_on=timezone.now()
             )
 
+            # Log activity
+            log_web_activity(request, 'CREATE', 'Teacher', record_id=user.id, record_name=user.name)
+
             # Parse enrollment_date if provided
             if enrollment_date:
                 try:
@@ -3475,6 +3843,9 @@ class TeacherView(LoginRequiredMixin, View):
             teacher.updated_on = timezone.now()
             teacher.save()
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'Teacher', record_id=user.id, record_name=user.name)
+            
             return JsonResponse({
                 'id': user.id,
                 'teacher_guid_id': teacher.teacher_guid_id,
@@ -3518,6 +3889,7 @@ class TeacherView(LoginRequiredMixin, View):
                 return JsonResponse({'detail': 'Teacher not found'}, status=404)
             
             user.status = False
+            teacher_name = user.name
             user.updated_by = request.web_user.get('user_id')
             user.updated_on = timezone.now()
             user.save(update_fields=['status', 'updated_by', 'updated_on'])
@@ -3526,6 +3898,9 @@ class TeacherView(LoginRequiredMixin, View):
             teacher.updated_by = request.web_user.get('user_id')
             teacher.updated_on = timezone.now()
             teacher.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'Teacher', record_id=user.id, record_name=teacher_name)
             
             return JsonResponse({'detail': 'Teacher deactivated successfully'})
         except Exception as e:
@@ -3825,6 +4200,9 @@ class CenterView(LoginRequiredMixin, View):
             if not center:
                 return JsonResponse({'detail': 'Failed to create center'}, status=500)
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'Centre', record_id=center.id, record_name=center.center_name)
+            
             name_map = self._get_user_names_map([
                 center.assigned_regional_admin, center.assigned_teachers
             ])
@@ -3890,6 +4268,9 @@ class CenterView(LoginRequiredMixin, View):
             if not center:
                 return JsonResponse({'detail': 'Center not found or failed to update'}, status=404)
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'Centre', record_id=center.id, record_name=center.center_name)
+            
             name_map = self._get_user_names_map([
                 center.assigned_regional_admin, center.assigned_teachers
             ])
@@ -3921,10 +4302,14 @@ class CenterView(LoginRequiredMixin, View):
             except Center.DoesNotExist:
                 return JsonResponse({'detail': 'Center not found'}, status=404)
             
+            center_name = center.center_name
             center.status = False
             center.updated_by = request.web_user.get('user_id')
             center.updated_on = timezone.now()
             center.save(update_fields=['status', 'updated_by', 'updated_on'])
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'Centre', record_id=center.id, record_name=center_name)
             
             return JsonResponse({'detail': 'Center deactivated successfully'})
         except Exception as e:

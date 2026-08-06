@@ -31,6 +31,7 @@
     data-user-session='{{ user|default:"{}"|safe }}'
     data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
     data-url-dashboard="{% url 'esswebapp:dashboard' %}"
+    data-url-login="{% url 'esswebapp:login' %}"
     data-url-centres="{% url 'esswebapp:centres' %}"
     data-url-attendance="{% url 'esswebapp:attendance' %}"
     data-url-center-detail="{% url 'esswebapp:center-detail' %}"
@@ -46,12 +47,18 @@
     data-url-vidhan-sabha="{% url 'esswebapp:vidhan-sabha' %}"
     data-url-panchayat="{% url 'esswebapp:panchayat' %}"
     data-url-village="{% url 'esswebapp:village' %}"
+    data-url-district-dropdown-list="{% url 'esswebapp:district-dropdown-list' %}"
+    data-url-vidhan-sabha-dropdown-list="{% url 'esswebapp:vidhan-sabha-dropdown-list' %}"
+    data-url-panchayat-dropdown-list="{% url 'esswebapp:panchayat-dropdown-list' %}"
+    data-url-village-dropdown-list="{% url 'esswebapp:village-dropdown-list' %}"
     data-url-super-admin="{% url 'esswebapp:super-admin' %}"
     data-url-regional-admin="{% url 'esswebapp:regional-admin' %}"
     data-url-teacher="{% url 'esswebapp:teacher' %}"
     data-url-student-registration="{% url 'esswebapp:student-registration' %}"
     data-url-school-details-list="{% url 'esswebapp:school-details-list' %}"
     data-url-school-dropdown-list="{% url 'esswebapp:school-dropdown-list' %}"
+    data-url-center-dropdown-list="{% url 'esswebapp:center-dropdown-list' %}"
+    data-url-dashboardApi="{% url 'esswebapp:dashboard' %}"
 {% endblock %}>
 
     {% block content %}

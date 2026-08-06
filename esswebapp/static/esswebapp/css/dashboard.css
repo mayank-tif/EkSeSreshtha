@@ -7,6 +7,26 @@
    ================================================================ */
 
 /* ================================================================
+   CARD HEADER ROW - for title + dropdown alignment
+   ================================================================ */
+
+.card-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+}
+
+.card-header-row h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+/* ================================================================
    STATS ROW
    Four cards showing top-line KPIs.
    ================================================================ */
@@ -120,6 +140,12 @@
    Simple pure-CSS/SVG bar chart. Bars scale via percentage height.
    ================================================================ */
 
+.chart-wrapper {
+    overflow-x: auto;
+    padding-bottom: var(--space-4);
+    margin-bottom: calc(var(--space-4) * -1);
+}
+
 .attendance-chart {
     display: flex;
     align-items: flex-end;
@@ -127,15 +153,16 @@
     gap: var(--space-2);
     height: 240px;
     padding: var(--space-4) 0;
+    min-width: max-content; /* Allow horizontal scroll for many bars */
 }
 
 .chart-bar-group {
-    flex: 1;
+    flex: 0 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--space-2);
-    min-width: 0;
+    min-width: 44px; /* Minimum width for readability */
 }
 
 .chart-bar {

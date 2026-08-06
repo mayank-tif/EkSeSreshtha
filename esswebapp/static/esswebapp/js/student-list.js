@@ -42,8 +42,7 @@ const locationCache = {
 
 async function fetchDistricts() {
     try {
-        const data = await apiFetch(getUrl('district'));
-        return data.results || data;
+        return await fetchDistrictsForDropdown(true);
     } catch (e) {
         console.error('Failed to fetch districts:', e);
         return [];
@@ -53,8 +52,7 @@ async function fetchDistricts() {
 async function fetchVidhanSabhas(districtId) {
     if (!districtId) return [];
     try {
-        const data = await apiFetch(getUrl('vidhan-sabha') + '?district_id=' + districtId);
-        return data.results || data;
+        return await fetchVidhanSabhasForDropdown(districtId, true);
     } catch (e) {
         console.error('Failed to fetch vidhan sabhas:', e);
         return [];
@@ -64,8 +62,7 @@ async function fetchVidhanSabhas(districtId) {
 async function fetchPanchayats(vidhanSabhaId) {
     if (!vidhanSabhaId) return [];
     try {
-        const data = await apiFetch(getUrl('panchayat') + '?vidhan_sabha_id=' + vidhanSabhaId);
-        return data.results || data;
+        return await fetchPanchayatsForDropdown(vidhanSabhaId, true);
     } catch (e) {
         console.error('Failed to fetch panchayats:', e);
         return [];
@@ -75,8 +72,7 @@ async function fetchPanchayats(vidhanSabhaId) {
 async function fetchVillages(panchayatId) {
     if (!panchayatId) return [];
     try {
-        const data = await apiFetch(getUrl('village') + '?panchayat_id=' + panchayatId);
-        return data.results || data;
+        return await fetchVillagesForDropdown(panchayatId, true);
     } catch (e) {
         console.error('Failed to fetch villages:', e);
         return [];

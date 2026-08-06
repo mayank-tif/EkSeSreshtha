@@ -55,6 +55,31 @@ const AppConfig = (function() {
 window.AppConfig = AppConfig;
 
 /* ================================================================
+   URL HELPERS - DATA_URLS
+   ----------------------------------------------------------------
+   Reads data-url-* attributes from the body tag and exposes them
+   as a global DATA_URLS object for easy access in page scripts.
+   ================================================================ */
+
+const DATA_URLS = (function() {
+    const urls = {};
+    const body = document.body;
+    if (body) {
+        // Extract all data-url-* attributes
+        for (const attr of body.attributes) {
+            if (attr.name.startsWith('data-url-')) {
+                const key = attr.name.replace('data-url-', '').replace(/-/g, '');
+                urls[key] = attr.value;
+            }
+        }
+    }
+    return urls;
+})();
+
+// Export for use in other modules
+window.DATA_URLS = DATA_URLS;
+
+/* ================================================================
    TOAST NOTIFICATION SYSTEM
    ----------------------------------------------------------------
    Shows temporary feedback messages at the top-right corner.
@@ -63,7 +88,7 @@ window.AppConfig = AppConfig;
 
 /**
  * Ensures a toast container exists on the page.
- * Creates one on first use so pages don't need to include it in HTML.
+ * Creates one on first use so pages do not need to include it in HTML.
  */
 function ensureToastContainer() {
     let container = document.querySelector('.toast-container');
@@ -698,23 +723,121 @@ function findRecord(type, id) {
 /**
  * Fetch centres from API
  * @param {Object} params - Query parameters
+ * @param {boolean} showLoader - Whether to show global loader
  * @returns {Promise} - API response
  */
-async function fetchCentres(params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const url = getUrl('centres') + (queryString ? '?' + queryString : '');
-    return apiFetch(url);
+async function fetchCentres(params = {}, showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading centres...');
+    try {
+        const queryString = new URLSearchParams(params).toString();
+        const url = getUrl('centres') + (queryString ? '?' + queryString : '');
+        return await apiFetch(url);
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
+}
+
+/**
+ * Fetch centres for dropdown (non-paginated, all status=true)
+ * @param {boolean} showLoader - Whether to show global loader
+ * @returns {Promise} - Array of centres
+ */
+async function fetchCentresForDropdown(showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading centres...');
+    try {
+        const url = getUrl('center-dropdown-list');
+        const response = await apiFetch(url);
+        return response.results || response || [];
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
 }
 
 /**
  * Fetch schools from API (esswebapp paginated for dropdowns)
  * @param {Object} params - Query parameters
+ * @param {boolean} showLoader - Whether to show global loader
  * @returns {Promise} - API response
  */
-async function fetchSchools(params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const url = getUrl('school-dropdown-list') + (queryString ? '?' + queryString : '');
-    return apiFetch(url);
+async function fetchSchools(params = {}, showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading schools...');
+    try {
+        const queryString = new URLSearchParams(params).toString();
+        const url = getUrl('school-dropdown-list') + (queryString ? '?' + queryString : '');
+        return await apiFetch(url);
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
+}
+
+/**
+ * Fetch districts for dropdown (non-paginated, all status=true)
+ * @param {boolean} showLoader - Whether to show global loader
+ * @returns {Promise} - Array of districts
+ */
+async function fetchDistrictsForDropdown(showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading districts...');
+    try {
+        const url = getUrl('district-dropdown-list');
+        const response = await apiFetch(url);
+        return response.results || response || [];
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
+}
+
+/**
+ * Fetch vidhan sabhas for dropdown (non-paginated, all status=true)
+ * @param {number} districtId - Optional district ID for filtering
+ * @param {boolean} showLoader - Whether to show global loader
+ * @returns {Promise} - Array of vidhan sabhas
+ */
+async function fetchVidhanSabhasForDropdown(districtId = null, showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading vidhan sabhas...');
+    try {
+        let url = getUrl('vidhan-sabha-dropdown-list');
+        if (districtId) url += '?district_id=' + districtId;
+        const response = await apiFetch(url);
+        return response.results || response || [];
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
+}
+
+/**
+ * Fetch panchayats for dropdown (non-paginated, all status=true)
+ * @param {number} vidhanSabhaId - Optional vidhan sabha ID for filtering
+ * @param {boolean} showLoader - Whether to show global loader
+ * @returns {Promise} - Array of panchayats
+ */
+async function fetchPanchayatsForDropdown(vidhanSabhaId = null, showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading panchayats...');
+    try {
+        let url = getUrl('panchayat-dropdown-list');
+        if (vidhanSabhaId) url += '?vidhan_sabha_id=' + vidhanSabhaId;
+        const response = await apiFetch(url);
+        return response.results || response || [];
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
+}
+
+/**
+ * Fetch villages for dropdown (non-paginated, all status=true)
+ * @param {number} panchayatId - Optional panchayat ID for filtering
+ * @param {boolean} showLoader - Whether to show global loader
+ * @returns {Promise} - Array of villages
+ */
+async function fetchVillagesForDropdown(panchayatId = null, showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading villages...');
+    try {
+        let url = getUrl('village-dropdown-list');
+        if (panchayatId) url += '?panchayat_id=' + panchayatId;
+        const response = await apiFetch(url);
+        return response.results || response || [];
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
 }
 
 /* ================================================================
@@ -824,7 +947,12 @@ if (typeof module !== 'undefined' && module.exports) {
         getRecords,
         findRecord,
         fetchCentres,
+        fetchCentresForDropdown,
         fetchSchools,
+        fetchDistrictsForDropdown,
+        fetchVidhanSabhasForDropdown,
+        fetchPanchayatsForDropdown,
+        fetchVillagesForDropdown,
         showGlobalLoader,
         hideGlobalLoader,
         renderPagination,

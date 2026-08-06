@@ -12,20 +12,44 @@
     <!-- Stats cards -->
     <section class="dashboard-stats">
         <div class="stat-card">
-            <div class="stat-card-label">Educational Centres</div>
-            <div class="stat-card-value" id="stat-centres">0</div>
+            <div class="stat-card-icon" style="background: var(--info-light); color: var(--brand-blue);">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10"></path><path d="M6 10V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"></path><path d="M12 3v2"></path><path d="M12 14v2"></path><path d="M12 18v2"></path></svg>
+            </div>
+            <div class="stat-card-info">
+                <div class="stat-card-label">Educational Centres</div>
+                <div class="stat-card-value" id="stat-centres">0</div>
+                <div class="stat-card-trend neutral" id="stat-centres-trend">+0 this month</div>
+            </div>
         </div>
         <div class="stat-card">
-            <div class="stat-card-label">Enrolled Students</div>
-            <div class="stat-card-value" id="stat-students">0</div>
+            <div class="stat-card-icon" style="background: var(--success-light); color: var(--success);">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            </div>
+            <div class="stat-card-info">
+                <div class="stat-card-label">Enrolled Students</div>
+                <div class="stat-card-value" id="stat-students">0</div>
+                <div class="stat-card-trend positive" id="stat-students-trend">+0 this month</div>
+            </div>
         </div>
         <div class="stat-card">
-            <div class="stat-card-label">Active Teachers</div>
-            <div class="stat-card-value" id="stat-teachers">0</div>
+            <div class="stat-card-icon" style="background: var(--warning-light); color: var(--warning);">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            </div>
+            <div class="stat-card-info">
+                <div class="stat-card-label">Active Teachers</div>
+                <div class="stat-card-value" id="stat-teachers">0</div>
+                <div class="stat-card-trend positive" id="stat-teachers-trend">+0 this month</div>
+            </div>
         </div>
         <div class="stat-card">
-            <div class="stat-card-label">Districts Covered</div>
-            <div class="stat-card-value" id="stat-districts">0</div>
+            <div class="stat-card-icon" style="background: var(--purple-light); color: var(--purple);">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon><path d="M12 22V12"></path><path d="M12 2v10"></path></svg>
+            </div>
+            <div class="stat-card-info">
+                <div class="stat-card-label">Districts Covered</div>
+                <div class="stat-card-value" id="stat-districts">0</div>
+                <div class="stat-card-trend neutral" id="stat-districts-trend">+0 this month</div>
+            </div>
         </div>
     </section>
 
@@ -33,10 +57,19 @@
     <section class="dashboard-grid">
         <div class="card">
             <div class="card-header">
-                <h2>Attendance Overview</h2>
+                <div class="card-header-row">
+                    <h2>Attendance Overview</h2>
+                    <select id="attendance-range" class="form-select form-select-sm" style="width: auto;">
+                        <option value="7">Last 7 Days</option>
+                        <option value="30">Last 30 Days</option>
+                        <option value="year">This Year</option>
+                    </select>
+                </div>
             </div>
             <div class="card-body">
-                <div id="attendance-chart" class="attendance-chart"></div>
+                <div class="chart-wrapper">
+                    <div id="attendance-chart" class="attendance-chart"></div>
+                </div>
             </div>
         </div>
         <!-- Recent activity -->
@@ -58,19 +91,19 @@
     <section class="quick-links">
             <h2 class="section-heading">Quick Actions</h2>
             <div class="quick-links-grid">
-                <a href="students/student-registration.html" class="quick-link-card">
+                <a href="{% url 'esswebapp:student-registration' %}" class="quick-link-card">
                     <div class="quick-link-icon">➕</div>
                     <div class="quick-link-label">Register Student</div>
                 </a>
-                <a href="centres/educational-centre.html" class="quick-link-card">
+                <a href="{% url 'esswebapp:centres' %}" class="quick-link-card">
                     <div class="quick-link-icon">🏫</div>
                     <div class="quick-link-label">Add Centre</div>
                 </a>
-                <a href="users/teacher.html" class="quick-link-card">
+                <a href="{% url 'esswebapp:teacher' %}" class="quick-link-card">
                     <div class="quick-link-icon">👨‍🏫</div>
                     <div class="quick-link-label">Add Teacher</div>
                 </a>
-                <a href="attendance/center-attendance.html" class="quick-link-card">
+                <a href="{% url 'esswebapp:attendance' %}" class="quick-link-card">
                     <div class="quick-link-icon">📊</div>
                     <div class="quick-link-label">View Attendance</div>
                 </a>

@@ -14,15 +14,15 @@
    ================================================================ */
 
 /* ================================================================
-   API HELPERS
+   API HELPERS - Use non-paginated dropdown endpoints from common.js
    ================================================================ */
 
 async function fetchDistricts() {
     console.log('fetchDistricts called');
     try {
-        const data = await apiFetch(getUrl('district'));
+        const data = await fetchDistrictsForDropdown(true);
         console.log('fetchDistricts result:', data);
-        return data.results || data;
+        return data;
     } catch (e) {
         console.error('Failed to fetch districts:', e);
         return [];
@@ -32,8 +32,8 @@ async function fetchDistricts() {
 async function fetchVidhanSabhas(districtId) {
     if (!districtId) return [];
     try {
-        const data = await apiFetch(getUrl('vidhan-sabha') + '?district_id=' + districtId);
-        return data.results || data;
+        const data = await fetchVidhanSabhasForDropdown(districtId, true);
+        return data;
     } catch (e) {
         console.error('Failed to fetch vidhan sabhas:', e);
         return [];
@@ -43,8 +43,8 @@ async function fetchVidhanSabhas(districtId) {
 async function fetchPanchayats(vidhanSabhaId) {
     if (!vidhanSabhaId) return [];
     try {
-        const data = await apiFetch(getUrl('panchayat') + '?vidhan_sabha_id=' + vidhanSabhaId);
-        return data.results || data;
+        const data = await fetchPanchayatsForDropdown(vidhanSabhaId, true);
+        return data;
     } catch (e) {
         console.error('Failed to fetch panchayats:', e);
         return [];
@@ -54,8 +54,8 @@ async function fetchPanchayats(vidhanSabhaId) {
 async function fetchVillages(panchayatId) {
     if (!panchayatId) return [];
     try {
-        const data = await apiFetch(getUrl('village') + '?panchayat_id=' + panchayatId);
-        return data.results || data;
+        const data = await fetchVillagesForDropdown(panchayatId, true);
+        return data;
     } catch (e) {
         console.error('Failed to fetch villages:', e);
         return [];
