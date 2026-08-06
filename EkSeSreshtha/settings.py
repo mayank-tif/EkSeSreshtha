@@ -206,5 +206,10 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'esswebapp': {
+            'handlers': ['app_file', 'error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
