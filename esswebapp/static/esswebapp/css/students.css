@@ -170,6 +170,12 @@
     cursor: pointer;
 }
 
+/* Searchable select container - needs visible overflow for dropdown to escape card */
+.searchable-select {
+    position: relative;
+    overflow: visible;
+}
+
 /* Dropdown panel */
 .searchable-select-dropdown {
     position: absolute;

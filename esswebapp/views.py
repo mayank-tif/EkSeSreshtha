@@ -642,12 +642,39 @@ class CenterDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            queryset = Center.objects.filter(status=True).order_by('center_name')
+            queryset = Center.objects.filter(status=True).select_related(
+                'district', 'vidhan_sabha', 'panchayat', 'village'
+            ).order_by('center_name')
             
-            centers = list(queryset.values('id', 'center_name'))
+            centers = list(queryset.values(
+                'id', 'center_name',
+                'district__name', 'vidhan_sabha__name',
+                'panchayat__name', 'village__name',
+                'assigned_teachers', 'assigned_regional_admin'
+            ))
+            
+            # Collect user IDs for batch fetch
+            user_ids = set()
+            for c in centers:
+                if c['assigned_teachers']:
+                    user_ids.add(c['assigned_teachers'])
+                if c['assigned_regional_admin']:
+                    user_ids.add(c['assigned_regional_admin'])
+            
+            # Batch fetch user names
+            name_map = {}
+            if user_ids:
+                name_map = dict(User.objects.filter(id__in=user_ids).values_list('id', 'name'))
             
             items = [
-                {'id': c['id'], 'name': c['center_name']}
+                {'id': c['id'], 'name': c['center_name'],
+                 'district_name': c['district__name'],
+                 'vidhan_sabha_name': c['vidhan_sabha__name'],
+                 'panchayat_name': c['panchayat__name'],
+                 'village_name': c['village__name'],
+                 'assigned_teacher_name': name_map.get(c['assigned_teachers']),
+                 'assigned_regional_admin_name': name_map.get(c['assigned_regional_admin'])
+                }
                 for c in centers
             ]
             
