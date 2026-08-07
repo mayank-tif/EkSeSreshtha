@@ -961,6 +961,74 @@ function validateFields(fields) {
     return true;
 }
 
+/* ================================================================
+   SELECT2 HELPER
+   ----------------------------------------------------------------
+   Reusable Select2 initialization for dropdowns across the app.
+   ================================================================ */
+
+/**
+ * Initialize Select2 on a select element with standard options
+ * @param {HTMLElement} selectEl - The <select> element
+ * @param {Object} options - Optional overrides
+ * @param {string} options.placeholder - Placeholder text
+ * @param {boolean} options.allowClear - Allow clearing selection
+ * @param {string} options.width - Width of the dropdown
+ * @param {HTMLElement} options.dropdownParent - Parent for dropdown (for modals)
+ * @param {Function} options.onChange - Callback when selection changes
+ */
+function initSelect2(selectEl, options = {}) {
+    if (!selectEl || !$.fn.select2) return;
+    
+    // Destroy existing Select2 instance if present
+    if ($(selectEl).data('select2')) {
+        $(selectEl).select2('destroy');
+    }
+    
+    const defaults = {
+        placeholder: options.placeholder || 'Select...',
+        allowClear: options.allowClear !== false,
+        width: options.width || '100%',
+        dropdownParent: options.dropdownParent || $(selectEl).parent()
+    };
+    
+    $(selectEl).select2(defaults);
+    
+    if (options.onChange) {
+        $(selectEl).off('select2:change').on('select2:change', options.onChange);
+    }
+}
+
+/**
+ * Reset a Select2 dropdown to empty state
+ * @param {HTMLElement} selectEl - The <select> element
+ * @param {string} placeholder - Placeholder text
+ */
+function resetSelect2(selectEl, placeholder = 'Select...') {
+    if (!selectEl || !$.fn.select2) return;
+    
+    selectEl.innerHTML = `<option value="">${placeholder}</option>`;
+    selectEl.value = '';
+    
+    if ($(selectEl).data('select2')) {
+        $(selectEl).select2('destroy');
+    }
+    
+    initSelect2(selectEl, { placeholder });
+}
+
+/**
+ * Set Select2 value programmatically without triggering change events
+ * @param {HTMLElement} selectEl - The <select> element
+ * @param {string|number} value - Value to set
+ */
+function setSelect2Value(selectEl, value) {
+    if (!selectEl || !$.fn.select2) return;
+    
+    selectEl.value = value;
+    $(selectEl).val(value).trigger('change.select2');
+}
+
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         showToast,
@@ -990,6 +1058,9 @@ if (typeof module !== 'undefined' && module.exports) {
         showGlobalLoader,
         hideGlobalLoader,
         renderPagination,
-        getUrl
+        getUrl,
+        initSelect2,
+        resetSelect2,
+        setSelect2Value
     };
 }

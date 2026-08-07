@@ -826,10 +826,13 @@ async function openAttendanceModal(studentId) {
     document.getElementById('attendance-modal-subtitle').textContent =
         `Roll No #${student.roll_number || student.rollNo || '—'}`;
 
+    // Initialize Select2 on attendance modal dropdown
+    initSelect2(document.getElementById('att-mode'), { placeholder: 'Select view' });
+
     // Default filter values: day-wise for current month
     const today = new Date();
     const monthValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-    document.getElementById('att-mode').value = 'day';
+    setSelect2Value(document.getElementById('att-mode'), 'day');
     document.getElementById('att-month').value = monthValue;
 
     renderAttendanceData();
@@ -1025,6 +1028,9 @@ function initAnalytics() {
     const today = new Date();
     const iso = today.toISOString().split('T')[0];
     document.getElementById('analytics-date').value = iso;
+    
+    // Initialize Select2 on analytics dropdown
+    initSelect2(document.getElementById('analytics-mode'), { placeholder: 'Select view' });
 }
 
 async function renderAnalytics() {

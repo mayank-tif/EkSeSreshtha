@@ -21,6 +21,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadSchools();
     await loadCentres();
 
+    // Initialize Select2 on form dropdowns
+    initSelect2(document.getElementById('student-gender'), { placeholder: 'Select gender' });
+    initSelect2(document.getElementById('student-class'), { placeholder: 'Select class' });
+    initSelect2(document.getElementById('student-category'), { placeholder: 'Select category' });
+    initSelect2(document.getElementById('student-bpl'), { placeholder: 'Select' });
+    initSelect2(document.getElementById('student-school'), { placeholder: 'Select school' });
+
     document.getElementById('student-form').addEventListener('submit', handleStudentSubmit);
     document.getElementById('student-image').addEventListener('change', handleStudentImageChange);
 
@@ -376,14 +383,19 @@ async function editStudent(id) {
         // BPL dropdown expects 'true' or 'false'
         const bplVal = student.bpl;
         if (bplVal === true || bplVal === 'true' || bplVal === 1 || bplVal === '1') {
-            document.getElementById('student-bpl').value = 'true';
+            setSelect2Value(document.getElementById('student-bpl'), 'true');
         } else if (bplVal === false || bplVal === 'false' || bplVal === 0 || bplVal === '0') {
-            document.getElementById('student-bpl').value = 'false';
+            setSelect2Value(document.getElementById('student-bpl'), 'false');
         } else {
-            document.getElementById('student-bpl').value = '';
+            setSelect2Value(document.getElementById('student-bpl'), '');
         }
 
-        document.getElementById('student-school').value = student.school_id || student.schoolId || '';
+        setSelect2Value(document.getElementById('student-school'), student.school_id || student.schoolId || '');
+
+        // Set simple select dropdowns using setSelect2Value
+        setSelect2Value(document.getElementById('student-gender'), student.gender || '');
+        setSelect2Value(document.getElementById('student-class'), student.grade || student.active_class || student.activeClass || '');
+        setSelect2Value(document.getElementById('student-category'), student.category || '');
 
         // Set centre and show info panel
         if (student.center_id || student.centreId) {
@@ -417,6 +429,13 @@ function resetStudentForm() {
     document.getElementById('centre-info-panel').hidden = true;
     document.getElementById('student-image-preview').innerHTML =
         `<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+
+    // Reset Select2 dropdowns
+    resetSelect2(document.getElementById('student-gender'), 'Select gender');
+    resetSelect2(document.getElementById('student-class'), 'Select class');
+    resetSelect2(document.getElementById('student-category'), 'Select category');
+    resetSelect2(document.getElementById('student-bpl'), 'Select');
+    resetSelect2(document.getElementById('student-school'), 'Select school');
 
     // Reset selected highlight in the dropdown
     document.querySelectorAll('.searchable-select-option').forEach(el =>

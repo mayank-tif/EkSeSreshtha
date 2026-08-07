@@ -958,7 +958,6 @@ def save_center(center_data, request):
                                     ).exclude(id=center_id).first()
                                     if not other_center:
                                         old_teacher.assigned_teacher_status = False
-                                        old_teacher.assigned_regional_admin_status = False
                                         old_teacher.updated_on = datetime.now()
                                         old_teacher.updated_by = current_user_id
                                         old_teacher.save()
@@ -971,7 +970,6 @@ def save_center(center_data, request):
                                 new_teacher = Teacher.objects.filter(user_id=center.assigned_teachers, status=True).first()
                                 if new_teacher:
                                     new_teacher.assigned_teacher_status = True
-                                    new_teacher.assigned_regional_admin_status = True
                                     new_teacher.updated_on = datetime.now()
                                     new_teacher.updated_by = current_user_id
                                     new_teacher.center = center
@@ -1003,7 +1001,6 @@ def save_center(center_data, request):
                                         status=True
                                     ).exclude(id=center_id).first()
                                     if not other_center:
-                                        old_regional_admin.assigned_teacher_status = False
                                         old_regional_admin.assigned_regional_admin_status = False
                                         old_regional_admin.updated_on = datetime.now()
                                         old_regional_admin.updated_by = current_user_id
@@ -1016,7 +1013,6 @@ def save_center(center_data, request):
                             try:
                                 new_regional_admin = RegionalAdmin.objects.filter(user_id=center.assigned_regional_admin, status=True).first()
                                 if new_regional_admin:
-                                    new_regional_admin.assigned_teacher_status = True
                                     new_regional_admin.assigned_regional_admin_status = True
                                     new_regional_admin.updated_on = datetime.now()
                                     new_regional_admin.updated_by = current_user_id
