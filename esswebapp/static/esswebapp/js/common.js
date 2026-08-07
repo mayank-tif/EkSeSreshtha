@@ -840,6 +840,38 @@ async function fetchVillagesForDropdown(panchayatId = null, showLoader = false) 
     }
 }
 
+/**
+ * Fetch regional admins for dropdown (non-paginated, all status=true)
+ * @param {boolean} showLoader - Whether to show global loader
+ * @returns {Promise} - Array of regional admins
+ */
+async function fetchRegionalAdminsForDropdown(showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading regional admins...');
+    try {
+        const url = getUrl('regional-admin-dropdown-list');
+        const response = await apiFetch(url);
+        return response.results || response || [];
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
+}
+
+/**
+ * Fetch teachers for dropdown (non-paginated, all status=true)
+ * @param {boolean} showLoader - Whether to show global loader
+ * @returns {Promise} - Array of teachers
+ */
+async function fetchTeachersForDropdown(showLoader = false) {
+    if (showLoader) showGlobalLoader('Loading teachers...');
+    try {
+        const url = getUrl('teacher-dropdown-list');
+        const response = await apiFetch(url);
+        return response.results || response || [];
+    } finally {
+        if (showLoader) hideGlobalLoader();
+    }
+}
+
 /* ================================================================
    VALIDATION HELPERS
    ----------------------------------------------------------------
@@ -953,6 +985,8 @@ if (typeof module !== 'undefined' && module.exports) {
         fetchVidhanSabhasForDropdown,
         fetchPanchayatsForDropdown,
         fetchVillagesForDropdown,
+        fetchRegionalAdminsForDropdown,
+        fetchTeachersForDropdown,
         showGlobalLoader,
         hideGlobalLoader,
         renderPagination,

@@ -806,6 +806,75 @@ class VillageDropDownView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
 
+class RegionalAdminDropDownView(LoginRequiredMixin, View):
+    """API view for listing regional admins - used in dropdowns"""
+
+    def get(self, request):
+        try:
+            # Get accessible center IDs for this user
+            center_ids = get_user_accessible_center_ids(request)
+            
+            queryset = User.objects.filter(role__role_code='REGIONAL_ADMIN', status=True)
+            
+            if center_ids is not None:
+                # Regional Admin - filter by assigned centers
+                # CenterAssignUser has users_id (IntegerField) and center (FK with related_name=center_assign_users)
+                assigned_user_ids = CenterAssignUser.objects.filter(
+                    center_id__in=center_ids, status=True
+                ).values_list('users_id', flat=True)
+                queryset = queryset.filter(id__in=assigned_user_ids)
+            
+            queryset = queryset.order_by('name')
+            
+            regional_admins = list(queryset.values('id', 'name'))
+            print("regional_admins", regional_admins)
+            
+            items = [
+                {'id': ra['id'], 'name': ra['name']}
+                for ra in regional_admins
+            ]
+            
+            return JsonResponse({
+                'results': items,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class TeacherDropDownView(LoginRequiredMixin, View):
+    """API view for listing teachers - used in dropdowns"""
+
+    def get(self, request):
+        try:
+            # Get accessible center IDs for this user
+            center_ids = get_user_accessible_center_ids(request)
+            
+            queryset = User.objects.filter(role__role_code='TEACHER', status=True)
+            
+            if center_ids is not None:
+                # Regional Admin - filter by assigned centers
+                assigned_user_ids = CenterAssignUser.objects.filter(
+                    center_id__in=center_ids, status=True
+                ).values_list('users_id', flat=True)
+                queryset = queryset.filter(id__in=assigned_user_ids)
+            
+            queryset = queryset.order_by('name')
+            
+            teachers = list(queryset.values('id', 'name'))
+            print("teachers", teachers)
+            
+            items = [
+                {'id': t['id'], 'name': t['name']}
+                for t in teachers
+            ]
+            
+            return JsonResponse({
+                'results': items,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
 class SchoolListView(LoginRequiredMixin, View):
     """School management page + API endpoints"""
     template_name = 'esswebapp/pages/students/school-list.html'
@@ -2192,7 +2261,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             queryset = self._get_regional_admins_queryset()
             
             page = int(request.GET.get('page', 1))
-            page_size = int(request.GET.get('page_size', 50))
+            page_size = int(request.GET.get('page_size', PAGE_SIZE))
             search = request.GET.get('search', '').strip().lower()
             
             if search:

@@ -167,6 +167,7 @@ function initMapPicker() {
 }
 
 // ── Cascading Dropdowns ───────────────────────────────────────────
+// Uses dropdown APIs from common.js (non-paginated, filtered by user access)
 // Guard flag: prevents cascade handlers from firing when values are
 // set programmatically (edit modal pre-selection, form reset)
 let suppressCascade = false;
@@ -182,8 +183,7 @@ function initCascadeSelect2(el, placeholder, onChange) {
     $(el).select2({
         placeholder: placeholder,
         allowClear: true,
-        width: '100%',
-        dropdownParent: $(els.modal)
+        width: '100%'
     });
     if (onChange) {
         $(el).off('change.cascade').on('change.cascade', function () {
@@ -219,16 +219,11 @@ function setSelectValue(el, value) {
 async function loadDistrictDropdown() {
     showGlobalLoader();
     try {
-        const url = getUrl('district') + '?page=1&page_size=1000';
-        const res = await fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin'
-        });
-        const data = await res.json();
+        const districts = await fetchDistrictsForDropdown(true);
 
         if (!els.district) return;
         els.district.innerHTML = '<option value="">Select district</option>' +
-            (data.results || []).map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+            districts.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
 
         initCascadeSelect2(els.district, 'Select district', onDistrictChange);
     } catch (e) {
@@ -251,16 +246,11 @@ async function onDistrictChange() {
 
     showGlobalLoader();
     try {
-        const url = getUrl('vidhan-sabha') + '?district_id=' + districtId + '&page=1&page_size=1000';
-        const res = await fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin'
-        });
-        const data = await res.json();
+        const vidhanSabhas = await fetchVidhanSabhasForDropdown(districtId, true);
 
         if (!els.vs) return;
         els.vs.innerHTML = '<option value="">Select Vidhan Sabha</option>' +
-            (data.results || []).map(v =>
+            vidhanSabhas.map(v =>
                 `<option value="${v.id}">${escapeHtml(v.name)}</option>`
             ).join('');
         els.vs.disabled = false;
@@ -283,16 +273,11 @@ async function onVsChange() {
 
     showGlobalLoader();
     try {
-        const url = getUrl('panchayat') + '?vidhan_sabha_id=' + vsId + '&page=1&page_size=1000';
-        const res = await fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin'
-        });
-        const data = await res.json();
+        const panchayats = await fetchPanchayatsForDropdown(vsId, true);
 
         if (!els.panchayat) return;
         els.panchayat.innerHTML = '<option value="">Select Panchayat</option>' +
-            (data.results || []).map(p =>
+            panchayats.map(p =>
                 `<option value="${p.id}">${escapeHtml(p.name)}</option>`
             ).join('');
         els.panchayat.disabled = false;
@@ -314,16 +299,11 @@ async function onPanchayatChange() {
 
     showGlobalLoader();
     try {
-        const url = getUrl('village') + '?panchayat_id=' + panchayatId + '&page=1&page_size=1000';
-        const res = await fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin'
-        });
-        const data = await res.json();
+        const villages = await fetchVillagesForDropdown(panchayatId, true);
 
         if (!els.village) return;
         els.village.innerHTML = '<option value="">Select Village</option>' +
-            (data.results || []).map(v =>
+            villages.map(v =>
                 `<option value="${v.id}">${escapeHtml(v.name)}</option>`
             ).join('');
         els.village.disabled = false;
@@ -358,18 +338,14 @@ async function loadDropdownsForEdit(districtId, vsId, panchayatId, villageId) {
 
 // Load Regional Admin dropdown
 async function loadRegionalAdminDropdown() {
+    showGlobalLoader();
     try {
-        const url = getUrl('regional-admin') + '?page=1&page_size=1000';
-        const res = await fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin'
-        });
-        const data = await res.json();
+        const regionalAdmins = await fetchRegionalAdminsForDropdown(true);
 
         if (!els.ra) return;
         els.ra.innerHTML = '<option value="">Select Regional Admin</option>' +
-            (data.results || []).map(ra =>
-                `<option value="${ra.id}">${escapeHtml(ra.name)} (${escapeHtml(ra.district_name || '')} / ${escapeHtml(ra.vidhan_sabha_name || '')})</option>`
+            regionalAdmins.map(ra =>
+                `<option value="${ra.id}">${escapeHtml(ra.name)}</option>`
             ).join('');
 
         if ($.fn.select2 && $(els.ra).data('select2')) {
@@ -379,29 +355,26 @@ async function loadRegionalAdminDropdown() {
             $(els.ra).select2({
                 placeholder: 'Select Regional Admin',
                 allowClear: true,
-                width: '100%',
-                dropdownParent: $(els.modal)
+                width: '100%'
             });
         }
     } catch (e) {
         console.error('Failed to load Regional Admins:', e);
+    } finally {
+        hideGlobalLoader();
     }
 }
 
 // Load Teacher dropdown
 async function loadTeacherDropdown() {
+    showGlobalLoader();
     try {
-        const url = getUrl('teacher') + '?page=1&page_size=1000';
-        const res = await fetch(url, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin'
-        });
-        const data = await res.json();
+        const teachers = await fetchTeachersForDropdown(true);
 
         if (!els.teacher) return;
         els.teacher.innerHTML = '<option value="">Select Teacher</option>' +
-            (data.results || []).map(t =>
-                `<option value="${t.id}">${escapeHtml(t.name)} (${escapeHtml(t.village_name || 'No village')})</option>`
+            teachers.map(t =>
+                `<option value="${t.id}">${escapeHtml(t.name)}</option>`
             ).join('');
 
         if ($.fn.select2 && $(els.teacher).data('select2')) {
@@ -411,12 +384,13 @@ async function loadTeacherDropdown() {
             $(els.teacher).select2({
                 placeholder: 'Select Teacher',
                 allowClear: true,
-                width: '100%',
-                dropdownParent: $(els.modal)
+                width: '100%'
             });
         }
     } catch (e) {
         console.error('Failed to load Teachers:', e);
+    } finally {
+        hideGlobalLoader();
     }
 }
 
@@ -619,11 +593,21 @@ async function openEditModal(id) {
         if (els.name) els.name.focus();
 
         // Set dropdown values AFTER modal is open (required for Select2 dropdownParent)
-        if (data.assigned_regional_admin) {
-            setSelectValue(els.ra, data.assigned_regional_admin);
+        // API returns assigned_regional_admin as object (regional_admin_obj) or ID
+        let raId = data.assigned_regional_admin;
+        if (raId && typeof raId === 'object') {
+            raId = raId.id;
         }
-        if (data.assigned_teachers) {
-            setSelectValue(els.teacher, data.assigned_teachers);
+        if (raId) {
+            setSelectValue(els.ra, raId);
+        }
+
+        let teacherId = data.assigned_teachers;
+        if (teacherId && typeof teacherId === 'object') {
+            teacherId = teacherId.id;
+        }
+        if (teacherId) {
+            setSelectValue(els.teacher, teacherId);
         }
     } catch (e) {
         console.error('Edit fetch failed:', e);

@@ -30,6 +30,25 @@ DEBUG = True
 ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '[::1]', '.localhost', 'testserver']
 
 
+# Domain URI Restriction Middleware Configuration
+# Configure which domains can access which URL patterns
+DOMAIN_URI_RESTRICTIONS = {
+    # Domains that serve the webapp (cannot access /api/)
+    'webapp_domains': [
+    ],
+    # Domains that serve the API (cannot access webapp URLs)
+    'api_domains': [
+    ],
+    # Local hosts that can access everything (development)
+    'local_hosts': [
+        'localhost',
+        '127.0.0.1',
+        '[::1]',
+        'testserver',
+    ],
+}
+
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -47,6 +66,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'esswebapp.middleware.DomainURIRestrictionMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

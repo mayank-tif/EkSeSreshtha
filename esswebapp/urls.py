@@ -24,7 +24,9 @@ urlpatterns = [
     path('constituency/vidhan-sabha-dropdown-list/', VidhanSabhaDropDownView.as_view(), name='vidhan-sabha-dropdown-list'),
     path('constituency/panchayat-dropdown-list/', PanchayatDropDownView.as_view(), name='panchayat-dropdown-list'),
     path('constituency/village-dropdown-list/', VillageDropDownView.as_view(), name='village-dropdown-list'),
-    
+    path('regional-admin/dropdown-list/', RegionalAdminDropDownView.as_view(), name='regional-admin-dropdown-list'),
+    path('teacher/dropdown-list/', TeacherDropDownView.as_view(), name='teacher-dropdown-list'),
+
     path('school-details-list/', SchoolListView.as_view(), name='school-details-list'),
     
     path('students/class-list/', ClassListView.as_view(), name='class-list'),
@@ -50,6 +52,4 @@ urlpatterns = [
     path('students/attendance-history/', StudentsView.as_view(), name='student-attendance-history'),
     path('students/monthly-attendance/', StudentsView.as_view(), name='student-monthly-attendance'),
     path('students/daily-attendance/', StudentsView.as_view(), name='student-daily-attendance'),
-        
-    
 ]

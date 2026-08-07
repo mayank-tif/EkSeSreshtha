@@ -126,6 +126,7 @@ async function loadCentres() {
         showToast('Failed to load centres', 'danger');
         renderCentreTable([]);
         updatePagination();
+        hideGlobalLoader();
     } finally {
         hideGlobalLoader();
         isLoading = false;

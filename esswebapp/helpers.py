@@ -803,6 +803,7 @@ def get_center_monthly_attendance(center_ids, year, month):
         .values('center_id').annotate(cnt=Count('id'))
         .values_list('center_id', 'cnt')
     )
+    print("student_counts", student_counts)  # --- IGNORE ---
     
     # 2. Get daily present student counts per center (sum of daily present students)
     daily_present = StudentAttendance.objects.filter(
@@ -814,7 +815,7 @@ def get_center_monthly_attendance(center_ids, year, month):
     ).values('center_id', 'scan_date__date').annotate(
         daily_present=Count('student_id', distinct=True)
     )
-    
+    print("daily_present", list(daily_present))  # --- IGNORE ---
     # Filter to only count students actually enrolled in each center
     enrolled_ids_by_center = {}
     students = Student.objects.filter(center_id__in=center_ids, status=True).values('id', 'center_id')
