@@ -187,7 +187,7 @@ function fillFilterSelect(select, records, placeholder) {
 /* Clear a select down to only its placeholder option. */
 function resetFilterSelect(select, placeholder) {
     if (!select) return;
-    select.innerHTML = `<option value="">${placeholder}</option';
+    select.innerHTML = `<option value="">${placeholder}</option>`;
     select.value = '';
     // Refresh Select2
     if ($.fn.select2 && $(select).data('select2')) {
