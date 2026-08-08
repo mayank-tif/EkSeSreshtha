@@ -593,9 +593,15 @@ class Announcement(models.Model):
 
 
 class CenterAssignUser(models.Model):
+    TYPE_CHOICES = [
+        (1, 'Super Admin'),
+        (2, 'Regional Admin'),
+        (3, 'Teacher'),
+    ]
+
     id = models.AutoField(db_column="Id", primary_key=True)
     users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
-    type = models.IntegerField(db_column="Type", null=True, blank=True)
+    type = models.IntegerField(db_column="Type", null=True, blank=True, choices=TYPE_CHOICES)
     date = models.DateTimeField(db_column="Date", null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='center_assign_users')

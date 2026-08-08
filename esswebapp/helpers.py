@@ -295,7 +295,7 @@ def _create_center(center_data, current_user_id):
 # ── Assignment helpers ────────────────────────────────────────────
 
 def _unassign_old_teacher(old_teacher_id, center_id, current_user_id):
-    """Clear assignment flags on the previously assigned teacher (if no other center)."""
+    """Clear assignment flags on the previously assigned teacher (if no other center) and deactivate CenterAssignUser."""
     if not old_teacher_id:
         return
     try:
@@ -309,7 +309,20 @@ def _unassign_old_teacher(old_teacher_id, center_id, current_user_id):
                 old_teacher.assigned_teacher_status = False
                 old_teacher.updated_on = datetime.now()
                 old_teacher.updated_by = current_user_id
+                old_teacher.center = None
                 old_teacher.save()
+        
+        # Deactivate old CenterAssignUser entries for this teacher (type=3)
+        CenterAssignUser.objects.filter(
+            users_id=old_teacher_id,
+            center_id=center_id,
+            type=3,
+            status=True
+        ).update(
+            status=False,
+            updated_by=current_user_id,
+            updated_on=datetime.now()
+        )
     except Exception as e:
         logger.error(f"WebCenterHelper : Error updating old teacher status: {str(e)}")
 
@@ -328,9 +341,22 @@ def _assign_new_teacher(center, current_user_id):
             new_teacher.save()
 
             if new_teacher.user:
+                # Deactivate any existing active CenterAssignUser for this teacher (type=3) across ALL centers
+                CenterAssignUser.objects.filter(
+                    users_id=new_teacher.user.id,
+                    type=3,
+                    status=True
+                ).update(
+                    status=False,
+                    updated_by=current_user_id,
+                    updated_on=datetime.now()
+                )
+                
+                # Create new CenterAssignUser entry for this teacher-center assignment (type=3)
                 CenterAssignUser.objects.create(
                     center_id=center.id,
                     users_id=new_teacher.user.id,
+                    type=3,
                     date=datetime.now(),
                     status=True,
                     created_by=current_user_id,
@@ -341,7 +367,7 @@ def _assign_new_teacher(center, current_user_id):
 
 
 def _unassign_old_regional_admin(old_regional_admin_id, center_id, current_user_id):
-    """Clear assignment flags on the previously assigned regional admin (if no other center)."""
+    """Clear assignment flags on the previously assigned regional admin (if no other center) and deactivate CenterAssignUser."""
     if not old_regional_admin_id:
         return
     try:
@@ -356,6 +382,18 @@ def _unassign_old_regional_admin(old_regional_admin_id, center_id, current_user_
                 old_ra.updated_on = datetime.now()
                 old_ra.updated_by = current_user_id
                 old_ra.save()
+        
+        # Deactivate old CenterAssignUser entries for this regional admin (type=2)
+        CenterAssignUser.objects.filter(
+            users_id=old_regional_admin_id,
+            center_id=center_id,
+            type=2,
+            status=True
+        ).update(
+            status=False,
+            updated_by=current_user_id,
+            updated_on=datetime.now()
+        )
     except Exception as e:
         logger.error(f"WebCenterHelper : Error updating old regional admin status: {str(e)}")
 
@@ -373,9 +411,22 @@ def _assign_new_regional_admin(center, current_user_id):
             new_ra.save()
 
             if new_ra.user:
+                # Deactivate any existing active CenterAssignUser for this regional admin (type=2) across ALL centers
+                CenterAssignUser.objects.filter(
+                    users_id=new_ra.user.id,
+                    type=2,
+                    status=True
+                ).update(
+                    status=False,
+                    updated_by=current_user_id,
+                    updated_on=datetime.now()
+                )
+                
+                # Create new CenterAssignUser entry for this regional admin-center assignment (type=2)
                 CenterAssignUser.objects.create(
                     center_id=center.id,
                     users_id=new_ra.user.id,
+                    type=2,
                     date=datetime.now(),
                     status=True,
                     created_by=current_user_id,
