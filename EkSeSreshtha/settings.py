@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-q(0=r4tlpr4nsvd8&*=xf^4z741^6g4-aittn08+nv9tnbase^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '[::1]', '.localhost', 'testserver']
+ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '[::1]', '.localhost', 'testserver', 'dev.ekshreshtha.com', 'devapi.eksesreshtha.com']
 
 
 # Domain URI Restriction Middleware Configuration
@@ -35,9 +35,11 @@ ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '[::1]', '.localhost', 'testserv
 DOMAIN_URI_RESTRICTIONS = {
     # Domains that serve the webapp (cannot access /api/)
     'webapp_domains': [
+        'dev.ekshreshtha.com',
     ],
     # Domains that serve the API (cannot access webapp URLs)
     'api_domains': [
+        'devapi.eksesreshtha.com',
     ],
     # Local hosts that can access everything (development)
     'local_hosts': [
