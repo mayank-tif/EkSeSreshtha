@@ -19,14 +19,12 @@ from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from APIS.views import WeatherforecastGetView
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('APIS.urls')),
     path('WeatherForecast/', WeatherforecastGetView.as_view(), name='weatherforecast-get'),
-    # Frontend website
     path('', include('esswebapp.urls', namespace='esswebapp')),
 ]
 

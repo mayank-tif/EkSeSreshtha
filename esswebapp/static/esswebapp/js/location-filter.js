@@ -88,10 +88,10 @@ function initLocationFilter(onChange) {
     if (!districtSel) return; // Page has no filter bar
 
     // Initialize Select2 on filter dropdowns
-    initSelect2(districtSel, { placeholder: 'All Districts' });
-    initSelect2(vsSel, { placeholder: 'All Vidhan Sabhas' });
-    initSelect2(panchayatSel, { placeholder: 'All Panchayats' });
-    initSelect2(villageSel, { placeholder: 'All Villages' });
+    // initSelect2(districtSel, { placeholder: 'All Districts' });
+    // initSelect2(vsSel, { placeholder: 'All Vidhan Sabhas' });
+    // initSelect2(panchayatSel, { placeholder: 'All Panchayats' });
+    // initSelect2(villageSel, { placeholder: 'All Villages' });
 
     // Load districts from API
     loadDistricts();
@@ -178,10 +178,10 @@ function fillFilterSelect(select, records, placeholder) {
         records.map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
     select.value = '';
     // Refresh Select2 to pick up new options
-    if ($.fn.select2 && $(select).data('select2')) {
-        $(select).select2('destroy');
-        initSelect2(select, { placeholder });
-    }
+    // if ($.fn.select2 && $(select).data('select2')) {
+    //     $(select).select2('destroy');
+    //     initSelect2(select, { placeholder });
+    // }
 }
 
 /* Clear a select down to only its placeholder option. */
@@ -190,10 +190,10 @@ function resetFilterSelect(select, placeholder) {
     select.innerHTML = `<option value="">${placeholder}</option>`;
     select.value = '';
     // Refresh Select2
-    if ($.fn.select2 && $(select).data('select2')) {
-        $(select).select2('destroy');
-        initSelect2(select, { placeholder });
-    }
+    // if ($.fn.select2 && $(select).data('select2')) {
+    //     $(select).select2('destroy');
+    //     initSelect2(select, { placeholder });
+    // }
 }
 
 /* ================================================================

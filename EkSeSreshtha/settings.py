@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-q(0=r4tlpr4nsvd8&*=xf^4z741^6g4-aittn08+nv9tnbase^
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '[::1]', '.localhost', 'testserver', 'dev.ekshreshtha.com', 'devapi.eksesreshtha.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]', '.localhost', 'testserver', 'dev.ekseshreshtha.com', 'devapi.eksesreshtha.com']
 
 
 # Domain URI Restriction Middleware Configuration
@@ -160,7 +160,6 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'EXCEPTION_HANDLER': 'APIS.exceptions.custom_exception_handler',
-    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 SPECTACULAR_SETTINGS = {
