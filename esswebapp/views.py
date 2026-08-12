@@ -1010,6 +1010,9 @@ class SchoolListView(LoginRequiredMixin, View):
                 created_on=timezone.now(),
             )
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'School', record_id=school.id, record_name=school.school_name)
+            
             return JsonResponse({
                 'id': school.id,
                 'schoolName': school.school_name,
@@ -1047,6 +1050,9 @@ class SchoolListView(LoginRequiredMixin, View):
             school.updated_on = timezone.now()
             school.save()
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'School', record_id=school.id, record_name=school.school_name)
+            
             return JsonResponse({
                 'id': school.id,
                 'schoolName': school.school_name,
@@ -1078,6 +1084,9 @@ class SchoolListView(LoginRequiredMixin, View):
             school.updated_by = user_id
             school.updated_on = timezone.now()
             school.save()
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'School', record_id=school.id, record_name=school.school_name)
             
             return JsonResponse({'detail': 'School deleted successfully'})
         except Exception as e:
@@ -2014,6 +2023,9 @@ class SuperAdminView(PermissionRequiredMixin, View):
                 created_on=timezone.now()
             )
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'SuperAdmin', record_id=user.id, record_name=user.name)
+            
             # Save picture if provided
             if picture_file:
                 user.picture.save(picture_file.name, picture_file, save=True)
@@ -2110,6 +2122,9 @@ class SuperAdminView(PermissionRequiredMixin, View):
             sa.updated_on = timezone.now()
             sa.save()
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'SuperAdmin', record_id=user.id, record_name=user.name)
+            
             return JsonResponse({
                 'id': user.id,  # Use user.id as the main ID
                 'super_admin_guid_id': sa.super_admin_guid_id,
@@ -2151,6 +2166,9 @@ class SuperAdminView(PermissionRequiredMixin, View):
             user.updated_by = request.web_user.get('user_id')
             user.updated_on = timezone.now()
             user.save()
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'SuperAdmin', record_id=user.id, record_name=user.name)
             
             return JsonResponse({'message': 'Super Admin deactivated successfully'})
         except Exception as e:
@@ -2465,6 +2483,9 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 created_on=timezone.now()
             )
             
+            # Log activity
+            log_web_activity(request, 'CREATE', 'RegionalAdmin', record_id=user.id, record_name=user.name)
+            
             # Save picture if provided
             if picture_file:
                 user.picture.save(picture_file.name, picture_file, save=True)
@@ -2604,6 +2625,9 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             ra.updated_on = timezone.now()
             ra.save()
             
+            # Log activity
+            log_web_activity(request, 'UPDATE', 'RegionalAdmin', record_id=user.id, record_name=user.name)
+            
             return JsonResponse({
                 'id': user.id,  # Use user.id as the main ID
                 'regional_admin_guid_id': ra.regional_admin_guid_id,
@@ -2649,6 +2673,9 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             user.updated_by = request.web_user.get('user_id')
             user.updated_on = timezone.now()
             user.save()
+            
+            # Log activity
+            log_web_activity(request, 'DELETE', 'RegionalAdmin', record_id=user.id, record_name=user.name)
             
             return JsonResponse({'message': 'Regional Admin deactivated successfully'})
         except Exception as e:
