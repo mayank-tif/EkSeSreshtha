@@ -154,7 +154,7 @@ function handleImageChange(event) {
 async function loadDistrictDropdown() {
     showGlobalLoader();
     try {
-        const url = getUrl('district') + '?page=1&page_size=1000';
+        const url = getUrl('district-dropdown-list');
         const res = await fetch(url, { 
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
@@ -163,7 +163,7 @@ async function loadDistrictDropdown() {
 
         if (!els.district) return;
         els.district.innerHTML = '<option value="">Select district</option>' +
-            (data.results || []).map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
+            (data.results || data || []).map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join('');
 
         // Initialize Select2 on district dropdown
         if ($.fn.select2 && $(els.district).data('select2')) {
@@ -216,7 +216,7 @@ async function onDistrictChange() {
 
     showGlobalLoader();
     try {
-        const url = getUrl('vidhan-sabha') + '?district_id=' + districtId + '&page=1&page_size=1000';
+        const url = getUrl('vidhan-sabha-dropdown-list') + '?district_id=' + districtId;
         const res = await fetch(url, { 
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
@@ -224,7 +224,7 @@ async function onDistrictChange() {
         const data = await res.json();
 
         if (!els.vs) return;
-        els.vs.innerHTML += (data.results || []).map(v =>
+        els.vs.innerHTML += (data.results || data || []).map(v =>
             `<option value="${v.id}">${escapeHtml(v.name)}</option>`
         ).join('');
         els.vs.disabled = false;
@@ -272,7 +272,7 @@ async function onVsChange() {
 
     showGlobalLoader();
     try {
-        const url = getUrl('panchayat') + '?vidhan_sabha_id=' + vsId + '&page=1&page_size=1000';
+        const url = getUrl('panchayat-dropdown-list') + '?vidhan_sabha_id=' + vsId;
         const res = await fetch(url, { 
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
@@ -280,7 +280,7 @@ async function onVsChange() {
         const data = await res.json();
 
         if (!els.panchayat) return;
-        els.panchayat.innerHTML += (data.results || []).map(p =>
+        els.panchayat.innerHTML += (data.results || data || []).map(p =>
             `<option value="${p.id}">${escapeHtml(p.name)}</option>`
         ).join('');
         els.panchayat.disabled = false;
@@ -321,7 +321,7 @@ async function onPanchayatChange() {
 
     showGlobalLoader();
     try {
-        const url = getUrl('village') + '?panchayat_id=' + panchayatId + '&page=1&page_size=1000';
+        const url = getUrl('village-dropdown-list') + '?panchayat_id=' + panchayatId;
         const res = await fetch(url, { 
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
@@ -329,7 +329,7 @@ async function onPanchayatChange() {
         const data = await res.json();
 
         if (!els.village) return;
-        els.village.innerHTML += (data.results || []).map(v =>
+        els.village.innerHTML += (data.results || data || []).map(v =>
             `<option value="${v.id}">${escapeHtml(v.name)}</option>`
         ).join('');
         els.village.disabled = false;

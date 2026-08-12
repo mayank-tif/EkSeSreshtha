@@ -106,11 +106,11 @@
                 <div class="form-grid-2">
                     <div class="form-group">
                         <label class="form-label" for="teacher-phone">Phone number <span class="required">*</span></label>
-                        <input type="tel" id="teacher-phone" class="form-input" placeholder="10-digit mobile number" required>
+                        <input type="tel" id="teacher-phone" class="form-input" placeholder="10-digit mobile number" required maxlength="10" pattern="[0-9]{10}" inputmode="numeric">
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="teacher-whatsapp">WhatsApp number</label>
-                        <input type="tel" id="teacher-whatsapp" class="form-input" placeholder="If different from phone">
+                        <input type="tel" id="teacher-whatsapp" class="form-input" placeholder="If different from phone" maxlength="10" pattern="[0-9]{10}" inputmode="numeric">
                     </div>
                 </div>
 
@@ -126,7 +126,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label" for="teacher-guardian-no">Guardian phone number</label>
-                        <input type="tel" id="teacher-guardian-no" class="form-input" placeholder="10-digit number">
+                        <input type="tel" id="teacher-guardian-no" class="form-input" placeholder="10-digit number" maxlength="10" pattern="[0-9]{10}" inputmode="numeric">
                     </div>
                 </div>
 

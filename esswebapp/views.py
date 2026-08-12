@@ -2,9 +2,8 @@ from django.core.files.storage import default_storage
 from django.shortcuts import render, redirect
 from django.views import View
 from django.urls import re_path
-from django.utils import timezone
 from django.http import JsonResponse
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count
 import json
 import uuid
@@ -145,13 +144,13 @@ class LoginView(View):
             'role_name': user.role.role_name if user.role else None,
             'is_super_admin': role_code == 'SUPER_ADMIN',
             'is_regional_admin': role_code == 'REGIONAL_ADMIN',
-            'last_login': str(timezone.now()),
+            'last_login': str(datetime.now()),
         }
         request.session.set_expiry(86400)  # 24 hours
         request.session.modified = True
         
         # Update last login time
-        user.last_login_time = str(timezone.now())
+        user.last_login_time = str(datetime.now())
         user.save(update_fields=['last_login_time'])
         print("user", user)
         
@@ -991,7 +990,7 @@ class SchoolListView(LoginRequiredMixin, View):
     def _create_school(self, request):
         try:
             data = json.loads(request.body)
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             
             if not name:
                 return JsonResponse({'detail': 'School name is required'}, status=400)
@@ -1007,7 +1006,7 @@ class SchoolListView(LoginRequiredMixin, View):
                 school_name=name,
                 status=True,
                 created_by=user_id,
-                created_on=timezone.now(),
+                created_on=datetime.now(),
             )
             
             # Log activity
@@ -1029,7 +1028,7 @@ class SchoolListView(LoginRequiredMixin, View):
         try:
             data = json.loads(request.body)
             school_id = data.get('id')
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             
             if not school_id or not name:
                 return JsonResponse({'detail': 'School ID and name are required'}, status=400)
@@ -1047,7 +1046,7 @@ class SchoolListView(LoginRequiredMixin, View):
             
             school.school_name = name
             school.updated_by = user_id
-            school.updated_on = timezone.now()
+            school.updated_on = datetime.now()
             school.save()
             
             # Log activity
@@ -1082,7 +1081,7 @@ class SchoolListView(LoginRequiredMixin, View):
             
             school.status = False
             school.updated_by = user_id
-            school.updated_on = timezone.now()
+            school.updated_on = datetime.now()
             school.save()
             
             # Log activity
@@ -1968,16 +1967,17 @@ class SuperAdminView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    @transaction.atomic
     def _create_super_admin(self, request):
         try:
             data = json.loads(request.body)
             
-            name = data.get('name', '').strip()
-            email = data.get('email', '').strip().lower()
-            phone = data.get('phone_number', '').strip()
-            whats_app = data.get('whats_app', '').strip()
-            password = data.get('password', '').strip()
-            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            name = (data.get('name') or '').strip()
+            email = (data.get('email') or '').strip().lower()
+            phone = (data.get('phone_number') or '').strip()
+            whats_app = (data.get('whats_app') or '').strip()
+            password = (data.get('password') or '').strip()
+            enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
@@ -2000,7 +2000,7 @@ class SuperAdminView(PermissionRequiredMixin, View):
                 return JsonResponse({'detail': 'SUPER_ADMIN role not configured'}, status=500)
             
             # Handle picture (base64 data URL)
-            picture_data = data.get('picture', '').strip()
+            picture_data = (data.get('picture') or '').strip()
             picture_file = None
             if picture_data and picture_data.startswith('data:'):
                 import base64
@@ -2020,7 +2020,7 @@ class SuperAdminView(PermissionRequiredMixin, View):
                 role=super_admin_role,
                 status=True,
                 created_by=request.web_user.get('user_id'),
-                created_on=timezone.now()
+                created_on=datetime.now()
             )
             
             # Log activity
@@ -2036,7 +2036,7 @@ class SuperAdminView(PermissionRequiredMixin, View):
                 user=user,
                 status=True,
                 created_by=request.web_user.get('user_id'),
-                created_on=timezone.now()
+                created_on=datetime.now()
             )
             
             return JsonResponse({
@@ -2057,6 +2057,7 @@ class SuperAdminView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    @transaction.atomic
     def _update_super_admin(self, request):
         try:
             data = json.loads(request.body)
@@ -2071,12 +2072,12 @@ class SuperAdminView(PermissionRequiredMixin, View):
             except (User.DoesNotExist, SuperAdmin.DoesNotExist):
                 return JsonResponse({'detail': 'Super Admin not found'}, status=404)
             
-            name = data.get('name', '').strip()
-            email = data.get('email', '').strip().lower()
-            phone = data.get('phone_number', '').strip()
-            whats_app = data.get('whats_app', '').strip()
-            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
-            password = data.get('password', '').strip()  # Optional password update
+            name = (data.get('name') or '').strip()
+            email = (data.get('email') or '').strip().lower()
+            phone = (data.get('phone_number') or '').strip()
+            whats_app = (data.get('whats_app') or '').strip()
+            enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
+            password = (data.get('password') or '').strip()  # Optional password update
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
@@ -2104,7 +2105,7 @@ class SuperAdminView(PermissionRequiredMixin, View):
                 user.password = hash_password(password)
             
             # Handle picture (base64 data URL)
-            picture_data = data.get('picture', '').strip()
+            picture_data = (data.get('picture') or '').strip()
             if picture_data and picture_data.startswith('data:'):
                 import base64
                 from django.core.files.base import ContentFile
@@ -2114,12 +2115,12 @@ class SuperAdminView(PermissionRequiredMixin, View):
                 user.picture.save(picture_file.name, picture_file, save=False)
             
             user.updated_by = request.web_user.get('user_id')
-            user.updated_on = timezone.now()
+            user.updated_on = datetime.now()
             user.save()
             
             # Update super admin
             sa.updated_by = request.web_user.get('user_id')
-            sa.updated_on = timezone.now()
+            sa.updated_on = datetime.now()
             sa.save()
             
             # Log activity
@@ -2158,13 +2159,13 @@ class SuperAdminView(PermissionRequiredMixin, View):
             # Soft delete - set status to False
             sa.status = False
             sa.updated_by = request.web_user.get('user_id')
-            sa.updated_on = timezone.now()
+            sa.updated_on = datetime.now()
             sa.save()
             
             # Also deactivate user
             user.status = False
             user.updated_by = request.web_user.get('user_id')
-            user.updated_on = timezone.now()
+            user.updated_on = datetime.now()
             user.save()
             
             # Log activity
@@ -2416,30 +2417,32 @@ class RegionalAdminView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    @transaction.atomic
     def _create_regional_admin(self, request):
         try:
             data = json.loads(request.body)
             print("data", data)
             
-            name = data.get('name', '').strip()
-            email = data.get('email', '').strip().lower()
-            phone = data.get('phone_number', '').strip()
-            whats_app = data.get('whats_app', '').strip()
-            password = data.get('password', '').strip()
-            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            name = (data.get('name') or '').strip()
+            email = (data.get('email') or '').strip().lower()
+            phone = (data.get('phone_number') or '').strip()
+            whats_app = (data.get('whats_app') or '').strip()
+            password = (data.get('password') or '').strip()
+            enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             panchayat_id = data.get('panchayat_id')
             village_id = data.get('village_id')
             age = data.get('age')
-            gender = data.get('gender', '').strip()
-            date_of_birth = data.get('date_of_birth', '').strip()
-            contact = data.get('contact', '').strip()
-            full_address = data.get('full_address', '').strip()
-            education = data.get('education', '').strip()
-            guardian_name = data.get('guardian_name', '').strip()
-            guardian_number = data.get('guardian_number', '').strip()
-            enrollment_date = data.get('enrollment_date', '').strip()
+            gender = (data.get('gender') or '').strip()
+            date_of_birth = (data.get('date_of_birth') or '').strip()
+            contact = (data.get('contact') or '').strip()
+            full_address = (data.get('full_address') or '').strip()
+            education = (data.get('education') or '').strip()
+            guardian_name = (data.get('guardian_name') or '').strip()
+            guardian_number = (data.get('guardian_number') or '').strip()
+            enrollment_date_raw = data.get('enrollment_date')
+            enrollment_date = enrollment_date_raw if enrollment_date_raw else None
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
@@ -2462,7 +2465,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 return JsonResponse({'detail': 'REGIONAL_ADMIN role not configured'}, status=500)
             
             # Handle picture (base64 data URL)
-            picture_data = data.get('picture', '').strip()
+            picture_data = (data.get('picture') or '').strip()
             picture_file = None
             if picture_data and picture_data.startswith('data:'):
                 format, imgstr = picture_data.split(';base64,')
@@ -2480,7 +2483,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 role=regional_admin_role,
                 status=True,
                 created_by=request.web_user.get('user_id'),
-                created_on=timezone.now()
+                created_on=datetime.now()
             )
             
             # Log activity
@@ -2511,7 +2514,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 status=True,
                 enrollment_date=enrollment_date,
                 created_by=request.web_user.get('user_id'),
-                created_on=timezone.now()
+                created_on=datetime.now()
             )
             print("ra", ra)
             
@@ -2535,6 +2538,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    @transaction.atomic
     def _update_regional_admin(self, request):
         try:
             data = json.loads(request.body)
@@ -2549,24 +2553,24 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             except (User.DoesNotExist, RegionalAdmin.DoesNotExist):
                 return JsonResponse({'detail': 'Regional Admin not found'}, status=404)
             
-            name = data.get('name', '').strip()
-            email = data.get('email', '').strip().lower()
-            phone = data.get('phone_number', '').strip()
-            whats_app = data.get('whats_app', '').strip()
-            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            name = (data.get('name') or '').strip()
+            email = (data.get('email') or '').strip().lower()
+            phone = (data.get('phone_number') or '').strip()
+            whats_app = (data.get('whats_app') or '').strip()
+            enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             panchayat_id = data.get('panchayat_id')
             village_id = data.get('village_id')
             age = data.get('age')
-            gender = data.get('gender', '').strip()
-            date_of_birth = data.get('date_of_birth', '').strip()
-            contact = data.get('contact', '').strip()
-            full_address = data.get('full_address', '').strip()
-            education = data.get('education', '').strip()
-            guardian_name = data.get('guardian_name', '').strip()
-            guardian_number = data.get('guardian_number', '').strip()
-            password = data.get('password', '').strip()  # Optional password update
+            gender = (data.get('gender') or '').strip()
+            date_of_birth = (data.get('date_of_birth') or '').strip()
+            contact = (data.get('contact') or '').strip()
+            full_address = (data.get('full_address') or '').strip()
+            education = (data.get('education') or '').strip()
+            guardian_name = (data.get('guardian_name') or '').strip()
+            guardian_number = (data.get('guardian_number') or '').strip()
+            password = (data.get('password') or '').strip()  # Optional password update
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
@@ -2594,7 +2598,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 user.password = hash_password(password)
             
             # Handle picture (base64 data URL)
-            picture_data = data.get('picture', '').strip()
+            picture_data = (data.get('picture') or '').strip()
             if picture_data and picture_data.startswith('data:'):
                 import base64
                 from django.core.files.base import ContentFile
@@ -2605,7 +2609,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 user.picture.save(picture_file.name, picture_file, save=False)
             
             user.updated_by = request.web_user.get('user_id')
-            user.updated_on = timezone.now()
+            user.updated_on = datetime.now()
             user.save()
             
             # Update regional admin
@@ -2622,7 +2626,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             ra.guardian_name = guardian_name if guardian_name else None
             ra.guardian_number = guardian_number if guardian_number else None
             ra.updated_by = request.web_user.get('user_id')
-            ra.updated_on = timezone.now()
+            ra.updated_on = datetime.now()
             ra.save()
             
             # Log activity
@@ -2665,13 +2669,13 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             # Soft delete - set status to False
             ra.status = False
             ra.updated_by = request.web_user.get('user_id')
-            ra.updated_on = timezone.now()
+            ra.updated_on = datetime.now()
             ra.save()
             
             # Also deactivate user
             user.status = False
             user.updated_by = request.web_user.get('user_id')
-            user.updated_on = timezone.now()
+            user.updated_on = datetime.now()
             user.save()
             
             # Log activity
@@ -2792,7 +2796,7 @@ class DistrictView(PermissionRequiredMixin, View):
     def _create_district(self, request):
         try:
             data = json.loads(request.body)
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             
             if not name:
                 return JsonResponse({'detail': 'District name is required'}, status=400)
@@ -2812,9 +2816,9 @@ class DistrictView(PermissionRequiredMixin, View):
                 name=name,
                 status=True,
                 created_by=user_id,
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 updated_by=user_id,
-                updated_on=timezone.now()
+                updated_on=datetime.now()
             )
             
             # Log activity
@@ -2841,7 +2845,7 @@ class DistrictView(PermissionRequiredMixin, View):
         try:
             data = json.loads(request.body)
             district_id = data.get('id')
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             
             if not district_id:
                 return JsonResponse({'detail': 'District ID is required'}, status=400)
@@ -2862,7 +2866,7 @@ class DistrictView(PermissionRequiredMixin, View):
             
             district.name = name
             district.updated_by = user_id
-            district.updated_on = timezone.now()
+            district.updated_on = datetime.now()
             district.save(update_fields=['name', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -2908,7 +2912,7 @@ class DistrictView(PermissionRequiredMixin, View):
             district_name = district.name
             district.status = False
             district.updated_by = request.web_user.get('user_id')
-            district.updated_on = timezone.now()
+            district.updated_on = datetime.now()
             district.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -3024,7 +3028,7 @@ class VidhanSabhaView(PermissionRequiredMixin, View):
     def _create_vidhan_sabha(self, request):
         try:
             data = json.loads(request.body)
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             district_id = data.get('district_id')
             
             if not name:
@@ -3044,9 +3048,9 @@ class VidhanSabhaView(PermissionRequiredMixin, View):
                 district_id=district_id,
                 status=True,
                 created_by=user_id,
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 updated_by=user_id,
-                updated_on=timezone.now()
+                updated_on=datetime.now()
             )
             
             # Log activity
@@ -3073,7 +3077,7 @@ class VidhanSabhaView(PermissionRequiredMixin, View):
         try:
             data = json.loads(request.body)
             vs_id = data.get('id')
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             district_id = data.get('district_id')
             
             if not vs_id:
@@ -3095,7 +3099,7 @@ class VidhanSabhaView(PermissionRequiredMixin, View):
             vs.name = name
             vs.district_id = district_id
             vs.updated_by = user_id
-            vs.updated_on = timezone.now()
+            vs.updated_on = datetime.now()
             vs.save(update_fields=['name', 'district_id', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -3139,7 +3143,7 @@ class VidhanSabhaView(PermissionRequiredMixin, View):
             vs.status = False
             vs_name = vs.name
             vs.updated_by = request.web_user.get('user_id')
-            vs.updated_on = timezone.now()
+            vs.updated_on = datetime.now()
             vs.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -3264,7 +3268,7 @@ class PanchayatView(PermissionRequiredMixin, View):
     def _create_panchayat(self, request):
         try:
             data = json.loads(request.body)
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             
@@ -3288,9 +3292,9 @@ class PanchayatView(PermissionRequiredMixin, View):
                 vidhan_sabha_id=vidhan_sabha_id,
                 status=True,
                 created_by=user_id,
-                created_on=timezone.now(),
+                created_on=datetime.now(),
                 updated_by=user_id,
-                updated_on=timezone.now()
+                updated_on=datetime.now()
             )
             
             # Log activity
@@ -3321,7 +3325,7 @@ class PanchayatView(PermissionRequiredMixin, View):
         try:
             data = json.loads(request.body)
             p_id = data.get('id')
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             
@@ -3347,7 +3351,7 @@ class PanchayatView(PermissionRequiredMixin, View):
             p.district_id = district_id
             p.vidhan_sabha_id = vidhan_sabha_id
             p.updated_by = user_id
-            p.updated_on = timezone.now()
+            p.updated_on = datetime.now()
             p.save(update_fields=['name', 'district_id', 'vidhan_sabha_id', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -3395,7 +3399,7 @@ class PanchayatView(PermissionRequiredMixin, View):
             p.status = False
             p_name = p.name
             p.updated_by = request.web_user.get('user_id')
-            p.updated_on = timezone.now()
+            p.updated_on = datetime.now()
             p.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -3517,7 +3521,7 @@ class VillageView(PermissionRequiredMixin, View):
     def _create_village(self, request):
         try:
             data = json.loads(request.body)
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             panchayat_id = data.get('panchayat_id')
@@ -3545,7 +3549,7 @@ class VillageView(PermissionRequiredMixin, View):
                 panchayat_id=panchayat_id,
                 status=True,
                 created_by=user_id,
-                created_on=timezone.now(),
+                created_on=datetime.now(),
             )
             
             # Log activity
@@ -3577,7 +3581,7 @@ class VillageView(PermissionRequiredMixin, View):
         try:
             data = json.loads(request.body)
             v_id = data.get('id')
-            name = data.get('name', '').strip()
+            name = (data.get('name') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             panchayat_id = data.get('panchayat_id')
@@ -3607,7 +3611,7 @@ class VillageView(PermissionRequiredMixin, View):
             v.vidhan_sabha_id = vidhan_sabha_id
             v.panchayat_id = panchayat_id
             v.updated_by = user_id
-            v.updated_on = timezone.now()
+            v.updated_on = datetime.now()
             v.save(update_fields=['name', 'district_id', 'vidhan_sabha_id', 'panchayat_id', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -3656,7 +3660,7 @@ class VillageView(PermissionRequiredMixin, View):
             v.status = False
             v_name = v.name
             v.updated_by = request.web_user.get('user_id')
-            v.updated_on = timezone.now()
+            v.updated_on = datetime.now()
             v.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -3689,7 +3693,7 @@ class TeacherView(PermissionRequiredMixin, View):
     
     def _get_teachers_queryset(self):
         """Get teachers ordered by created_on desc"""
-        return get_user_accessible_teachers_queryset(self.request).select_related('role', 'teacher').order_by('-created_on')
+        return get_user_accessible_teachers_user_queryset(self.request).select_related('role', 'teacher').order_by('-created_on')
     
     def _list_teachers_api(self, request):
         try:
@@ -3867,29 +3871,32 @@ class TeacherView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    @transaction.atomic
     def _create_teacher(self, request):
         try:
             data = json.loads(request.body)
+            print("data", data)
             
-            name = data.get('name', '').strip()
-            email = data.get('email', '').strip().lower()
-            phone = data.get('phone_number', '').strip()
-            whats_app = data.get('whats_app', '').strip()
-            password = data.get('password', '').strip()
-            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            name = (data.get('name') or '').strip()
+            email = (data.get('email') or '').strip().lower()
+            phone = (data.get('phone_number') or '').strip()
+            whats_app = (data.get('whats_app') or '').strip()
+            password = (data.get('password') or '').strip()
+            enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             panchayat_id = data.get('panchayat_id')
             village_id = data.get('village_id')
             age = data.get('age')
-            gender = data.get('gender', '').strip()
-            date_of_birth = data.get('date_of_birth', '').strip()
-            full_address = data.get('full_address', '').strip()
-            education = data.get('education', '').strip()
-            guardian_name = data.get('guardian_name', '').strip()
-            guardian_number = data.get('guardian_number', '').strip()
-            enrollment_date = data.get('enrollment_date', '').strip()
-            contact = data.get('contact', '').strip()
+            gender = (data.get('gender') or '').strip()
+            date_of_birth = (data.get('date_of_birth') or '').strip()
+            full_address = (data.get('full_address') or '').strip()
+            education = (data.get('education') or '').strip()
+            guardian_name = (data.get('guardian_name') or '').strip()
+            guardian_number = (data.get('guardian_number') or '').strip()
+            enrollment_date_raw = data.get('enrollment_date')
+            enrollment_date = enrollment_date_raw if enrollment_date_raw else None
+            contact = (data.get('contact') or '').strip()
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
@@ -3921,7 +3928,7 @@ class TeacherView(PermissionRequiredMixin, View):
                 return JsonResponse({'detail': 'TEACHER role not configured'}, status=500)
             
             # Handle picture (base64 data URL)
-            picture_data = data.get('picture', '').strip()
+            picture_data = (data.get('picture') or '').strip()
             picture_file = None
             if picture_data and picture_data.startswith('data:'):
                 format, imgstr = picture_data.split(';base64,')
@@ -3939,8 +3946,9 @@ class TeacherView(PermissionRequiredMixin, View):
                 role=teacher_role,
                 status=True,
                 created_by=request.web_user.get('user_id'),
-                created_on=timezone.now()
+                created_on=datetime.now()
             )
+            print("user created", user)
             
             # Save picture if provided
             if picture_file:
@@ -3965,8 +3973,9 @@ class TeacherView(PermissionRequiredMixin, View):
                 status=True,
                 enrollment_date=enrollment_date,
                 created_by=request.web_user.get('user_id'),
-                created_on=timezone.now()
+                created_on=datetime.now()
             )
+            print("teacher created", teacher)
 
             # Log activity
             log_web_activity(request, 'CREATE', 'Teacher', record_id=user.id, record_name=user.name)
@@ -4006,10 +4015,12 @@ class TeacherView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    @transaction.atomic
     def _update_teacher(self, request):
         try:
             data = json.loads(request.body)
             user_id = data.get('id')
+            print("user_id", user_id)
             
             if not user_id:
                 return JsonResponse({'detail': 'ID is required'}, status=400)
@@ -4020,25 +4031,26 @@ class TeacherView(PermissionRequiredMixin, View):
             except (User.DoesNotExist, Teacher.DoesNotExist):
                 return JsonResponse({'detail': 'Teacher not found'}, status=404)
             
-            name = data.get('name', '').strip()
-            email = data.get('email', '').strip().lower()
-            phone = data.get('phone_number', '').strip()
-            whats_app = data.get('whats_app', '').strip()
-            enrolment_roll_id = data.get('enrolment_roll_id', '').strip()
+            name = (data.get('name') or '').strip()
+            email = (data.get('email') or '').strip().lower()
+            phone = (data.get('phone_number') or '').strip()
+            whats_app = (data.get('whats_app') or '').strip()
+            enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             panchayat_id = data.get('panchayat_id')
             village_id = data.get('village_id')
             age = data.get('age')
-            gender = data.get('gender', '').strip()
-            date_of_birth = data.get('date_of_birth', '').strip()
-            contact = data.get('contact', '').strip()
-            full_address = data.get('full_address', '').strip()
-            education = data.get('education', '').strip()
-            guardian_name = data.get('guardian_name', '').strip()
-            guardian_number = data.get('guardian_number', '').strip()
-            enrollment_date = data.get('enrollment_date', '').strip()
-            password = data.get('password', '').strip()
+            gender = (data.get('gender') or '').strip()
+            date_of_birth = (data.get('date_of_birth') or '').strip()
+            contact = (data.get('contact') or '').strip()
+            full_address = (data.get('full_address') or '').strip()
+            education = (data.get('education') or '').strip()
+            guardian_name = (data.get('guardian_name') or '').strip()
+            guardian_number = (data.get('guardian_number') or '').strip()
+            enrollment_date_raw = data.get('enrollment_date')
+            enrollment_date = enrollment_date_raw if enrollment_date_raw else None
+            password = (data.get('password') or '').strip()
             
             if name:
                 user.name = name
@@ -4062,11 +4074,11 @@ class TeacherView(PermissionRequiredMixin, View):
                 user.password = hash_password(password)
             
             user.updated_by = request.web_user.get('user_id')
-            user.updated_on = timezone.now()
+            user.updated_on = datetime.now()
             user.save()
             
             # Handle picture (base64 data URL)
-            picture_data = data.get('picture', '').strip()
+            picture_data = (data.get('picture') or '').strip()
             if picture_data and picture_data.startswith('data:'):
                 format, imgstr = picture_data.split(';base64,')
                 ext = format.split('/')[-1]
@@ -4111,7 +4123,7 @@ class TeacherView(PermissionRequiredMixin, View):
                     teacher.enrollment_date = None
             
             teacher.updated_by = request.web_user.get('user_id')
-            teacher.updated_on = timezone.now()
+            teacher.updated_on = datetime.now()
             teacher.save()
             
             # Log activity
@@ -4162,12 +4174,12 @@ class TeacherView(PermissionRequiredMixin, View):
             user.status = False
             teacher_name = user.name
             user.updated_by = request.web_user.get('user_id')
-            user.updated_on = timezone.now()
+            user.updated_on = datetime.now()
             user.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             teacher.status = False
             teacher.updated_by = request.web_user.get('user_id')
-            teacher.updated_on = timezone.now()
+            teacher.updated_on = datetime.now()
             teacher.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             # Log activity
@@ -4411,8 +4423,8 @@ class CenterView(PermissionRequiredMixin, View):
         try:
             data = json.loads(request.body)
             
-            center_name = data.get('center_name', '').strip()
-            address = data.get('address', '').strip()
+            center_name = (data.get('center_name') or '').strip()
+            address = (data.get('address') or '').strip()
             district_id = data.get('district_id')
             vidhan_sabha_id = data.get('vidhan_sabha_id')
             panchayat_id = data.get('panchayat_id')
@@ -4585,7 +4597,7 @@ class CenterView(PermissionRequiredMixin, View):
             center_name = center.center_name
             center.status = False
             center.updated_by = request.web_user.get('user_id')
-            center.updated_on = timezone.now()
+            center.updated_on = datetime.now()
             center.save(update_fields=['status', 'updated_by', 'updated_on'])
             
             # Log activity

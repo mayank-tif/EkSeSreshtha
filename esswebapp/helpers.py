@@ -682,6 +682,7 @@ def get_user_accessible_students_queryset(request):
 def get_user_accessible_teachers_queryset(request):
     """
     Get Teacher queryset filtered by user's accessible centers.
+    Used for dashboard/stats where Teacher objects are needed.
     
     Args:
         request: Django request object
@@ -690,15 +691,48 @@ def get_user_accessible_teachers_queryset(request):
         Filtered Teacher queryset
     """
     center_ids = get_user_accessible_center_ids(request)
+    print("get_user_accessible_teachers_queryset center_ids", center_ids)  # --- IGNORE ---
     
     if center_ids is None:
+        print("get_user_accessible_teachers_queryset: Super Admin - returning all teachers")  # --- IGNORE ---
         return Teacher.objects.filter(status=True)
     
     if not center_ids:
+        print("get_user_accessible_teachers_queryset: No accessible centers - returning empty queryset")  # --- IGNORE ---
         return Teacher.objects.none()
     
     # Teachers are linked to centers via center field
     return Teacher.objects.filter(center_id__in=center_ids, status=True)
+
+
+def get_user_accessible_teachers_user_queryset(request):
+    """
+    Get User queryset for teachers filtered by user's accessible centers.
+    Used for API endpoints where User objects with Teacher profiles are needed.
+    
+    Args:
+        request: Django request object
+    
+    Returns:
+        Filtered User queryset (with role and teacher select_related)
+    """
+    center_ids = get_user_accessible_center_ids(request)
+    
+    if center_ids is None:
+        # Super Admin - all teachers
+        return User.objects.filter(role__role_code='TEACHER', status=True)
+    
+    if not center_ids:
+        # No accessible centers - empty queryset
+        return User.objects.none()
+    
+    # Regional Admin - filter users who have Teacher profile with center in accessible centers
+    return User.objects.filter(
+        role__role_code='TEACHER',
+        status=True,
+        teacher__center_id__in=center_ids,
+        teacher__status=True
+    )
 
 
 # ==================================================================

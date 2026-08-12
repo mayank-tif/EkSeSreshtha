@@ -2676,7 +2676,7 @@ def get_class_current_status(center_id, teacher_id):
         active_class = ClassModel.objects.filter(
             started_date__date=today,
             center_id=center_id,
-            status=True
+            active_status=True
         ).first()
         
         if active_class:
