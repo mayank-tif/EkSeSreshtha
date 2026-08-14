@@ -4933,7 +4933,7 @@ class UserGetAllUnAssignedTeacherView(APIView):
         try:
             logger.info("UserView : GetUnAssignedTeachers : Started")
             
-            teachers = Teacher.objects.filter(center__isnull=True).order_by('id')
+            teachers = Teacher.objects.filter(center__isnull=True, status=True).order_by('id')
             
             # Convert to dict for serialization
             data = []

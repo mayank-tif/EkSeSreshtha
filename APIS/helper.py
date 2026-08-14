@@ -142,7 +142,8 @@ def get_centers_for_admin(status_param, today):
         center_ids = [cls.center_id for cls in classes if cls.center_id]
         
         centers = Center.objects.filter(
-            id__in=center_ids
+            id__in=center_ids,
+            status=True
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
@@ -169,7 +170,8 @@ def get_centers_for_admin(status_param, today):
         center_ids = [cc.center_id for cc in canceled_classes if cc.center_id]
         
         centers = Center.objects.filter(
-            id__in=center_ids
+            id__in=center_ids,
+            status=True
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
@@ -188,6 +190,8 @@ def get_centers_for_admin(status_param, today):
         
         centers = Center.objects.exclude(
             id__in=center_ids
+        ).filter(
+            status=True
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         
@@ -205,14 +209,16 @@ def get_centers_for_regional_admin(status_param, user_id, today):
         # Active or Completed classes
         classes = ClassModel.objects.filter(
             started_date__date=today,
-            status=status_param
+            status=status_param,
+            active_status=True
         ).select_related('center')
         
         center_ids = [cls.center_id for cls in classes if cls.center_id]
         
         centers = Center.objects.filter(
             id__in=center_ids,
-            assigned_regional_admin=user_id
+            assigned_regional_admin=user_id,
+            status=True
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
@@ -250,7 +256,8 @@ def get_centers_for_regional_admin(status_param, user_id, today):
     else:
         # Upcoming classes for regional admin
         classes = ClassModel.objects.filter(
-            started_date__date=today
+            started_date__date=today,
+            active_status=True
         ).select_related('center')
         
         center_ids = [cls.center_id for cls in classes if cls.center_id]
@@ -258,7 +265,8 @@ def get_centers_for_regional_admin(status_param, user_id, today):
         centers = Center.objects.exclude(
             id__in=center_ids
         ).filter(
-            assigned_regional_admin=user_id
+            assigned_regional_admin=user_id,
+            status=True
         ).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by("-id")
         
         for item in centers:
@@ -683,10 +691,11 @@ def get_all_center_attendance(user_id, date, offset, limit):
         
         # Get centers based on user type - order by id descending
         if user_type == 1:
-            centers = Center.objects.all().order_by('-id')
+            centers = Center.objects.filter(status=True).order_by('-id')
         else:
             centers = Center.objects.filter(
-                assigned_regional_admin=user_id
+                assigned_regional_admin=user_id,
+                status=True
             ).order_by('-id')
         
         # Apply pagination
@@ -699,7 +708,8 @@ def get_all_center_attendance(user_id, date, offset, limit):
             # Get class for this center on the given date
             class_obj = ClassModel.objects.filter(
                 center_id=center.id,
-                started_date__date=date_obj
+                started_date__date=date_obj,
+                active_status=True
             ).first()
             
             # Get teacher name
@@ -753,7 +763,8 @@ def get_all_center_attendance(user_id, date, offset, limit):
                 cancel = ClassCancelByTeacher.objects.filter(
                     center_id=center.id,
                     starting_date__date__lte=date_obj,
-                    ending_date__date__gte=date_obj
+                    ending_date__date__gte=date_obj,
+                    status=True
                 ).first()
                 
                 if cancel:
@@ -801,9 +812,9 @@ def get_total_attendance_count_of_center(user_id, date):
         
         # Get centers based on user type
         if user_type == 1:  # SuperAdmin
-            centers = Center.objects.all()
+            centers = Center.objects.filter(status=True)
         else:  # Regional Admin (Type 2)
-            centers = Center.objects.filter(assigned_regional_admin=user_id)
+            centers = Center.objects.filter(assigned_regional_admin=user_id, status=True)
         
         # Initialize counters
         not_started = 0
@@ -816,7 +827,8 @@ def get_total_attendance_count_of_center(user_id, date):
             # Check if class exists for this center on the given date
             class_obj = ClassModel.objects.filter(
                 center_id=center.id,
-                started_date__date=date_obj
+                started_date__date=date_obj,
+                active_status=True
             ).first()
             
             if class_obj is None:
@@ -1381,7 +1393,7 @@ def get_all_teachers(user_id):
         else:
             # Get teachers assigned to centers under this regional admin
             # Find center IDs where AssignedRegionalAdmin = user_id
-            center_ids = Center.objects.filter(assigned_regional_admin=user_id).values_list('assigned_teachers', flat=True)
+            center_ids = Center.objects.filter(assigned_regional_admin=user_id, status=True).values_list('assigned_teachers', flat=True)
             teachers = Teacher.objects.filter(user__id__in=center_ids, user__role_id=3, user__status=True).select_related('user').order_by('user__name')
         
         result = []
@@ -1528,7 +1540,7 @@ def login_user(mobile_number, password):
                     
                     # Get list of centers
                     list_of_centers = []
-                    centers = Center.objects.filter(assigned_regional_admin=user.id)
+                    centers = Center.objects.filter(assigned_regional_admin=user.id, status=True)
                     
                     # Get full center details for each center
                     full_centers = []
@@ -2074,7 +2086,7 @@ def get_user_by_id(user_id):
                 
                 # Get list of centers
                 list_of_centers = []
-                centers = Center.objects.filter(assigned_regional_admin=regional_admin.id)
+                centers = Center.objects.filter(assigned_regional_admin=regional_admin.id, status=True)
                 for center in centers:
                     list_of_centers.append({
                         'id': center.id,
@@ -2345,7 +2357,8 @@ def save_class(class_data, request):
             existing = ClassModel.objects.filter(
                 started_date__date=today,
                 center_id=center_id,
-                status=1
+                status=1,
+                active_status=True
             ).exists()
 
             if existing:
@@ -2693,7 +2706,8 @@ def get_class_current_status(center_id, teacher_id):
         completed_class = ClassModel.objects.filter(
             started_date__date=today,
             center_id=center_id,
-            status=2
+            status=2,
+            active_status=True
         ).first()
         
         if completed_class:
@@ -2947,7 +2961,7 @@ def get_class_count_by_month(center_id, start_date, end_date):
             center_id=center_id,
             started_date__date__gte=start,
             end_date__date__lte=end,
-            status=True  # Soft delete filter
+            active_status=True  # Soft delete filter
         ).count()
             
         holiday_count = Holidays.objects.filter(
@@ -4478,6 +4492,7 @@ def get_total_student_present(scan_date, user_id):
         active_classes = ClassModel.objects.filter(
             center_id__in=center_ids,
             status=1,  # Active status
+            active_status=True,
             started_date__date=scan_date_obj
         ).count()
         
@@ -4485,7 +4500,8 @@ def get_total_student_present(scan_date, user_id):
         # Classes that started on scan_date
         classes_on_date = ClassModel.objects.filter(
             center_id__in=center_ids,
-            started_date__date=scan_date_obj
+            started_date__date=scan_date_obj,
+            active_status=True
         )
         
         completed_class_count = classes_on_date.filter(
