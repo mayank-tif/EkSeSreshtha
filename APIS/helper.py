@@ -1071,15 +1071,15 @@ def save_center(center_data, request):
                                     # Save history for new regional admin
                                     if new_regional_admin.user:
                                         # Deactivate any existing active CenterAssignUser for this regional admin (type=2) across ALL centers
-                                        CenterAssignUser.objects.filter(
-                                            user_id=new_regional_admin.user.id,
-                                            type=2,
-                                            status=True
-                                        ).update(
-                                            status=False,
-                                            updated_by=current_user_id,
-                                            updated_on=datetime.now()
-                                        )
+                                        # CenterAssignUser.objects.filter(
+                                        #     user_id=new_regional_admin.user.id,
+                                        #     type=2,
+                                        #     status=True
+                                        # ).update(
+                                        #     status=False,
+                                        #     updated_by=current_user_id,
+                                        #     updated_on=datetime.now()
+                                        # )
                                         
                                         # Create new CenterAssignUser entry (type=2 for regional admin)
                                         CenterAssignUser.objects.create(
@@ -1184,15 +1184,15 @@ def save_center(center_data, request):
                             # Save history of user assign (matches .NET)
                             if regional_admin.user:
                                 # Deactivate any existing active CenterAssignUser for this regional admin (type=2) across ALL centers
-                                CenterAssignUser.objects.filter(
-                                    user_id=regional_admin.user.id,
-                                    type=2,
-                                    status=True
-                                ).update(
-                                    status=False,
-                                    updated_by=current_user_id,
-                                    updated_on=datetime.now()
-                                )
+                                # CenterAssignUser.objects.filter(
+                                #     user_id=regional_admin.user.id,
+                                #     type=2,
+                                #     status=True
+                                # ).update(
+                                #     status=False,
+                                #     updated_by=current_user_id,
+                                #     updated_on=datetime.now()
+                                # )
                                 
                                 # Create new CenterAssignUser entry (type=2 for regional admin)
                                 CenterAssignUser.objects.create(
