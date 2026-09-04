@@ -112,22 +112,6 @@ class School(models.Model):
         return self.school_name or str(self.id)
 
 
-class SchoolName(models.Model):
-    id = models.IntegerField(db_column="Id", primary_key=True)
-    school_name = models.CharField(db_column="SchoolName", max_length=50, unique=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "SchoolName"
-
-    def __str__(self):
-        return self.school_name
-
-
 class Center(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     center_guid_id = models.CharField(db_column="CenterGuidId", max_length=50, null=True, blank=True, unique=True)
@@ -342,34 +326,6 @@ class ClassModel(models.Model):
         return self.name or str(self.id)
 
 
-class ClassDetail(models.Model):
-    id = models.AutoField(db_column="Id", primary_key=True)
-    class_guid_id = models.CharField(db_column="ClassGuidId", max_length=36, unique=True)
-    sccan_time_spam = models.BinaryField(db_column="SccanTimeSpam", null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    student = models.ForeignKey('Student', db_column="StudentId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
-    teacher = models.ForeignKey('Teacher', db_column="TeacherId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
-    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
-    class_obj = models.ForeignKey(ClassModel, db_column="ClassId", on_delete=models.SET_NULL, null=True, blank=True, related_name='class_details')
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "ClassDetail"
-        constraints = [
-            models.UniqueConstraint(fields=['class_guid_id'], name='uc_classdetail_guid'),
-        ]
-        indexes = [
-            models.Index(fields=['class_guid_id'], name='idx_classdetail_guid'),
-            models.Index(fields=['student'], name='idx_classdetail_student'),
-            models.Index(fields=['teacher'], name='idx_classdetail_teacher'),
-            models.Index(fields=['center'], name='idx_classdetail_center'),
-            models.Index(fields=['class_obj'], name='idx_classdetail_class'),
-        ]
-
-
 class RegionalAdmin(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     regional_admin_guid_id = models.CharField(db_column="RegionalAdminGuidId", max_length=36, unique=True)
@@ -534,45 +490,6 @@ class Holidays(models.Model):
         return self.name or str(self.id)
 
 
-class HolidayCenter(models.Model):
-    id = models.AutoField(db_column="Id", primary_key=True)
-    holiday = models.ForeignKey(Holidays, db_column="HolidayId", on_delete=models.SET_NULL, null=True, blank=True, related_name='holiday_centers')
-    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='holiday_centers')
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "HolidayCenter"
-        indexes = [
-            models.Index(fields=['holiday'], name='idx_holidaycenter_holiday'),
-            models.Index(fields=['center'], name='idx_holidaycenter_center'),
-        ]
-
-
-class TeacherActivityLog(models.Model):
-    id = models.AutoField(db_column="Id", primary_key=True)
-    teacher_acivity_guid_id = models.CharField(db_column="TeacherAcivityGuidId", max_length=36, unique=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    login_time = models.CharField(db_column="LoginTime", max_length=50, null=True, blank=True)
-    logout_time = models.CharField(db_column="LogoutTime", max_length=50, null=True, blank=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "TeacherActivityLog"
-        constraints = [
-            models.UniqueConstraint(fields=['teacher_acivity_guid_id'], name='uc_teacheractivity_guid'),
-        ]
-        indexes = [
-            models.Index(fields=['teacher_acivity_guid_id'], name='idx_teacheractivity_guid'),
-        ]
-
-
 class Announcement(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     title = models.CharField(db_column="Title", max_length=50, null=True, blank=True)
@@ -660,25 +577,6 @@ class ClassCancelByTeacher(models.Model):
         ]
 
 
-class Concern(models.Model):
-    id = models.AutoField(db_column="Id", primary_key=True)
-    type = models.CharField(db_column="Type", max_length=50, null=True, blank=True)
-    description = models.CharField(db_column="Description", max_length=50, null=True, blank=True)
-    users_id = models.IntegerField(db_column="UsersId", null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "Concern"
-        indexes = [
-            models.Index(fields=['users_id'], name='idx_concern_users'),
-            models.Index(fields=['type'], name='idx_concern_type'),
-        ]
-
-
 class RegionalAdminPanchayat(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     panchayat_name = models.CharField(db_column="PanchayatName", max_length=50, null=True, blank=True)
@@ -733,79 +631,6 @@ class StudentAttendance(models.Model):
             models.Index(fields=['user_id'], name='idx_attendance_user'),
             models.Index(fields=['attendance_type'], name='idx_attendance_type'),
         ]
-
-
-class UserActivityLog(models.Model):
-    id = models.AutoField(db_column="Id", primary_key=True)
-    user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
-    ip_address = models.CharField(db_column="IpAddress", max_length=50, null=True, blank=True)
-    user_name = models.CharField(db_column="UserName", max_length=50, null=True, blank=True)
-    activity_date = models.DateTimeField(db_column="ActivityDate", null=True, blank=True)
-    data = models.TextField(db_column="Data", null=True, blank=True)
-    url = models.CharField(db_column="Url", max_length=50, null=True, blank=True)
-    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "UserActivityLog"
-        indexes = [
-            models.Index(fields=['user_id'], name='idx_useractivity_user'),
-            models.Index(fields=['activity_date'], name='idx_useractivity_date'),
-        ]
-
-
-class VersionControl(models.Model):
-    id = models.IntegerField(db_column="Id", primary_key=True)
-    app_id = models.IntegerField(db_column="AppId", null=True, blank=True)
-    version = models.FloatField(db_column="Version", null=True, blank=True)
-    message = models.CharField(db_column="Message", max_length=50, null=True, blank=True)
-    status = models.IntegerField(db_column="Status", null=True, blank=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "VersionControl"
-        indexes = [
-            models.Index(fields=['app_id'], name='idx_versioncontrol_app'),
-            models.Index(fields=['status'], name='idx_versioncontrol_status'),
-        ]
-
-
-class Test(models.Model):
-    id = models.AutoField(db_column="id", primary_key=True)
-    name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    address = models.CharField(db_column="Address", max_length=50, null=True, blank=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "test"
-
-    def __str__(self):
-        return self.name or str(self.id)
-
-
-class TestTable(models.Model):
-    id = models.AutoField(db_column="id", primary_key=True)
-    name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    address = models.CharField(db_column="Address", max_length=50, null=True, blank=True)
-    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
-    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
-    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
-    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
-
-    class Meta:
-        db_table = "TestTable"
-
-    def __str__(self):
-        return self.name or str(self.id)
 
 
 class ActivityLog(models.Model):
