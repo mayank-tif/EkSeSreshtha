@@ -421,7 +421,8 @@ class Student(models.Model):
     date_of_birth = models.CharField(db_column="DateOfBirth", max_length=50, null=True, blank=True)
     remarks = models.CharField(db_column="Remarks", max_length=50, null=True, blank=True)
     profile_image = models.CharField(db_column="ProfileImage", max_length=50, null=True, blank=True)
-    phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
+    phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True)
+    aadhar_number = models.CharField(db_column="AadharNumber", max_length=50, null=True, blank=True)
     education = models.CharField(db_column="Education", max_length=50, null=True, blank=True)
     manual_attendance = models.IntegerField(db_column="ManualAttendance", null=True, blank=True)
     mother_name = models.CharField(db_column="MotherName", max_length=50, null=True, blank=True)
@@ -449,7 +450,6 @@ class Student(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['enrollment_id'], name='uc_student_enrollment'),
             models.UniqueConstraint(fields=['email'], name='uc_student_email'),
-            models.UniqueConstraint(fields=['phone_number'], name='uc_student_phone'),
         ]
         indexes = [
             models.Index(fields=['district'], name='idx_student_district'),
