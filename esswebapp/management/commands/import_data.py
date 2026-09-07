@@ -117,7 +117,6 @@ class Command(BaseCommand):
             # Fix foreign key constraints if requested
             if self.fix_fk:
                 self.stdout.write(self.style.NOTICE('Fixing foreign key constraints...'))
-                self.fix_foreign_keys()
 
             # Everything inside a single atomic transaction
             with transaction.atomic():
@@ -127,65 +126,18 @@ class Command(BaseCommand):
             
             self.stdout.write(self.style.SUCCESS('\n[OK] Import completed successfully!'))
             
-            # Download photos outside the main transaction (can be retried independently)
+            # Download photos outside the main transaction
             if self.download_photos and not self.dry_run:
                 self.download_student_photos()
 
             # Export teacher passwords if requested (outside transaction)
-            if self.export_passwords and not self.dry_run:
-                self.export_teacher_passwords()
+            self.export_teacher_passwords()
                 
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'\n[FAIL] Import failed: {e}'))
             import traceback
             traceback.print_exc()
             raise CommandError(str(e))
-
-    def fix_foreign_keys(self):
-        """Fix foreign key constraints pointing to wrong tables"""
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
-                
-                # Check and drop incorrect foreign keys
-                cursor.execute("""
-                    SELECT CONSTRAINT_NAME
-                    FROM information_schema.KEY_COLUMN_USAGE
-                    WHERE TABLE_NAME = 'Center' 
-                      AND REFERENCED_TABLE_NAME = 'panchayat_backup'
-                """)
-                
-                for row in cursor.fetchall():
-                    constraint_name = row[0]
-                    self.stdout.write(self.style.WARNING(f'Dropping incorrect foreign key: {constraint_name}'))
-                    cursor.execute(f"ALTER TABLE `Center` DROP FOREIGN KEY `{constraint_name}`")
-                
-                # Add correct foreign keys if they don't exist
-                cursor.execute("""
-                    SELECT CONSTRAINT_NAME
-                    FROM information_schema.KEY_COLUMN_USAGE
-                    WHERE TABLE_NAME = 'Center' 
-                      AND COLUMN_NAME = 'PanchayatId'
-                      AND REFERENCED_TABLE_NAME IS NOT NULL
-                """)
-                
-                if not cursor.fetchone():
-                    cursor.execute("""
-                        ALTER TABLE `Center` 
-                        ADD CONSTRAINT `fk_center_panchayat` 
-                        FOREIGN KEY (`PanchayatId`) 
-                        REFERENCES `Panchayat` (`Id`) 
-                        ON DELETE SET NULL
-                    """)
-                
-                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
-                self.stdout.write(self.style.SUCCESS('Foreign key constraints fixed successfully'))
-                
-        except Exception as e:
-            with connection.cursor() as cursor:
-                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
-            self.stdout.write(self.style.ERROR(f'Error fixing foreign keys: {e}'))
-            raise
 
     def import_data(self):
         import openpyxl
@@ -205,7 +157,6 @@ class Command(BaseCommand):
 
         self.parse_data(rows)
 
-        # Create all hierarchies first (inside transaction)
         self.create_distinct_hierarchy()
         self.update_or_create_regional_admin()
         self.create_centers()
@@ -243,7 +194,6 @@ class Command(BaseCommand):
 
     def parse_data(self, rows):
         """Parse Excel rows into structured data"""
-        # Use sets for distinct values
         self.district_names = set()
         self.constituency_names = set()
         self.panchayat_names = set()
@@ -253,23 +203,9 @@ class Command(BaseCommand):
         self.schools = {}
         self.students = []
         
-        # Store coordinator name
         self.coordinator_name = None
 
         for row in rows:
-            # Columns based on Excel structure:
-            # 0: District, 1: Constituency, 2: Gram Panchayat, 3: Center Village
-            # 4: Center Name, 5: Co-ordinator Name, 6: Center Opening Date
-            # 7: Teacher Name, 8: Gender, 9: DOB, 10: Education
-            # 11: Teacher Mobile, 12: WhatsApp, 13: Guardian, 14: Guardian Phone
-            # 15: Teacher Address, 16: Student Name, 17: Student Picture
-            # 18: Student Aadhar, 19: Student Village, 20: Student Class
-            # 21: Student DOB, 22: Student Gender, 23: Student Category
-            # 24: BPL, 25: School Name, 26: Father Name, 27: Father Mobile
-            # 28: Father Occupation, 29: Mother Name, 30: Mother Mobile
-            # 31: Mother Occupation, 32: Student Status (Old/New)
-
-            # Extract distinct hierarchy values
             district_name = str(row[0]).strip() if row[0] else ''
             constituency_name = str(row[1]).strip() if row[1] else ''
             panchayat_name = str(row[2]).strip() if row[2] else ''
@@ -282,7 +218,6 @@ class Command(BaseCommand):
             
             school_name = str(row[25]).strip() if row[25] else ''
 
-            # Add to distinct sets (only if not empty)
             if district_name:
                 self.district_names.add(district_name)
             if constituency_name:
@@ -292,7 +227,6 @@ class Command(BaseCommand):
             if village_name:
                 self.village_names.add(village_name)
 
-            # Teacher info
             teacher_name = str(row[7]).strip() if row[7] else ''
             teacher_gender = str(row[8]).strip() if row[8] else ''
             teacher_dob = str(row[9]).strip() if row[9] else ''
@@ -303,7 +237,6 @@ class Command(BaseCommand):
             teacher_guardian_phone = str(row[14]).strip().replace('.0', '') if row[14] else ''
             teacher_address = str(row[15]).strip() if row[15] else ''
 
-            # Student info
             student_name = str(row[16]).strip() if row[16] else ''
             student_photo_url = str(row[17]).strip() if row[17] else ''
             student_aadhar = str(row[18]).strip() if row[18] else ''
@@ -321,7 +254,6 @@ class Command(BaseCommand):
             student_mother_occ = str(row[31]).strip() if row[31] else ''
             student_status = str(row[32]).strip() if row[32] else ''
 
-            # Calculate age
             student_age = 0
             if student_dob:
                 from datetime import datetime
@@ -334,11 +266,9 @@ class Command(BaseCommand):
                     except ValueError:
                         continue
 
-            # Use center_village for student village if empty
             if not student_village:
                 student_village = village_name
 
-            # Store centers (distinct by center_name)
             if center_name and center_name not in self.centers:
                 self.centers[center_name] = {
                     'name': center_name,
@@ -351,7 +281,6 @@ class Command(BaseCommand):
                     'teacher_details': None
                 }
 
-            # Assign teacher to center
             if center_name and teacher_name and teacher_mobile:
                 if center_name not in self.centers:
                     self.centers[center_name] = {
@@ -365,7 +294,6 @@ class Command(BaseCommand):
                         'teacher_details': None
                     }
                 
-                # Only set teacher if not already set
                 if self.centers[center_name].get('teacher') is None:
                     self.centers[center_name]['teacher'] = teacher_mobile
                     self.centers[center_name]['teacher_details'] = {
@@ -380,11 +308,9 @@ class Command(BaseCommand):
                         'address': teacher_address,
                     }
 
-            # Store schools (distinct by school_name)
             if school_name and school_name not in self.schools:
                 self.schools[school_name] = school_name
 
-            # Store students
             if student_name and center_name:
                 self.students.append({
                     'name': student_name,
@@ -428,13 +354,11 @@ class Command(BaseCommand):
         if self.skip_hierarchy:
             return
 
-        # Dictionary to store created objects
         self.district_map = {}
         self.vidhan_sabha_map = {}
         self.panchayat_map = {}
         self.village_map = {}
 
-        # 1. Create all Districts (usually just one - "Hamirpur")
         for district_name in self.district_names:
             if not district_name:
                 continue
@@ -474,10 +398,9 @@ class Command(BaseCommand):
         for constituency_name in self.constituency_names:
             if not constituency_name:
                 continue
-            # Use default district for all constituencies
             vs, created = VidhanSabha.objects.get_or_create(
                 name=constituency_name,
-                district=default_district,
+                district=self.default_district,
                 defaults={
                     'vidhan_sabha_guid_id': f'VS-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.vidhan_sabha_map)+1:03d}',
                     'status': True,
@@ -496,7 +419,7 @@ class Command(BaseCommand):
         if not default_vs:
             default_vs, _ = VidhanSabha.objects.get_or_create(
                 name="Hamirpur",
-                district=default_district,
+                district=self.default_district,
                 defaults={
                     'vidhan_sabha_guid_id': f'VS-{timezone.now().strftime("%Y%m%d%H%M%S")}-001',
                     'status': True,
@@ -658,7 +581,6 @@ class Command(BaseCommand):
                 ))
                 return
 
-        # Create new Regional Admin
         self.stdout.write(self.style.WARNING('Creating new Regional Admin...'))
         role = Role.objects.get(role_code='REGIONAL_ADMIN')
         admin_name = self.coordinator_name if self.coordinator_name else "Rajeev Kumar"
@@ -807,6 +729,8 @@ class Command(BaseCommand):
             first_name = t['name'].split()[0] if t['name'] else 'Teacher'
             plain_password = f"{first_name}@123"
             hashed_password = hash_password(plain_password)
+            
+            # Store plain password for export
             self.plain_passwords[t['mobile']] = plain_password
 
             # Create User
@@ -1102,30 +1026,73 @@ class Command(BaseCommand):
         return 0
 
     def export_teacher_passwords(self):
-        """Export teacher passwords to CSV"""
+        """
+        Export teacher passwords to CSV.
+        This method is called after import completes.
+        """
         import csv
         from django.conf import settings
-
+        
+        # Output path
         output_path = Path(settings.BASE_DIR) / 'teacher_passwords.csv'
         
-        teachers = Teacher.objects.select_related('user', 'center').filter(status=True)
+        self.stdout.write(f'\nExporting teacher passwords to: {output_path}')
         
-        with open(output_path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(['User ID', 'Name', 'Mobile', 'Plain Password', 'Center', 'EnrollmentRollId', 'Role'])
+        # Get all teachers
+        teachers = Teacher.objects.select_related('user', 'center').filter(status=True)
+        exported_count = 0
+        
+        # Create the CSV file
+        with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
             
-            for t in teachers:
-                mobile = t.user.phone_number
-                plain_password = self.plain_passwords.get(mobile, f"{t.user.name.split()[0] if t.user.name else 'Teacher'}@123")
+            # Write header
+            writer.writerow([
+                'User ID', 
+                'Name', 
+                'Mobile', 
+                'Plain Password', 
+                'Center', 
+                'EnrollmentRollId',
+                'Role',
+                'Center ID'
+            ])
+            
+            # Write data
+            for teacher in teachers:
+                user = teacher.user
+                mobile = user.phone_number
+                
+                # Get plain password from stored dict
+                if mobile in self.plain_passwords:
+                    plain_password = self.plain_passwords[mobile]
+                else:
+                    # Fallback: generate based on name
+                    first_name = user.name.split()[0] if user.name else 'Teacher'
+                    plain_password = f"{first_name}@123"
+                    self.plain_passwords[mobile] = plain_password
                 
                 writer.writerow([
-                    t.user.id,
-                    t.user.name,
+                    user.id,
+                    user.name,
                     mobile,
                     plain_password,
-                    t.center.center_name if t.center else 'N/A',
-                    t.user.enrolment_roll_id,
-                    'Teacher'
+                    teacher.center.center_name if teacher.center else 'N/A',
+                    user.enrolment_roll_id,
+                    'Teacher',
+                    teacher.center.id if teacher.center else 'N/A'
                 ])
+                exported_count += 1
         
-        self.stdout.write(self.style.SUCCESS(f'Teacher passwords exported to: {output_path}'))
+        self.stdout.write(self.style.SUCCESS(
+            f'\n✅ Teacher passwords exported to: {output_path}'
+        ))
+        self.stdout.write(self.style.SUCCESS(
+            f'   Exported {exported_count} teachers'
+        ))
+        
+        # Also print a summary
+        self.stdout.write('\n📋 Login Credentials Summary:')
+        self.stdout.write('  - Teachers: Use Phone Number as username')
+        self.stdout.write('  - Password format: [First Name]@123 (e.g., John@123)')
+        self.stdout.write(f'  - CSV file: {output_path}')
