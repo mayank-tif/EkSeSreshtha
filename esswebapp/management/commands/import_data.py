@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Django management command to import Rajeev Kumar ESS Center data.
-Run: python manage.py import_rajeev_data
+Run: python manage.py import_data
 """
 import os
 import re
@@ -9,6 +9,7 @@ import requests
 import tempfile
 import hashlib
 from pathlib import Path
+from datetime import datetime, date, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction, connection
@@ -46,14 +47,14 @@ class Command(BaseCommand):
         parser.add_argument(
             '--excel-file',
             type=str,
-            default='Rajeev Kumar Ess Center data.xlsx',
-            help='Path to Excel file (default: Rajeev Kumar Ess Center data.xlsx)'
+            default='All_Coordinators_Issues_v8.xlsx',
+            help='Path to Excel file (default: All_Coordinators_Issues_v8.xlsx)'
         )
         parser.add_argument(
             '--sheet-name',
             type=str,
-            default='1. Data',
-            help='Sheet name to import (default: 1. Data)'
+            default='FinalData',
+            help='Sheet name to import (default: FinalData)'
         )
         parser.add_argument(
             '--download-photos',
@@ -81,12 +82,6 @@ class Command(BaseCommand):
             help='Export teacher passwords to CSV after import'
         )
         parser.add_argument(
-            '--regional-admin-phone',
-            type=str,
-            default=None,
-            help='Phone number of existing Regional Admin to update (optional)'
-        )
-        parser.add_argument(
             '--fix-fk',
             action='store_true',
             help='Fix foreign key constraints before import'
@@ -100,11 +95,14 @@ class Command(BaseCommand):
         self.skip_hierarchy = options['skip_hierarchy']
         self.clear_data = options['clear']
         self.export_passwords = options['export_passwords']
-        self.regional_admin_phone = options['regional_admin_phone']
         self.fix_fk = options['fix_fk']
 
         # Store plain passwords for export
         self.plain_passwords = {}
+        # coordinator name -> RA User (filled by create_regional_admins)
+        self.coord_ra_user = {}
+        # created-item totals for the final summary
+        self.created_counts = {}
 
         self.stdout.write(self.style.NOTICE('=' * 60))
         self.stdout.write(self.style.NOTICE('Importing Rajeev Kumar ESS Center Data'))
@@ -114,9 +112,6 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('DRY RUN MODE - No changes will be saved'))
 
         try:
-            # Fix foreign key constraints if requested
-            if self.fix_fk:
-                self.stdout.write(self.style.NOTICE('Fixing foreign key constraints...'))
 
             # Everything inside a single atomic transaction
             with transaction.atomic():
@@ -127,8 +122,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('\n[OK] Import completed successfully!'))
             
             # Download photos outside the main transaction
-            if self.download_photos and not self.dry_run:
-                self.download_student_photos()
+            self.download_student_photos()
 
             # Export teacher passwords if requested (outside transaction)
             self.export_teacher_passwords()
@@ -141,15 +135,18 @@ class Command(BaseCommand):
 
     def import_data(self):
         import openpyxl
-        import csv
 
-        if self.clear_data and not self.dry_run:
-            self.stdout.write(self.style.WARNING('Clearing existing data...'))
-            self.clear_existing_data()
-            self.stdout.write(self.style.SUCCESS('Existing data cleared'))
+        self.stdout.write(self.style.WARNING('Clearing existing data...'))
+        self.clear_existing_data()
+        self.stdout.write(self.style.SUCCESS('Existing data cleared'))
 
         self.stdout.write(f'\nLoading Excel: {self.excel_file}')
-        wb = openpyxl.load_workbook(self.excel_file, read_only=True)
+        # data_only=True so VLOOKUP formulas (e.g. RA phone column) yield cached values
+        wb = openpyxl.load_workbook(self.excel_file, read_only=True, data_only=True)
+        if self.sheet_name not in wb.sheetnames:
+            raise CommandError(
+                f'Sheet {self.sheet_name!r} not found. Available: {wb.sheetnames}'
+            )
         ws = wb[self.sheet_name]
 
         rows = list(ws.iter_rows(min_row=2, values_only=True))
@@ -158,7 +155,12 @@ class Command(BaseCommand):
         self.parse_data(rows)
 
         self.create_distinct_hierarchy()
-        self.update_or_create_regional_admin()
+
+        # Validate coordinator/RA data BEFORE writing anything.
+        # Any error raises -> the atomic transaction rolls everything back.
+        self.validate_regional_admins()
+
+        self.create_regional_admins()
         self.create_centers()
         self.create_schools()
         self.create_teachers()
@@ -176,6 +178,7 @@ class Command(BaseCommand):
             CenterAssignUser.objects.all().delete()
             Student.objects.all().delete()
             Teacher.objects.all().delete()
+            RegionalAdmin.objects.all().delete()
             Center.objects.all().delete()
             Village.objects.all().delete()
             Panchayat.objects.all().delete()
@@ -183,13 +186,18 @@ class Command(BaseCommand):
             District.objects.all().delete()
             School.objects.all().delete()
             User.objects.filter(role__role_code='TEACHER').delete()
+            User.objects.filter(role__role_code='REGIONAL_ADMIN').delete()
             
             with connection.cursor() as cursor:
                 cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
                 
         except Exception as e:
-            with connection.cursor() as cursor:
-                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+            # Never let the cleanup query mask the original error
+            try:
+                with connection.cursor() as cursor:
+                    cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+            except Exception:
+                pass
             raise
 
     def parse_data(self, rows):
@@ -198,25 +206,61 @@ class Command(BaseCommand):
         self.constituency_names = set()
         self.panchayat_names = set()
         self.village_names = set()
-        
+
         self.centers = {}
         self.schools = {}
         self.students = []
-        
-        self.coordinator_name = None
+
+        # Regional Admin data parsed from the same sheet:
+        # col A = coordinator name (canonical), col B = their phone number
+        self.coordinators = {}
 
         for row in rows:
-            district_name = str(row[0]).strip() if row[0] else ''
-            constituency_name = str(row[1]).strip() if row[1] else ''
-            panchayat_name = str(row[2]).strip() if row[2] else ''
-            village_name = str(row[3]).strip() if row[3] else ''
-            center_name = str(row[4]).strip() if row[4] else ''
-            
-            coordinator_name = str(row[5]).strip() if row[5] else ''
-            if coordinator_name and not self.coordinator_name:
-                self.coordinator_name = coordinator_name
-            
-            school_name = str(row[25]).strip() if row[25] else ''
+            # Pad short rows so indexing never fails
+            row = list(row) + [None] * max(0, 37 - len(row))
+
+            # Column mapping (0-indexed) for All_Coordinators_Issues_v8.xlsx (FinalData):
+            # 0=Co-ordinator (Sheet) [RA name], 1=Mobile Number [RA phone],
+            # 2=District, 3=Constituency, 4=Gram Panchayat, 5=Center Village,
+            # 6=Center Name, 7=Co-ordinator Name (legacy spelling),
+            # 8=Center Opening Date, 9=Teacher Name, 10=Gender, 11=DOB,
+            # 12=Education, 13=Teacher Mobile, 14=WhatsApp, 15=Guardian Name,
+            # 16=Guardian Phone, 17=Teacher Address, 18=Student Name, 19=Photo,
+            # 20=Aadhar, 21=Student Village, 22=Class, 23=Student DOB,
+            # 24=Gender, 25=Category, 26=BPL, 27=School, 28=Father Name,
+            # 29=Father Mobile, 30=Father Occupation, 31=Mother Name,
+            # 32=Mother Mobile, 33=Mother Occupation, 34=Old/New Student
+            coordinator_name = str(row[0]).strip() if row[0] else ''
+            ra_phone = self.clean_mobile(row[1])
+            legacy_coordinator_name = str(row[7]).strip() if row[7] else ''
+
+            district_name = str(row[2]).strip() if row[2] else ''
+            constituency_name = str(row[3]).strip() if row[3] else ''
+            panchayat_name = str(row[4]).strip() if row[4] else ''
+            village_name = str(row[5]).strip() if row[5] else ''
+            center_name = str(row[6]).strip() if row[6] else ''
+
+            school_name = str(row[27]).strip() if row[27] else ''
+
+            if coordinator_name:
+                info = self.coordinators.setdefault(coordinator_name, {
+                    'phone': '',
+                    'areas': set(),
+                    'legacy_names': set(),
+                    'rows': 0,
+                })
+                info['rows'] += 1
+                if ra_phone:
+                    if info['phone'] and info['phone'] != ra_phone:
+                        self.stdout.write(self.style.ERROR(
+                            f"  Conflicting phone numbers for coordinator '{coordinator_name}': "
+                            f"{info['phone']} vs {ra_phone}"
+                        ))
+                    info['phone'] = ra_phone
+                if legacy_coordinator_name and legacy_coordinator_name != coordinator_name:
+                    info['legacy_names'].add(legacy_coordinator_name)
+                if district_name or constituency_name:
+                    info['areas'].add((district_name, constituency_name))
 
             if district_name:
                 self.district_names.add(district_name)
@@ -227,44 +271,34 @@ class Command(BaseCommand):
             if village_name:
                 self.village_names.add(village_name)
 
-            teacher_name = str(row[7]).strip() if row[7] else ''
-            teacher_gender = str(row[8]).strip() if row[8] else ''
-            teacher_dob = str(row[9]).strip() if row[9] else ''
-            teacher_education = str(row[10]).strip() if row[10] else ''
-            teacher_mobile = str(row[11]).strip().replace('.0', '') if row[11] else ''
-            teacher_whatsapp = str(row[12]).strip().replace('.0', '') if row[12] else ''
-            teacher_guardian = str(row[13]).strip() if row[13] else ''
-            teacher_guardian_phone = str(row[14]).strip().replace('.0', '') if row[14] else ''
-            teacher_address = str(row[15]).strip() if row[15] else ''
+            teacher_name = str(row[9]).strip() if row[9] else ''
+            teacher_gender = str(row[10]).strip() if row[10] else ''
+            teacher_dob = self.format_date(row[11])
+            teacher_education = str(row[12]).strip() if row[12] else ''
+            teacher_mobile = self.clean_mobile(row[13])
+            teacher_whatsapp = self.clean_mobile(row[14])
+            teacher_guardian = str(row[15]).strip() if row[15] else ''
+            teacher_guardian_phone = self.clean_mobile(row[16])
+            teacher_address = str(row[17]).strip() if row[17] else ''
 
-            student_name = str(row[16]).strip() if row[16] else ''
-            student_photo_url = str(row[17]).strip() if row[17] else ''
-            student_aadhar = str(row[18]).strip() if row[18] else ''
-            student_village = str(row[19]).strip() if row[19] else ''
-            student_class = str(row[20]).strip() if row[20] else ''
-            student_dob = str(row[21]).strip() if row[21] else ''
-            student_gender = str(row[22]).strip() if row[22] else ''
-            student_category = str(row[23]).strip() if row[23] else ''
-            student_bpl = str(row[24]).strip() if row[24] else ''
-            student_father = str(row[26]).strip() if row[26] else ''
-            student_father_mobile = str(row[27]).strip().replace('.0', '') if row[27] else ''
-            student_father_occ = str(row[28]).strip() if row[28] else ''
-            student_mother = str(row[29]).strip() if row[29] else ''
-            student_mother_mobile = str(row[30]).strip().replace('.0', '') if row[30] else ''
-            student_mother_occ = str(row[31]).strip() if row[31] else ''
-            student_status = str(row[32]).strip() if row[32] else ''
+            student_name = str(row[18]).strip() if row[18] else ''
+            student_photo_url = str(row[19]).strip() if row[19] else ''
+            student_aadhar = str(row[20]).strip() if row[20] else ''
+            student_village = str(row[21]).strip() if row[21] else ''
+            student_class = str(row[22]).strip() if row[22] else ''
+            student_dob = self.format_date(row[23])
+            student_gender = str(row[24]).strip() if row[24] else ''
+            student_category = str(row[25]).strip() if row[25] else ''
+            student_bpl = str(row[26]).strip() if row[26] else ''
+            student_father = str(row[28]).strip() if row[28] else ''
+            student_father_mobile = self.clean_mobile(row[29])
+            student_father_occ = str(row[30]).strip() if row[30] else ''
+            student_mother = str(row[31]).strip() if row[31] else ''
+            student_mother_mobile = self.clean_mobile(row[32])
+            student_mother_occ = str(row[33]).strip() if row[33] else ''
+            student_status = str(row[34]).strip() if row[34] else ''
 
-            student_age = 0
-            if student_dob:
-                from datetime import datetime
-                for fmt in ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%Y/%m/%d']:
-                    try:
-                        dob = datetime.strptime(student_dob, fmt)
-                        today = timezone.now().date()
-                        student_age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.year))
-                        break
-                    except ValueError:
-                        continue
+            student_age = self.calculate_age(student_dob)
 
             if not student_village:
                 student_village = village_name
@@ -344,7 +378,7 @@ class Command(BaseCommand):
         self.stdout.write(f'  Centers: {len(self.centers)}')
         self.stdout.write(f'  Schools: {len(self.schools)}')
         self.stdout.write(f'  Students: {len(self.students)}')
-        self.stdout.write(f'Coordinator Name: {self.coordinator_name}')
+        self.stdout.write(f'  Regional Admins (coordinators): {len(self.coordinators)}')
 
     def create_distinct_hierarchy(self):
         """
@@ -373,6 +407,7 @@ class Command(BaseCommand):
             )
             self.district_map[district_name] = district
             if created:
+                self.created_counts['districts'] = self.created_counts.get('districts', 0) + 1
                 self.stdout.write(f'  Created District: {district_name} (ID: {district.id})')
             else:
                 self.stdout.write(f'  Using existing District: {district_name} (ID: {district.id})')
@@ -410,6 +445,7 @@ class Command(BaseCommand):
             )
             self.vidhan_sabha_map[constituency_name] = vs
             if created:
+                self.created_counts['vidhan_sabhas'] = self.created_counts.get('vidhan_sabhas', 0) + 1
                 self.stdout.write(f'  Created VidhanSabha: {constituency_name} (ID: {vs.id})')
             else:
                 self.stdout.write(f'  Using existing VidhanSabha: {constituency_name} (ID: {vs.id})')
@@ -451,6 +487,7 @@ class Command(BaseCommand):
             )
             self.panchayat_map[panchayat_name] = panchayat
             if created:
+                self.created_counts['panchayats'] = self.created_counts.get('panchayats', 0) + 1
                 self.stdout.write(f'  Created Panchayat: {panchayat_name} (ID: {panchayat.id})')
             else:
                 self.stdout.write(f'  Using existing Panchayat: {panchayat_name} (ID: {panchayat.id})')
@@ -490,6 +527,7 @@ class Command(BaseCommand):
             )
             self.village_map[village_name] = village
             if created:
+                self.created_counts['villages'] = self.created_counts.get('villages', 0) + 1
                 self.stdout.write(f'  Created Village: {village_name} (ID: {village.id})')
             else:
                 self.stdout.write(f'  Using existing Village: {village_name} (ID: {village.id})')
@@ -502,119 +540,168 @@ class Command(BaseCommand):
             f'{len(self.village_map)} villages'
         ))
 
-    def update_or_create_regional_admin(self):
-        """Update or create Regional Admin"""
-        regional_admin_user = None
-        
-        # Try to find by coordinator name
-        if self.coordinator_name:
-            self.stdout.write(f'Looking for Regional Admin with name: {self.coordinator_name}')
-            try:
-                user = User.objects.get(
-                    name__icontains=self.coordinator_name,
-                    role__role_code='REGIONAL_ADMIN'
-                )
-                regional_admin_user = user
-                self.stdout.write(self.style.SUCCESS(
-                    f'Found Regional Admin by name: {user.name} (UserID: {user.id})'
-                ))
-            except User.DoesNotExist:
-                try:
-                    ra = RegionalAdmin.objects.get(
-                        user__name__icontains=self.coordinator_name,
-                        status=True
-                    )
-                    regional_admin_user = ra.user
-                    self.stdout.write(self.style.SUCCESS(
-                        f'Found Regional Admin in RegionalAdmin: {ra.user.name} (UserID: {ra.user.id})'
-                    ))
-                except RegionalAdmin.DoesNotExist:
-                    self.stdout.write(self.style.WARNING(
-                        f'No Regional Admin found with name: {self.coordinator_name}'
-                    ))
+    def validate_regional_admins(self):
+        """
+        Sanity-check the Regional Admin data found in the FIRST sheet
+        (column A = coordinator name, column B = phone) BEFORE anything
+        is written:
+          - every coordinator must have a valid 10-digit phone
+          - a coordinator must not span multiple districts
+          - one phone must not be shared by two coordinators
+        Any error raises -> the whole atomic transaction rolls back.
+        """
+        errors = []
+        warnings = []
 
-        # Try by phone
-        if not regional_admin_user and self.regional_admin_phone:
-            try:
-                user = User.objects.get(
-                    phone_number=self.regional_admin_phone,
-                    role__role_code='REGIONAL_ADMIN'
+        for name, info in sorted(self.coordinators.items()):
+            phone = info['phone']
+            if not phone or len(phone) != 10 or not phone.isdigit():
+                errors.append(
+                    f"Coordinator '{name}': missing/invalid phone number in "
+                    f"'Mobile Number' column (column B)"
                 )
-                regional_admin_user = user
-                self.stdout.write(self.style.SUCCESS(
-                    f'Found Regional Admin by phone: {user.name} (UserID: {user.id})'
-                ))
-            except User.DoesNotExist:
-                pass
+            districts = {d for (d, c) in info['areas'] if d}
+            if len(districts) > 1:
+                errors.append(
+                    f"Coordinator '{name}': spans multiple districts "
+                    f"{sorted(districts)} - cannot assign a single district"
+                )
+            if not info['areas']:
+                errors.append(
+                    f"Coordinator '{name}': no district/constituency data found on its rows"
+                )
+            for legacy in sorted(info['legacy_names']):
+                warnings.append(
+                    f"Coordinator '{name}': legacy name variant '{legacy}' found in "
+                    f"'Co-ordinator Name' column (ignored, '{name}' is canonical)"
+                )
 
-        # Update existing or create new
-        if regional_admin_user:
-            try:
-                ra = RegionalAdmin.objects.get(user=regional_admin_user)
-                ra.district = self.default_district
-                ra.vidhan_sabha = self.default_vidhan_sabha
-                ra.panchayat = None
-                ra.save()
-                
-                self.regional_admin = ra
-                self.regional_admin_user = regional_admin_user
-                
-                self.stdout.write(self.style.SUCCESS(
-                    f'Updated RegionalAdmin: {regional_admin_user.name} (UserID: {regional_admin_user.id})'
-                ))
-                return
-            except RegionalAdmin.DoesNotExist:
-                ra = RegionalAdmin.objects.create(
-                    user=regional_admin_user,
-                    regional_admin_guid_id=f'regional-admin-{regional_admin_user.id}',
-                    district=self.default_district,
-                    vidhan_sabha=self.default_vidhan_sabha,
-                    panchayat=None,
+        # One phone must map to exactly one coordinator
+        by_phone = {}
+        for name, info in self.coordinators.items():
+            if info['phone']:
+                by_phone.setdefault(info['phone'], []).append(name)
+        for phone, names in sorted(by_phone.items()):
+            if len(names) > 1:
+                errors.append(
+                    f"Phone {phone} is shared by multiple coordinators: {names}"
+                )
+
+        if warnings:
+            self.stdout.write(self.style.WARNING('\n=== Regional Admin warnings ==='))
+            for w in warnings:
+                self.stdout.write(self.style.WARNING(f'  [WARN] {w}'))
+
+        if errors:
+            self.stdout.write(self.style.ERROR('\n=== REGIONAL ADMIN MISMATCH REPORT ==='))
+            for e in errors:
+                self.stdout.write(self.style.ERROR(f'  [MISMATCH] {e}'))
+            self.stdout.write(self.style.ERROR(
+                '\nImport aborted - nothing was saved (transaction rolled back). '
+                'Fix the Excel file and re-run.'
+            ))
+            raise CommandError(f'{len(errors)} regional admin mismatch(es) found')
+
+        self.stdout.write(self.style.SUCCESS(
+            f'  Regional admin validation passed: {len(self.coordinators)} coordinators checked'
+        ))
+
+    def create_regional_admins(self):
+        """
+        Create/update one Regional Admin per coordinator found in the first
+        sheet (column A). The phone number comes from column B ('Mobile
+        Number') - no random numbers. District and Vidhan Sabha are matched
+        from the coordinator's own rows.
+        """
+        role = Role.objects.get(role_code='REGIONAL_ADMIN')
+        today = timezone.now().strftime('%Y%m%d')
+        created_count = 0
+        updated_count = 0
+
+        for seq, (name, info) in enumerate(sorted(self.coordinators.items()), start=1):
+            phone = info['phone']
+            areas = sorted(info['areas'])                       # [(district, constituency), ...]
+            district_name = areas[0][0]
+            vs_names = sorted({c for (_, c) in areas})
+
+            district = self.district_map.get(district_name)
+            if district is None:
+                raise CommandError(
+                    f"District '{district_name}' not found for coordinator '{name}'"
+                )
+            primary_vs = self.vidhan_sabha_map.get(vs_names[0])
+            if primary_vs is None:
+                raise CommandError(
+                    f"Vidhan Sabha '{vs_names[0]}' not found for coordinator '{name}'"
+                )
+
+            # --- User (phone number straight from the sheet) ---
+            user = User.objects.filter(phone_number=phone).first()
+            created = user is None
+            if created:
+                first_name = name.split()[0] if name else 'Admin'
+                plain_password = f'{first_name}@123'
+                user = User.objects.create(
+                    name=name,
+                    role=role,
+                    phone_number=phone,
+                    whats_app=phone,
+                    password=hash_password(plain_password),
                     status=True,
                     created_on=timezone.now(),
                     created_by=1,
                 )
-                self.regional_admin = ra
-                self.regional_admin_user = regional_admin_user
-                self.stdout.write(self.style.SUCCESS(
-                    f'Created RegionalAdmin for existing user: {regional_admin_user.name}'
-                ))
-                return
+                self.plain_passwords[phone] = plain_password
+                created_count += 1
+            else:
+                updated_count += 1
+                if user.role_id is None:
+                    user.role = role
+                    user.save()
 
-        self.stdout.write(self.style.WARNING('Creating new Regional Admin...'))
-        role = Role.objects.get(role_code='REGIONAL_ADMIN')
-        admin_name = self.coordinator_name if self.coordinator_name else "Rajeev Kumar"
-        admin_phone = self.regional_admin_phone or '9876543210'
-        plain_password = 'Rajeev@123'
-        hashed_password = hash_password(plain_password)
-        self.plain_passwords[admin_phone] = plain_password
+            # --- Unique enrollment roll id ---
+            if not user.enrolment_roll_id:
+                base_id = f'RA-{today}-{seq:03d}'
+                roll_id = base_id
+                suffix = 1
+                while User.objects.filter(enrolment_roll_id=roll_id).exclude(pk=user.pk).exists():
+                    roll_id = f'{base_id}-{suffix}'
+                    suffix += 1
+                user.enrolment_roll_id = roll_id
+                user.save()
 
-        user = User.objects.create(
-            name=admin_name,
-            role=role,
-            enrolment_roll_id=f'RA-{timezone.now().strftime("%Y%m%d")}-001',
-            phone_number=admin_phone,
-            whats_app=admin_phone,
-            password=hashed_password,
-            status=True,
-            created_on=timezone.now(),
-            created_by=1,
-        )
+            # --- RegionalAdmin row (district + vidhan sabha matched) ---
+            ra, ra_created = RegionalAdmin.objects.get_or_create(
+                user=user,
+                defaults={
+                    'regional_admin_guid_id': f'regional-admin-{user.id}',
+                    'status': True,
+                    'created_on': timezone.now(),
+                    'created_by': 1,
+                }
+            )
+            ra.district = district
+            ra.vidhan_sabha = primary_vs
+            ra.contact = phone
+            ra.status = True
+            ra.save()
 
-        ra = RegionalAdmin.objects.create(
-            user=user,
-            regional_admin_guid_id=f'regional-admin-{user.id}',
-            district=self.default_district,
-            vidhan_sabha=self.default_vidhan_sabha,
-            panchayat=None,
-            status=True,
-            created_on=timezone.now(),
-            created_by=1,
-        )
+            self.coord_ra_user[name] = user
+            if created:
+                self.created_counts['regional_admins'] = self.created_counts.get('regional_admins', 0) + 1
 
-        self.regional_admin = ra
-        self.regional_admin_user = user
-        self.stdout.write(self.style.SUCCESS(f'Created new RegionalAdmin: {user.name} (UserID: {user.id})'))
+            vs_note = ''
+            if len(vs_names) > 1:
+                vs_note = f' (covers {len(vs_names)} constituencies: {vs_names}; primary VS: {vs_names[0]})'
+            self.stdout.write(
+                f"  RA: {name} | phone {phone} | {district_name} / "
+                f"{vs_names[0]}{' | NEW' if created else ' | updated'}{vs_note}"
+            )
+
+        self.stdout.write(self.style.SUCCESS(
+            f'Regional admins: {created_count} created, {updated_count} updated '
+            f'(total {len(self.coordinators)})'
+        ))
 
     def create_centers(self):
         """Create Centers using distinct hierarchy"""
@@ -662,6 +749,8 @@ class Command(BaseCommand):
                     self.village_map[village_name] = village
 
             try:
+                # The center's own coordinator acts as its Regional Admin
+                coord_ra = self.coord_ra_user.get(c_data.get('coordinator'))
                 center, created = Center.objects.get_or_create(
                     center_name=c_name,
                     defaults={
@@ -674,7 +763,7 @@ class Command(BaseCommand):
                         'class_status': True,
                         'location_status': 'PENDING',
                         'assigned_teachers': 0,
-                        'assigned_regional_admin': self.regional_admin_user.id,
+                        'assigned_regional_admin': coord_ra.id if coord_ra else None,
                         'created_on': timezone.now(),
                         'created_by': 1,
                     }
@@ -682,6 +771,12 @@ class Command(BaseCommand):
                 self.centers[c_name]['obj'] = center
                 if created:
                     center_count += 1
+                    self.created_counts['centers'] = self.created_counts.get('centers', 0) + 1
+                    self.stdout.write(self.style.SUCCESS(
+                        f'  [OK] Center created: {c_name} (ID: {center.id}, RA: {coord_ra.name if coord_ra else None})'
+                    ))
+                else:
+                    self.stdout.write(f'  [--] Center exists: {c_name} (ID: {center.id})')
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f'Error creating center {c_name}: {e}'))
                 raise
@@ -703,6 +798,12 @@ class Command(BaseCommand):
             self.schools[s_name] = school
             if created:
                 school_count += 1
+                self.created_counts['schools'] = self.created_counts.get('schools', 0) + 1
+                self.stdout.write(self.style.SUCCESS(
+                    f'  [OK] School created: {s_name} (ID: {school.id})'
+                ))
+            else:
+                self.stdout.write(f'  [--] School exists: {s_name} (ID: {school.id})')
 
         self.stdout.write(f'Created/Updated {len(self.schools)} schools ({school_count} new)')
 
@@ -725,7 +826,7 @@ class Command(BaseCommand):
 
             t = teacher_details
             
-            # Generate plain password
+            # Generate plain password: first name + @123
             first_name = t['name'].split()[0] if t['name'] else 'Teacher'
             plain_password = f"{first_name}@123"
             hashed_password = hash_password(plain_password)
@@ -734,11 +835,19 @@ class Command(BaseCommand):
             self.plain_passwords[t['mobile']] = plain_password
 
             # Create User
+            # Ensure a unique enrolment_roll_id (Users.EnrolmentRollId has a unique constraint)
+            roll_id = self.generate_enrollment_rollid(t['name'], t['dob'], t['gender'], t['mobile'])
+            base_roll_id = roll_id
+            suffix = 1
+            while User.objects.filter(enrolment_roll_id=roll_id).exclude(phone_number=t['mobile']).exists():
+                roll_id = f'{base_roll_id}-{suffix}'
+                suffix += 1
+
             user, created = User.objects.get_or_create(
                 phone_number=t['mobile'],
                 role=teacher_role,
                 defaults={
-                    'enrolment_roll_id': self.generate_enrollment_rollid(t['name'], t['dob'], t['gender'], t['mobile']),
+                    'enrolment_roll_id': roll_id,
                     'name': t['name'],
                     'whats_app': t['whatsapp'] or t['mobile'],
                     'password': hashed_password,
@@ -750,6 +859,7 @@ class Command(BaseCommand):
 
             if created:
                 teacher_count += 1
+                self.created_counts['teachers'] = self.created_counts.get('teachers', 0) + 1
             else:
                 if user.password != hashed_password:
                     user.password = hashed_password
@@ -786,6 +896,14 @@ class Command(BaseCommand):
 
             c_data['teacher_user'] = user
             c_data['teacher_obj'] = teacher
+            if created:
+                self.stdout.write(self.style.SUCCESS(
+                    f"  [OK] Teacher created: {t['name']} ({t['mobile']}) | roll: {user.enrolment_roll_id} | center: {c_name} (TeacherID: {teacher.id})"
+                ))
+            else:
+                self.stdout.write(
+                    f"  [--] Teacher exists: {t['name']} ({t['mobile']}) | center: {c_name}"
+                )
 
         self.stdout.write(f'Created/Updated teachers for {teacher_count} new centers')
 
@@ -807,7 +925,7 @@ class Command(BaseCommand):
                 if file_id:
                     safe_name = re.sub(r'[^\w\s-]', '', s['name']).strip().replace(' ', '_')
                     safe_center = re.sub(r'[^\w\s-]', '', s['center_name']).strip().replace(' ', '_')
-                    photo_path = f"student_photos/{safe_center}_{safe_name}.jpg"
+                    photo_path = f"profile_pic/{safe_center}_{safe_name}.jpg"
 
             enrollment_id = f"ENR-{timezone.now().strftime('%Y%m%d')}-{str(i+1).zfill(6)}"
 
@@ -863,11 +981,15 @@ class Command(BaseCommand):
                 student.center = center['obj']
                 student.school = school
                 student.save()
+                self.stdout.write(
+                    f"  [--] Student exists/updated: {s['name']} ({enrollment_id}) | center: {s['center_name']}"
+                )
             else:
                 student_count += 1
-
-            if i % 50 == 0:
-                self.stdout.write(f'  Processed {i+1}/{len(self.students)} students...')
+                self.created_counts['students'] = self.created_counts.get('students', 0) + 1
+                self.stdout.write(self.style.SUCCESS(
+                    f"  [OK] Student created: {s['name']} ({enrollment_id}) | center: {s['center_name']} (StudentID: {student.id})"
+                ))
 
         self.stdout.write(f'Created/Updated {len(self.students)} students ({student_count} new)')
 
@@ -893,11 +1015,22 @@ class Command(BaseCommand):
                 )
                 if created:
                     assignment_count += 1
+                    self.stdout.write(self.style.SUCCESS(
+                        f"  [OK] Teacher assigned: {c_data['teacher_user'].name} -> {c_name}"
+                    ))
 
+        # Regional admin assignment: each center gets ITS OWN coordinator's RA user
         for c_name, c_data in self.centers.items():
             center = c_data['obj']
+            ra_user = self.coord_ra_user.get(c_data.get('coordinator'))
+            if not ra_user:
+                self.stdout.write(self.style.WARNING(
+                    f'  No regional admin found for center {c_name!r} '
+                    f"(coordinator {c_data.get('coordinator')!r} not in column A)"
+                ))
+                continue
             _, created = CenterAssignUser.objects.get_or_create(
-                users_id=self.regional_admin_user.id,
+                users_id=ra_user.id,
                 center=center,
                 type=2,
                 defaults={
@@ -909,15 +1042,42 @@ class Command(BaseCommand):
             )
             if created:
                 assignment_count += 1
+                self.stdout.write(self.style.SUCCESS(
+                    f'  [OK] Regional admin assigned: {ra_user.name} -> {c_name}'
+                ))
 
         self.stdout.write(f'Created {assignment_count} CenterAssignUser entries')
+        self.created_counts['center_assignments'] = assignment_count
+        self.print_import_summary()
+
+    def print_import_summary(self):
+        """Print final totals of everything created by this import."""
+        c = self.created_counts
+        self.stdout.write('\n' + '=' * 40)
+        self.stdout.write(self.style.SUCCESS('IMPORT SUMMARY (items created)'))
+        self.stdout.write('=' * 40)
+        rows = [
+            ('Districts', 'districts'),
+            ('Vidhan Sabhas', 'vidhan_sabhas'),
+            ('Panchayats', 'panchayats'),
+            ('Villages', 'villages'),
+            ('Regional Admins', 'regional_admins'),
+            ('Centers', 'centers'),
+            ('Schools', 'schools'),
+            ('Teachers', 'teachers'),
+            ('Students', 'students'),
+            ('Center Assignments', 'center_assignments'),
+        ]
+        for label, key in rows:
+            self.stdout.write(f'  {label}: {c.get(key, 0)}')
+        self.stdout.write('=' * 40)
 
     def download_student_photos(self):
         """Download photos from Google Drive"""
         self.stdout.write('\nDownloading student photos...')
 
         media_root = Path(settings.MEDIA_ROOT)
-        photo_dir = media_root / 'student_photos'
+        photo_dir = media_root / 'profile_pic'
         photo_dir.mkdir(parents=True, exist_ok=True)
 
         downloaded = 0
@@ -1004,7 +1164,8 @@ class Command(BaseCommand):
         """Generate enrollment roll ID"""
         first_two = name.strip()[:2].upper() if name.strip() else 'XX'
         dob_clean = dob.replace('/', '-') if dob else '0000-00-00'
-        gender_char = 'M' if gender and 'male' in gender.lower() else 'F' if gender else 'U'
+        g = gender.strip().lower() if gender else ''
+        gender_char = 'M' if g.startswith('m') else 'F' if g.startswith('f') else 'U'
         mobile_clean = mobile[-10:] if mobile else '0000000000'
         return f"{first_two}-{dob_clean}-{gender_char}-{mobile_clean}"
 
@@ -1024,6 +1185,39 @@ class Command(BaseCommand):
         except Exception:
             pass
         return 0
+
+    def clean_mobile(self, value):
+        """Normalize a phone/mobile cell to a digits-only string."""
+        if value in (None, ''):
+            return ''
+        s = str(value).strip()
+        if s.endswith('.0'):
+            s = s[:-2]
+        digits = re.sub(r'\D', '', s)
+        return digits[-10:] if len(digits) > 10 else digits
+
+    def format_date(self, value):
+        """Normalize a date cell (datetime object or string) to 'YYYY-MM-DD'."""
+        if value in (None, ''):
+            return ''
+        if isinstance(value, (datetime, date)):
+            return value.strftime('%Y-%m-%d')
+        s = str(value).strip()
+        if not s:
+            return ''
+        for fmt in ['%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%Y/%m/%d', '%d-%m-%y', '%d/%m/%y']:
+            try:
+                return datetime.strptime(s, fmt).strftime('%Y-%m-%d')
+            except ValueError:
+                continue
+        # Excel serial-number date fallback
+        try:
+            serial = float(s)
+            if 20000 < serial < 80000:
+                return (date(1899, 12, 30) + timedelta(days=int(serial))).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+        return s
 
     def export_teacher_passwords(self):
         """
