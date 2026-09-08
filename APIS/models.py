@@ -95,7 +95,7 @@ class Village(models.Model):
 
 class School(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
-    school_name = models.CharField(db_column="SchoolName", max_length=50, null=True, blank=True)
+    school_name = models.CharField(db_column="SchoolName", max_length=100, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
@@ -405,7 +405,7 @@ class Teacher(models.Model):
 class Student(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     enrollment_id = models.CharField(db_column="EnrollmentId", max_length=50, null=True, blank=True, unique=True)
-    full_name = models.CharField(db_column="FullName", max_length=50, null=True, blank=True)
+    full_name = models.CharField(db_column="FullName", max_length=100, null=True, blank=True)
     age = models.IntegerField(db_column="Age", null=True, blank=True)
     gender = models.CharField(db_column="Gender", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
