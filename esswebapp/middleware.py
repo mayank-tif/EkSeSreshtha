@@ -8,8 +8,9 @@ Restricts access to URL patterns based on the request domain:
 """
 
 import logging
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, JsonResponse
 from django.conf import settings
+from EkSeSreshtha.env_details import ATTENDANCE_ALLOWED_IPS
 
 logger = logging.getLogger(__name__)
 
@@ -122,4 +123,105 @@ class DomainURIRestrictionMiddleware:
         if not is_webapp_domain and not is_api_domain:
             logger.info(f"DomainURIAllow: Unknown domain '{host}' accessing '{path}'")
         
+        return self.get_response(request)
+
+
+class AttendanceIPRestrictionMiddleware:
+    """
+    Restricts the Center Attendance endpoints to a single trusted client IP.
+
+    Applies ONLY to:
+      - POST /api/generate-center-attendance-token/
+      - POST /api/center-attendance/
+
+    Requests from any other source receive 403 with a JSON body.
+    The allowed IP is configured via settings.ATTENDANCE_IP_RESTRICTIONS.
+    Local/dev hosts are bypassed so development and tests keep working.
+    """
+
+    # URL paths protected by this middleware (no trailing slash)
+    PROTECTED_PATHS = frozenset({
+        '/api/generate-center-attendance-token',
+        '/api/center-attendance',
+    })
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+        # Local/dev hosts that bypass the IP check (development + test client).
+        # Built-in list - deliberately not configurable via settings.
+        self.local_hosts = {
+            self._normalize_ip(h)
+            for h in ['localhost', '127.0.0.1', '[::1]', 'testserver']
+        }
+        # Allowed IPs: raw comma-separated value from .env, exposed via
+        # EkSeSreshtha/env_details.py (ATTENDANCE_ALLOWED_IPS).
+        # Split/parsed here: entries stripped, empties dropped.
+        raw_ips = ATTENDANCE_ALLOWED_IPS or ''
+        self.allowed_ips = {
+            self._normalize_ip(ip.strip())
+            for ip in raw_ips.split(',')
+            if ip.strip()
+        }
+
+        logger.info(
+            f"AttendanceIPRestrictionMiddleware initialized: "
+            f"allowed_ips={self.allowed_ips}, local_hosts={self.local_hosts}"
+        )
+
+    def _normalize_ip(self, value):
+        """Lowercase and strip port (e.g. '3.6.172.231:80' -> '3.6.172.231')."""
+        if not value:
+            return ''
+        value = str(value).strip().lower()
+        # IPv6 with brackets, e.g. '[::1]:8000'
+        if value.startswith('['):
+            return value.split(']')[0][1:] if ']' in value else value
+        # Strip :port for IPv4/host names
+        if ':' in value and value.count(':') == 1:
+            value = value.split(':')[0]
+        return value
+
+    def _client_ip(self, request):
+        """
+        Best-effort client IP: REMOTE_ADDR, falling back to the Host header
+        comparison used by the existing domain middleware.
+        """
+        remote = request.META.get('REMOTE_ADDR', '')
+        return self._normalize_ip(remote)
+
+    def _is_protected(self, request):
+        # Normalize: strip trailing slash so both '/api/center-attendance'
+        # and '/api/center-attendance/' match.
+        path = request.path.rstrip('/')
+        if path not in self.PROTECTED_PATHS:
+            return False
+        # The two views only accept POST
+        return request.method == 'POST'
+
+    def __call__(self, request):
+        if self._is_protected(request):
+            # Decision is based on the CLIENT IP only (REMOTE_ADDR).
+            # The Host header is deliberately NOT trusted here - an attacker
+            # could send 'Host: localhost' to abuse the local bypass.
+            client = self._client_ip(request)
+
+            allowed = (
+                client in self.allowed_ips
+                or client in self.local_hosts
+            )
+
+            if not allowed:
+                logger.warning(
+                    f"AttendanceIPBlock: '{client}' blocked from '{request.path}'"
+                )
+                return JsonResponse(
+                    {'message': 'Access denied: unauthorized source.'},
+                    status=403,
+                )
+
+            logger.info(
+                f"AttendanceIPAllow: '{client}' allowed on '{request.path}'"
+            )
+
         return self.get_response(request)

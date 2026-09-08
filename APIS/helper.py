@@ -6069,6 +6069,7 @@ def get_center_attendance_data(center_id, attendance_date):
                     students_data.append({
                         'student_id': student.id,
                         'student_name': student.full_name,
+                        'student_status': 'Active' if student.status else 'Inactive',
                         'attendance_status': 'Present' if record.type else 'Absent',
                         'capture_type': capture_type
                     })

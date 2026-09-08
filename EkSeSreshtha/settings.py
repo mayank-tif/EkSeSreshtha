@@ -68,6 +68,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'esswebapp.middleware.DomainURIRestrictionMiddleware',
+    'esswebapp.middleware.AttendanceIPRestrictionMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -232,4 +233,16 @@ LOGGING = {
             'propagate': False,
         },
     },
+}
+
+# ------------------------------------------------------------------
+# Center Attendance endpoints - IP restriction
+# Only these IPs may call /api/generate-center-attendance-token/ and
+# /api/center-attendance/. All other sources get 403.
+# ------------------------------------------------------------------
+ATTENDANCE_IP_RESTRICTIONS = {
+    'allowed_ips': [
+        '3.6.172.231',
+    ],
+    'local_hosts': ['localhost', '127.0.0.1', '[::1]', 'testserver'],
 }
