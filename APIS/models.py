@@ -342,8 +342,6 @@ class RegionalAdmin(models.Model):
     enrollment_date = models.DateTimeField(db_column="EnrollmentDate", null=True, blank=True)
     user = models.OneToOneField(User, db_column="UserId", on_delete=models.CASCADE, related_name='regional_admin')
     district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
-    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
-    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
     village = models.ForeignKey(Village, db_column="VillageId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admins')
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
@@ -595,6 +593,28 @@ class RegionalAdminPanchayat(models.Model):
             models.Index(fields=['regional_admin'], name='idx_regadmpnhyt_regaladm'),
             models.Index(fields=['panchayat'], name='idx_regadmpnhyt_panchayat'),
         ]
+
+
+class RegionalAdminVidhanSabha(models.Model):
+    id = models.AutoField(db_column="Id", primary_key=True)
+    vidhan_sabha_name = models.CharField(db_column="VidhanSabhaName", max_length=50, null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    regional_admin = models.ForeignKey(RegionalAdmin, db_column="RegionalAdminId", on_delete=models.CASCADE, null=True, blank=True, related_name='regional_admin_vidhan_sabhas')
+    vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='regional_admin_vidhan_sabhas')
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+
+    class Meta:
+        db_table = "RegionalAdminVidhanSabha"
+        indexes = [
+            models.Index(fields=['regional_admin'], name='idx_regadmvs_regaladm'),
+            models.Index(fields=['vidhan_sabha'], name='idx_regadmvs_vidhansabha'),
+        ]
+
+    def __str__(self):
+        return f"RegionalAdminVidhanSabha: {self.vidhan_sabha_name or ''}"
 
 
 class StudentAttendance(models.Model):

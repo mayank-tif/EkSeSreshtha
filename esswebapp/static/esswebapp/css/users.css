@@ -161,3 +161,16 @@
 .avatar-upload input[type="file"] {
     display: none;
 }
+
+/* ── RA multi-select: "N selected" count chip ─────────────────── */
+.select2-selection__choice.ra-count-item {
+    background: #1f4e78 !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 4px !important;
+    padding: 1px 10px !important;
+    margin: 2px 4px 2px 0 !important;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block !important;
+}

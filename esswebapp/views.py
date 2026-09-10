@@ -1982,13 +1982,11 @@ class SuperAdminView(PermissionRequiredMixin, View):
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
-            if not email:
-                return JsonResponse({'detail': 'Email is required'}, status=400)
             if not password:
                 return JsonResponse({'detail': 'Password is required'}, status=400)
             
-            # Check for duplicates
-            if User.objects.filter(email=email).exists():
+            # Check for duplicates (email is optional now)
+            if email and User.objects.filter(email=email).exists():
                 return JsonResponse({'detail': 'Email already exists'}, status=400)
             if phone and User.objects.filter(phone_number=phone).exists():
                 return JsonResponse({'detail': 'Phone number already exists'}, status=400)
@@ -2013,7 +2011,7 @@ class SuperAdminView(PermissionRequiredMixin, View):
             # Create user
             user = User.objects.create(
                 name=name,
-                email=email,
+                email=email if email else None,
                 phone_number=phone if phone else None,
                 whats_app=whats_app if whats_app else None,
                 password=hash_password(password),  
@@ -2082,11 +2080,9 @@ class SuperAdminView(PermissionRequiredMixin, View):
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
-            if not email:
-                return JsonResponse({'detail': 'Email is required'}, status=400)
             
-            # Check for duplicates (excluding current user)
-            if User.objects.filter(email=email).exclude(id=user_id).exists():
+            # Check for duplicates (excluding current user; email optional now)
+            if email and User.objects.filter(email=email).exclude(id=user_id).exists():
                 return JsonResponse({'detail': 'Email already exists'}, status=400)
             if phone and User.objects.filter(phone_number=phone).exclude(id=user_id).exists():
                 return JsonResponse({'detail': 'Phone number already exists'}, status=400)
@@ -2095,7 +2091,7 @@ class SuperAdminView(PermissionRequiredMixin, View):
             
             # Update user
             user.name = name
-            user.email = email
+            user.email = email if email else None
             user.phone_number = phone if phone else None
             user.whats_app = whats_app if whats_app else None
             if enrolment_roll_id:
@@ -2220,15 +2216,33 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                     
                     # Get RegionalAdmin profile if exists
                     try:
-                        ra = RegionalAdmin.objects.select_related('district', 'vidhan_sabha', 'panchayat', 'village').get(user=user, status=True)
+                        ra = RegionalAdmin.objects.select_related('district', 'village').get(user=user, status=True)
                         print("ra", ra)
                         ra_guid = ra.regional_admin_guid_id
                         ra_district = ra.district_id
                         ra_district_name = ra.district.name if ra.district else None
-                        ra_vidhan_sabha = ra.vidhan_sabha_id
-                        ra_vidhan_sabha_name = ra.vidhan_sabha.name if ra.vidhan_sabha else None
-                        ra_panchayat = ra.panchayat_id
-                        ra_panchayat_name = ra.panchayat.name if ra.panchayat else None
+                        ra_vs_rows = list(RegionalAdminVidhanSabha.objects.filter(
+                            regional_admin=ra, status=True, vidhan_sabha__isnull=False
+                        ).select_related('vidhan_sabha').order_by('id'))
+                        ra_vidhan_sabha_ids = [r.vidhan_sabha_id for r in ra_vs_rows]
+                        ra_vidhan_sabha_names = [
+                            r.vidhan_sabha_name or (r.vidhan_sabha.name if r.vidhan_sabha else None)
+                            for r in ra_vs_rows
+                        ]
+                        # single fields = first assignment (backward compatibility)
+                        ra_vidhan_sabha = ra_vidhan_sabha_ids[0] if ra_vidhan_sabha_ids else None
+                        ra_vidhan_sabha_name = ra_vidhan_sabha_names[0] if ra_vidhan_sabha_names else None
+                        ra_panchayat_rows = list(RegionalAdminPanchayat.objects.filter(
+                            regional_admin=ra, status=True, panchayat__isnull=False
+                        ).select_related('panchayat').order_by('id'))
+                        ra_panchayat_ids = [r.panchayat_id for r in ra_panchayat_rows]
+                        ra_panchayat_names = [
+                            r.panchayat_name or (r.panchayat.name if r.panchayat else None)
+                            for r in ra_panchayat_rows
+                        ]
+                        # single fields kept for backward compatibility (first assignment)
+                        ra_panchayat = ra_panchayat_ids[0] if ra_panchayat_ids else None
+                        ra_panchayat_name = ra_panchayat_names[0] if ra_panchayat_names else None
                         ra_village = ra.village_id
                         ra_village_name = ra.village.name if ra.village else None
                         ra_age = ra.age
@@ -2250,8 +2264,12 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                         ra_district_name = None
                         ra_vidhan_sabha = None
                         ra_vidhan_sabha_name = None
+                        ra_vidhan_sabha_ids = []
+                        ra_vidhan_sabha_names = []
                         ra_panchayat = None
                         ra_panchayat_name = None
+                        ra_panchayat_ids = []
+                        ra_panchayat_names = []
                         ra_village = None
                         ra_village_name = None
                         ra_age = None
@@ -2284,8 +2302,12 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                         'district_name': ra_district_name,
                         'vidhan_sabha_id': ra_vidhan_sabha,
                         'vidhan_sabha_name': ra_vidhan_sabha_name,
+                        'vidhan_sabha_ids': ra_vidhan_sabha_ids,
+                        'vidhan_sabha_names': ra_vidhan_sabha_names,
                         'panchayat_id': ra_panchayat,
                         'panchayat_name': ra_panchayat_name,
+                        'panchayat_ids': ra_panchayat_ids,
+                        'panchayat_names': ra_panchayat_names,
                         'village_id': ra_village,
                         'village_name': ra_village_name,
                         'age': ra_age,
@@ -2328,14 +2350,32 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             for user in queryset[start:end]:
                 # Get RegionalAdmin profile if exists
                 try:
-                    ra = RegionalAdmin.objects.select_related('district', 'vidhan_sabha', 'panchayat', 'village').get(user=user, status=True)
+                    ra = RegionalAdmin.objects.select_related('district', 'village').get(user=user, status=True)
                     ra_guid = ra.regional_admin_guid_id
                     ra_district = ra.district_id
                     ra_district_name = ra.district.name if ra.district else None
-                    ra_vidhan_sabha = ra.vidhan_sabha_id
-                    ra_vidhan_sabha_name = ra.vidhan_sabha.name if ra.vidhan_sabha else None
-                    ra_panchayat = ra.panchayat_id
-                    ra_panchayat_name = ra.panchayat.name if ra.panchayat else None
+                    ra_vs_rows = list(RegionalAdminVidhanSabha.objects.filter(
+                        regional_admin=ra, status=True, vidhan_sabha__isnull=False
+                    ).select_related('vidhan_sabha').order_by('id'))
+                    ra_vidhan_sabha_ids = [r.vidhan_sabha_id for r in ra_vs_rows]
+                    ra_vidhan_sabha_names = [
+                        r.vidhan_sabha_name or (r.vidhan_sabha.name if r.vidhan_sabha else None)
+                        for r in ra_vs_rows
+                    ]
+                    # single fields = first assignment (backward compatibility)
+                    ra_vidhan_sabha = ra_vidhan_sabha_ids[0] if ra_vidhan_sabha_ids else None
+                    ra_vidhan_sabha_name = ra_vidhan_sabha_names[0] if ra_vidhan_sabha_names else None
+                    ra_panchayat_rows = list(RegionalAdminPanchayat.objects.filter(
+                        regional_admin=ra, status=True, panchayat__isnull=False
+                    ).select_related('panchayat').order_by('id'))
+                    ra_panchayat_ids = [r.panchayat_id for r in ra_panchayat_rows]
+                    ra_panchayat_names = [
+                        r.panchayat_name or (r.panchayat.name if r.panchayat else None)
+                        for r in ra_panchayat_rows
+                    ]
+                    # single fields kept for backward compatibility (first assignment)
+                    ra_panchayat = ra_panchayat_ids[0] if ra_panchayat_ids else None
+                    ra_panchayat_name = ra_panchayat_names[0] if ra_panchayat_names else None
                     ra_village = ra.village_id
                     ra_village_name = ra.village.name if ra.village else None
                     ra_age = ra.age
@@ -2356,8 +2396,12 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                     ra_district_name = None
                     ra_vidhan_sabha = None
                     ra_vidhan_sabha_name = None
+                    ra_vidhan_sabha_ids = []
+                    ra_vidhan_sabha_names = []
                     ra_panchayat = None
                     ra_panchayat_name = None
+                    ra_panchayat_ids = []
+                    ra_panchayat_names = []
                     ra_village = None
                     ra_village_name = None
                     ra_age = None
@@ -2390,8 +2434,12 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                     'district_name': ra_district_name,
                     'vidhan_sabha_id': ra_vidhan_sabha,
                     'vidhan_sabha_name': ra_vidhan_sabha_name,
+                    'vidhan_sabha_ids': ra_vidhan_sabha_ids,
+                    'vidhan_sabha_names': ra_vidhan_sabha_names,
                     'panchayat_id': ra_panchayat,
                     'panchayat_name': ra_panchayat_name,
+                    'panchayat_ids': ra_panchayat_ids,
+                    'panchayat_names': ra_panchayat_names,
                     'village_id': ra_village,
                     'village_name': ra_village_name,
                     'age': ra_age,
@@ -2431,8 +2479,13 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             password = (data.get('password') or '').strip()
             enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
             district_id = data.get('district_id')
-            vidhan_sabha_id = data.get('vidhan_sabha_id')
-            panchayat_id = data.get('panchayat_id')
+            # Multi-select: accept vidhan_sabha_ids[] / panchayat_ids[] (legacy single ids still accepted)
+            vidhan_sabha_ids = self._normalize_id_list(
+                data.get('vidhan_sabha_ids') or data.get('vidhan_sabha_id')
+            )
+            panchayat_ids = self._normalize_id_list(
+                data.get('panchayat_ids') or data.get('panchayat_id')
+            )
             village_id = data.get('village_id')
             age = data.get('age')
             gender = (data.get('gender') or '').strip()
@@ -2447,13 +2500,11 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
-            if not email:
-                return JsonResponse({'detail': 'Email is required'}, status=400)
             if not password:
                 return JsonResponse({'detail': 'Password is required'}, status=400)
             
-            # Check for duplicates
-            if User.objects.filter(email=email).exists():
+            # Check for duplicates (email is optional now)
+            if email and User.objects.filter(email=email).exists():
                 return JsonResponse({'detail': 'Email already exists'}, status=400)
             if phone and User.objects.filter(phone_number=phone).exists():
                 return JsonResponse({'detail': 'Phone number already exists'}, status=400)
@@ -2476,7 +2527,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             # Create user
             user = User.objects.create(
                 name=name,
-                email=email,
+                email=email if email else None,
                 phone_number=phone if phone else None,
                 whats_app=whats_app if whats_app else None,
                 password=hash_password(password),  
@@ -2501,8 +2552,8 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 regional_admin_guid_id=str(uuid.uuid4()),
                 user=user,
                 district_id=district_id if district_id else None,
-                vidhan_sabha_id=vidhan_sabha_id if vidhan_sabha_id else None,
-                panchayat_id=panchayat_id if panchayat_id else None,
+                # VidhanSabhaId/PanchayatId single FKs removed - assignments live in
+                # RegionalAdminVidhanSabha / RegionalAdminPanchayat
                 village_id=village_id if village_id else None,
                 age=age if age else None,
                 gender=gender if gender else None,
@@ -2518,7 +2569,11 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 created_on=datetime.now()
             )
             print("ra", ra)
-            
+
+            # Save all vidhan sabha + panchayat assignments
+            self._save_ra_vidhan_sabhas(ra, vidhan_sabha_ids, request.web_user.get('user_id'))
+            self._save_ra_panchayats(ra, panchayat_ids, request.web_user.get('user_id'))
+
             return JsonResponse({
                 'id': user.id,
                 'regional_admin_guid_id': ra.regional_admin_guid_id,
@@ -2531,8 +2586,9 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 'enrolment_roll_id': user.enrolment_roll_id,
                 'role_code': user.role.role_code,
                 'district_id': ra.district_id,
-                'vidhan_sabha_id': ra.vidhan_sabha_id,
-                'panchayat_id': ra.panchayat_id,
+                'vidhan_sabha_id': vidhan_sabha_ids[0] if vidhan_sabha_ids else None,
+                'vidhan_sabha_ids': vidhan_sabha_ids,
+                'panchayat_ids': panchayat_ids,
                 'village_id': ra.village_id,
                 'message': 'Regional Admin created successfully'
             }, status=201)
@@ -2560,8 +2616,13 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             whats_app = (data.get('whats_app') or '').strip()
             enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
             district_id = data.get('district_id')
-            vidhan_sabha_id = data.get('vidhan_sabha_id')
-            panchayat_id = data.get('panchayat_id')
+            # Multi-select: accept vidhan_sabha_ids[] / panchayat_ids[] (legacy single ids still accepted)
+            vidhan_sabha_ids = self._normalize_id_list(
+                data.get('vidhan_sabha_ids') or data.get('vidhan_sabha_id')
+            )
+            panchayat_ids = self._normalize_id_list(
+                data.get('panchayat_ids') or data.get('panchayat_id')
+            )
             village_id = data.get('village_id')
             age = data.get('age')
             gender = (data.get('gender') or '').strip()
@@ -2575,11 +2636,9 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
-            if not email:
-                return JsonResponse({'detail': 'Email is required'}, status=400)
             
-            # Check for duplicates (excluding current user)
-            if User.objects.filter(email=email).exclude(id=user_id).exists():
+            # Check for duplicates (excluding current user; email optional now)
+            if email and User.objects.filter(email=email).exclude(id=user_id).exists():
                 return JsonResponse({'detail': 'Email already exists'}, status=400)
             if phone and User.objects.filter(phone_number=phone).exclude(id=user_id).exists():
                 return JsonResponse({'detail': 'Phone number already exists'}, status=400)
@@ -2588,7 +2647,7 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             
             # Update user
             user.name = name
-            user.email = email
+            user.email = email if email else None
             user.phone_number = phone if phone else None
             user.whats_app = whats_app if whats_app else None
             if enrolment_roll_id:
@@ -2615,8 +2674,8 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             
             # Update regional admin
             ra.district_id = district_id if district_id else None
-            ra.vidhan_sabha_id = vidhan_sabha_id if vidhan_sabha_id else None
-            ra.panchayat_id = panchayat_id if panchayat_id else None
+            # VidhanSabhaId/PanchayatId single FKs removed - assignments live in
+            # RegionalAdminVidhanSabha / RegionalAdminPanchayat
             ra.village_id = village_id if village_id else None
             ra.age = age if age else None
             ra.gender = gender if gender else None
@@ -2629,7 +2688,11 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             ra.updated_by = request.web_user.get('user_id')
             ra.updated_on = datetime.now()
             ra.save()
-            
+
+            # Replace vidhan sabha + panchayat assignments
+            self._save_ra_vidhan_sabhas(ra, vidhan_sabha_ids, request.web_user.get('user_id'))
+            self._save_ra_panchayats(ra, panchayat_ids, request.web_user.get('user_id'))
+
             # Log activity
             log_web_activity(request, 'UPDATE', 'RegionalAdmin', record_id=user.id, record_name=user.name)
             
@@ -2645,14 +2708,92 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 'enrolment_roll_id': user.enrolment_roll_id,
                 'role_code': user.role.role_code if user.role else None,
                 'district_id': ra.district_id,
-                'vidhan_sabha_id': ra.vidhan_sabha_id,
-                'panchayat_id': ra.panchayat_id,
+                'vidhan_sabha_id': vidhan_sabha_ids[0] if vidhan_sabha_ids else None,
+                'vidhan_sabha_ids': vidhan_sabha_ids,
+                'panchayat_ids': panchayat_ids,
                 'village_id': ra.village_id,
                 'message': 'Regional Admin updated successfully'
             })
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    @staticmethod
+    def _normalize_id_list(value):
+        """Normalize a list / comma-string / single id into a list of positive ints."""
+        if value is None:
+            return []
+        if isinstance(value, (list, tuple, set)):
+            raw_items = list(value)
+        else:
+            raw_items = str(value).split(',')
+        ids = []
+        for item in raw_items:
+            try:
+                i = int(str(item).strip())
+            except (TypeError, ValueError):
+                continue
+            if i > 0 and i not in ids:
+                ids.append(i)
+        return ids
+
+    @staticmethod
+    def _save_ra_vidhan_sabhas(ra, vidhan_sabha_ids, acting_user_id):
+        """Replace a Regional Admin's Vidhan Sabha assignments in RegionalAdminVidhanSabha.
+        Old rows are soft-deactivated (status=False) - same convention as the mobile API."""
+        now = datetime.now()
+        RegionalAdminVidhanSabha.objects.filter(regional_admin=ra).exclude(
+            vidhan_sabha_id__in=vidhan_sabha_ids or [0]
+        ).filter(status=True).update(status=False, updated_by=acting_user_id, updated_on=now)
+        for vs_id in vidhan_sabha_ids:
+            vs = VidhanSabha.objects.filter(id=vs_id).first()
+            if not vs:
+                continue
+            row, created = RegionalAdminVidhanSabha.objects.get_or_create(
+                regional_admin=ra,
+                vidhan_sabha_id=vs.id,
+                defaults={
+                    'vidhan_sabha_name': vs.name,
+                    'status': True,
+                    'created_by': acting_user_id,
+                    'created_on': now,
+                }
+            )
+            if not created:
+                row.status = True
+                row.vidhan_sabha_name = vs.name
+                row.updated_by = acting_user_id
+                row.updated_on = now
+                row.save()
+
+    @staticmethod
+    def _save_ra_panchayats(ra, panchayat_ids, acting_user_id):
+        """Replace a Regional Admin's Panchayat assignments in RegionalAdminPanchayat.
+        Old rows are soft-deactivated (status=False) - same convention as the mobile API."""
+        now = datetime.now()
+        RegionalAdminPanchayat.objects.filter(regional_admin=ra).exclude(
+            panchayat_id__in=panchayat_ids or [0]
+        ).filter(status=True).update(status=False, updated_by=acting_user_id, updated_on=now)
+        for pan_id in panchayat_ids:
+            pan = Panchayat.objects.filter(id=pan_id).first()
+            if not pan:
+                continue
+            row, created = RegionalAdminPanchayat.objects.get_or_create(
+                regional_admin=ra,
+                panchayat_id=pan.id,
+                defaults={
+                    'panchayat_name': pan.name,
+                    'status': True,
+                    'created_by': acting_user_id,
+                    'created_on': now,
+                }
+            )
+            if not created:
+                row.status = True
+                row.panchayat_name = pan.name
+                row.updated_by = acting_user_id
+                row.updated_on = now
+                row.save()
+
     def _delete_regional_admin(self, request):
         try:
             data = json.loads(request.body)
@@ -3220,10 +3361,12 @@ class PanchayatView(PermissionRequiredMixin, View):
             if district_id:
                 queryset = queryset.filter(district_id=district_id)
             
-            # Filter by vidhan_sabha if provided
+            # Filter by vidhan_sabha if provided (single id or comma-separated list for multi-select)
             vidhan_sabha_id = request.GET.get('vidhan_sabha_id')
             if vidhan_sabha_id:
-                queryset = queryset.filter(vidhan_sabha_id=vidhan_sabha_id)
+                vs_ids = [v.strip() for v in vidhan_sabha_id.split(',') if v.strip().isdigit()]
+                if vs_ids:
+                    queryset = queryset.filter(vidhan_sabha_id__in=vs_ids)
             
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', PAGE_SIZE))
@@ -3901,8 +4044,6 @@ class TeacherView(PermissionRequiredMixin, View):
             
             if not name:
                 return JsonResponse({'detail': 'Name is required'}, status=400)
-            if not email:
-                return JsonResponse({'detail': 'Email is required'}, status=400)
             if not password:
                 return JsonResponse({'detail': 'Password is required'}, status=400)
             if not phone:
@@ -3916,7 +4057,7 @@ class TeacherView(PermissionRequiredMixin, View):
             if not village_id:
                 return JsonResponse({'detail': 'Village is required'}, status=400)
             
-            if User.objects.filter(email=email).exists():
+            if email and User.objects.filter(email=email).exists():
                 return JsonResponse({'detail': 'Email already exists'}, status=400)
             if User.objects.filter(phone_number=phone).exists():
                 return JsonResponse({'detail': 'Phone number already exists'}, status=400)
@@ -3939,7 +4080,7 @@ class TeacherView(PermissionRequiredMixin, View):
             # Create user
             user = User.objects.create(
                 name=name,
-                email=email,
+                email=email if email else None,
                 phone_number=phone if phone else None,
                 whats_app=whats_app if whats_app else None,
                 password=hash_password(password),
@@ -4353,8 +4494,14 @@ class CenterView(PermissionRequiredMixin, View):
                 )
                 try:
                     ra_profile = RegionalAdmin.objects.select_related(
-                        'district', 'vidhan_sabha', 'panchayat', 'village'
+                        'district', 'village'
                     ).get(user=ra_user, status=True)
+                    ra_vs_rows = list(RegionalAdminVidhanSabha.objects.filter(
+                        regional_admin=ra_profile, status=True, vidhan_sabha__isnull=False
+                    ).select_related('vidhan_sabha').order_by('id'))
+                    ra_pan_rows = list(RegionalAdminPanchayat.objects.filter(
+                        regional_admin=ra_profile, status=True, panchayat__isnull=False
+                    ).select_related('panchayat').order_by('id'))
                     regional_admin_obj = {
                         'id': ra_user.id,
                         'regional_admin_guid_id': ra_profile.regional_admin_guid_id,
@@ -4370,10 +4517,20 @@ class CenterView(PermissionRequiredMixin, View):
                         'address': ra_profile.full_address,
                         'district_id': ra_profile.district_id,
                         'district_name': ra_profile.district.name if ra_profile.district else None,
-                        'vidhan_sabha_id': ra_profile.vidhan_sabha_id,
-                        'vidhan_sabha_name': ra_profile.vidhan_sabha.name if ra_profile.vidhan_sabha else None,
-                        'panchayat_id': ra_profile.panchayat_id,
-                        'panchayat_name': ra_profile.panchayat.name if ra_profile.panchayat else None,
+                        'vidhan_sabha_id': (ra_vs_rows[0].vidhan_sabha_id if ra_vs_rows else None),
+                        'vidhan_sabha_name': (ra_vs_rows[0].vidhan_sabha.name if ra_vs_rows and ra_vs_rows[0].vidhan_sabha else None),
+                        'vidhan_sabha_ids': [r.vidhan_sabha_id for r in ra_vs_rows],
+                        'vidhan_sabha_names': [
+                            r.vidhan_sabha_name or (r.vidhan_sabha.name if r.vidhan_sabha else None)
+                            for r in ra_vs_rows
+                        ],
+                        'panchayat_id': ra_pan_rows[0].panchayat_id if ra_pan_rows else None,
+                        'panchayat_name': (ra_pan_rows[0].panchayat.name if ra_pan_rows and ra_pan_rows[0].panchayat else None),
+                        'panchayat_ids': [r.panchayat_id for r in ra_pan_rows],
+                        'panchayat_names': [
+                            r.panchayat_name or (r.panchayat.name if r.panchayat else None)
+                            for r in ra_pan_rows
+                        ],
                         'village_id': ra_profile.village_id,
                         'village_name': ra_profile.village.name if ra_profile.village else None,
                     }

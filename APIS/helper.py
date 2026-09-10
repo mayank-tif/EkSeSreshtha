@@ -1538,6 +1538,25 @@ def login_user(mobile_number, password):
                                 'vidhanSabhaId': rap.panchayat.vidhan_sabha_id or 0
                             })
                     
+                    # Get list of vidhan sabhas
+                    list_of_vidhan_sabha = []
+                    regional_admin_vidhan_sabhas = RegionalAdminVidhanSabha.objects.filter(
+                        regional_admin=regional_admin,
+                        status=True
+                    ).select_related('vidhan_sabha')
+                    
+                    for rav in regional_admin_vidhan_sabhas:
+                        if rav.vidhan_sabha:
+                            list_of_vidhan_sabha.append({
+                                'id': rav.vidhan_sabha.id,
+                                'vidhanSabhaGuidId': str(rav.vidhan_sabha.vidhan_sabha_guid_id) if rav.vidhan_sabha.vidhan_sabha_guid_id else '00000000-0000-0000-0000-000000000000',
+                                'name': rav.vidhan_sabha.name,
+                                'status': rav.vidhan_sabha.status,
+                                'createdOn': format_dotnet_datetime(rav.vidhan_sabha.created_on) if rav.vidhan_sabha.created_on else None,
+                                'createdBy': rav.vidhan_sabha.created_by,
+                                'districtId': rav.vidhan_sabha.district_id or 0
+                            })
+                    
                     # Get list of centers
                     list_of_centers = []
                     centers = Center.objects.filter(assigned_regional_admin=user.id, status=True)
@@ -1582,12 +1601,20 @@ def login_user(mobile_number, password):
                         "guardianNumber": regional_admin.guardian_number,
                         "assignedTeacherStatus": regional_admin.assigned_teacher_status,
                         "assignedRegionalAdminStatus": regional_admin.assigned_regional_admin_status,
-                        "vidhanSabhaId": regional_admin.vidhan_sabha_id,
+                        "vidhanSabhaId": next(
+                            (rav.vidhan_sabha_id for rav in regional_admin_vidhan_sabhas if rav.vidhan_sabha_id),
+                            None
+                        ),
                         "districtId": regional_admin.district_id,
                         "villageId": regional_admin.village_id,
-                        "panchayatId": regional_admin.panchayat_id,
+                        "panchayatId": next(
+                            (rap.panchayat_id for rap in regional_admin_panchayats if rap.panchayat_id),
+                            None
+                        ),
                         "listOfPanchayatId": [rap.panchayat_id for rap in regional_admin_panchayats if rap.panchayat_id],
                         "regionalAdminPanchayat": list_of_panchayat,
+                        "listOfVidhanSabhaId": [rav.vidhan_sabha_id for rav in regional_admin_vidhan_sabhas if rav.vidhan_sabha_id],
+                        "regionalAdminVidhanSabha": list_of_vidhan_sabha,
                         "centers": full_centers,
                         "createdOn": format_dotnet_datetime(regional_admin.created_on) if regional_admin.created_on else user.created_on,
                     })
@@ -1767,10 +1794,8 @@ def save_user(user_data):
                             regional_admin.education = user_data['Education']
                         if 'DistrictId' in user_data and user_data['DistrictId'] is not None:
                             regional_admin.district_id = user_data['DistrictId']
-                        if 'VidhanSabhaId' in user_data and user_data['VidhanSabhaId'] is not None:
-                            regional_admin.vidhan_sabha_id = user_data['VidhanSabhaId']
-                        if 'PanchayatId' in user_data and user_data['PanchayatId'] is not None:
-                            regional_admin.panchayat_id = user_data['PanchayatId']
+                        # VidhanSabhaId / PanchayatId single FKs removed - multi assignments
+                        # are handled below via ListOfVidhanSabhaIds / ListOfPanchayatIds
                         if 'VillageId' in user_data and user_data['VillageId'] is not None:
                             regional_admin.village_id = user_data['VillageId']
                         regional_admin.updated_on = datetime.now()
@@ -1810,6 +1835,40 @@ def save_user(user_data):
                                                 created_on=datetime.now(),
                                                 created_by=user_data.get('CreatedBy') or user_id
                                             )
+                        
+                        # Handle ListOfVidhanSabhaIds for RegionalAdmin
+                        list_of_vidhan_sabha_ids = user_data.get('ListOfVidhanSabhaIds')
+                        if list_of_vidhan_sabha_ids:
+                            if isinstance(list_of_vidhan_sabha_ids, str):
+                                vidhan_sabha_list = [int(x.strip()) for x in list_of_vidhan_sabha_ids.split(',') if x.strip()]
+                            else:
+                                vidhan_sabha_list = list_of_vidhan_sabha_ids if isinstance(list_of_vidhan_sabha_ids, list) else []
+                            
+                            if vidhan_sabha_list:
+                                regional_admin = RegionalAdmin.objects.filter(user=user).first()
+                                if regional_admin:
+                                    # Soft delete existing records
+                                    RegionalAdminVidhanSabha.objects.filter(
+                                        regional_admin=regional_admin
+                                    ).update(
+                                        status=False,
+                                        updated_on=datetime.now(),
+                                        updated_by=user_data.get('CreatedBy') or user_id
+                                    )
+                                    
+                                    # Insert new records
+                                    for vidhan_sabha_id in vidhan_sabha_list:
+                                        vidhan_sabha = VidhanSabha.objects.filter(id=vidhan_sabha_id).first()
+                                        if vidhan_sabha:
+                                            RegionalAdminVidhanSabha.objects.create(
+                                                regional_admin=regional_admin,
+                                                vidhan_sabha_id=vidhan_sabha_id,
+                                                vidhan_sabha_name=vidhan_sabha.name,
+                                                status=True,
+                                                created_on=datetime.now(),
+                                                created_by=user_data.get('CreatedBy') or user_id
+                                            )
+                                    # Note: single FKs removed - assignments live in the tables
                 
                 elif user_type == 3:  # Teacher
                     teacher = Teacher.objects.filter(user=user).first()
@@ -1938,8 +1997,8 @@ def save_user(user_data):
                         assigned_regional_admin_status=False,
                         enrollment_date=user_data.get('EnrollmentDate'),
                         district_id=user_data.get('DistrictId'),
-                        vidhan_sabha_id=user_data.get('VidhanSabhaId'),
-                        panchayat_id=user_data.get('PanchayatId'),
+                        # VidhanSabhaId / PanchayatId single FKs removed - assignments
+                        # are saved below via ListOfVidhanSabhaIds / ListOfPanchayatIds
                         village_id=user_data.get('VillageId'),
                         status=True,
                         created_on=datetime.now(),
@@ -1966,6 +2025,27 @@ def save_user(user_data):
                                     created_on=datetime.now(),
                                     created_by=user_data.get('CreatedBy') or 1
                                 )
+                    
+                    # Handle ListOfVidhanSabhaIds for RegionalAdmin
+                    list_of_vidhan_sabha_ids = user_data.get('ListOfVidhanSabhaIds')
+                    if list_of_vidhan_sabha_ids:
+                        if isinstance(list_of_vidhan_sabha_ids, str):
+                            vidhan_sabha_list = [int(x.strip()) for x in list_of_vidhan_sabha_ids.split(',') if x.strip()]
+                        else:
+                            vidhan_sabha_list = list_of_vidhan_sabha_ids if isinstance(list_of_vidhan_sabha_ids, list) else []
+                        
+                        for vidhan_sabha_id in vidhan_sabha_list:
+                            vidhan_sabha = VidhanSabha.objects.filter(id=vidhan_sabha_id).first()
+                            if vidhan_sabha:
+                                RegionalAdminVidhanSabha.objects.create(
+                                    regional_admin=regional_admin,
+                                    vidhan_sabha_id=vidhan_sabha_id,
+                                    vidhan_sabha_name=vidhan_sabha.name,
+                                    status=True,
+                                    created_on=datetime.now(),
+                                    created_by=user_data.get('CreatedBy') or 1
+                                )
+                        # Note: single FKs removed - assignments live in the tables
                 
                 elif user_type == 3:  # Teacher
                     teacher = Teacher(
@@ -2050,6 +2130,7 @@ def get_user_by_id(user_id):
             'panchayatName': None,
             'centerName': None,
             'listOfPanchayat': None,
+            'listOfVidhanSabha': None,
             'listOfCenters': None,
             'center': None,
             'assignedDate': None,
@@ -2084,6 +2165,25 @@ def get_user_by_id(user_id):
                             'vidhanSabhaId': rap.panchayat.vidhan_sabha_id or 0
                         })
                 
+                # Get list of vidhan sabhas
+                list_of_vidhan_sabha = []
+                regional_admin_vidhan_sabhas = RegionalAdminVidhanSabha.objects.filter(
+                    regional_admin=regional_admin,
+                    status=True
+                ).select_related('vidhan_sabha')
+                
+                for rav in regional_admin_vidhan_sabhas:
+                    if rav.vidhan_sabha:
+                        list_of_vidhan_sabha.append({
+                            'id': rav.vidhan_sabha.id,
+                            'vidhanSabhaGuidId': rav.vidhan_sabha.vidhan_sabha_guid_id or '00000000-0000-0000-0000-000000000000',
+                            'name': rav.vidhan_sabha.name,
+                            'status': rav.vidhan_sabha.status,
+                            'createdOn': rav.vidhan_sabha.created_on,
+                            'createdBy': rav.vidhan_sabha.created_by,
+                            'districtId': rav.vidhan_sabha.district_id or 0
+                        })
+                
                 # Get list of centers
                 list_of_centers = []
                 centers = Center.objects.filter(assigned_regional_admin=regional_admin.id, status=True)
@@ -2114,14 +2214,29 @@ def get_user_by_id(user_id):
                     'assignedRegionalAdminStatus': regional_admin.assigned_regional_admin_status,
                     'enrollmentDate': regional_admin.enrollment_date,
                     'districtId': regional_admin.district_id,
-                    'vidhanSabhaId': regional_admin.vidhan_sabha_id,
+                    'vidhanSabhaId': next(
+                        (rav.vidhan_sabha_id for rav in regional_admin_vidhan_sabhas if rav.vidhan_sabha_id),
+                        None
+                    ),
                     'villageId': regional_admin.village_id,
-                    'panchayatId': regional_admin.panchayat_id,
+                    'panchayatId': next(
+                        (rap.panchayat_id for rap in regional_admin_panchayats if rap.panchayat_id),
+                        None
+                    ),
                     'districtName': regional_admin.district.name if regional_admin.district else None,
-                    'vidhanSabhaName': regional_admin.vidhan_sabha.name if regional_admin.vidhan_sabha else None,
+                    'vidhanSabhaName': next(
+                        (rav.vidhan_sabha.name for rav in regional_admin_vidhan_sabhas if rav.vidhan_sabha),
+                        None
+                    ),
                     'villageName': regional_admin.village.name if regional_admin.village else '',
-                    'panchayatName': regional_admin.panchayat.name if regional_admin.panchayat else None,
+                    'panchayatName': (
+                        RegionalAdminPanchayat.objects.filter(
+                            regional_admin=regional_admin, status=True, panchayat__isnull=False
+                        ).select_related('panchayat').order_by('id')
+                        .values_list('panchayat__name', flat=True).first()
+                    ),
                     'listOfPanchayat': list_of_panchayat,
+                    'listOfVidhanSabha': list_of_vidhan_sabha,
                     'listOfCenters': list_of_centers,
                     'assignedDate': None
                 })
@@ -5644,9 +5759,13 @@ def login_regional_admin(name, password):
                 'FullAddress': regional_admin.full_address,
                 'Type': user.role_id,
                 'Token': str(token),
-                'VidhanSabhaId': regional_admin.vidhan_sabha_id,
+                'VidhanSabhaId': RegionalAdminVidhanSabha.objects.filter(
+                    regional_admin=regional_admin, status=True, vidhan_sabha__isnull=False
+                ).order_by('id').values_list('vidhan_sabha_id', flat=True).first(),
                 'DistrictId': regional_admin.district_id,
-                'PanchayatId': regional_admin.panchayat_id,
+                'PanchayatId': RegionalAdminPanchayat.objects.filter(
+                    regional_admin=regional_admin, status=True, panchayat__isnull=False
+                ).order_by('id').values_list('panchayat_id', flat=True).first(),
                 'CenterId': regional_admin.center_id,
                 'VillageId': regional_admin.village_id,
                 'CreatedOn': regional_admin.created_on,
@@ -5657,8 +5776,16 @@ def login_regional_admin(name, password):
                 'UserEmail': user.email,
                 'UserPicture': user.picture.url if user.picture else None,
                 'DistrictName': regional_admin.district.name if regional_admin.district else None,
-                'VidhanSabhaName': regional_admin.vidhan_sabha.name if regional_admin.vidhan_sabha else None,
-                'PanchayatName': regional_admin.panchayat.name if regional_admin.panchayat else None,
+                'VidhanSabhaName': RegionalAdminVidhanSabha.objects.filter(
+                    regional_admin=regional_admin, status=True, vidhan_sabha__isnull=False
+                ).select_related('vidhan_sabha').order_by('id')
+                .values_list('vidhan_sabha__name', flat=True).first(),
+                'PanchayatName': (
+                    RegionalAdminPanchayat.objects.filter(
+                        regional_admin=regional_admin, status=True, panchayat__isnull=False
+                    ).select_related('panchayat').order_by('id')
+                    .values_list('panchayat__name', flat=True).first()
+                ),
                 'CenterName': regional_admin.center.center_name if regional_admin.center else None,
                 'VillageName': regional_admin.village.name if regional_admin.village else None,
             }
@@ -5762,7 +5889,7 @@ def get_regional_admin_by_id(regional_admin_id):
     """Get regional admin by User ID with User data joined"""
     try:
         regional_admin = RegionalAdmin.objects.filter(user__id=regional_admin_id).select_related(
-            'user', 'district', 'vidhan_sabha', 'panchayat', 'center', 'village'
+            'user', 'district', 'center', 'village'
         ).first()
         if regional_admin and regional_admin.user and regional_admin.user.role_id == 2:
             user = regional_admin.user
@@ -5785,9 +5912,13 @@ def get_regional_admin_by_id(regional_admin_id):
                 'FullAddress': regional_admin.full_address,
                 'Type': user.role_id,
                 'Token': user.token,
-                'VidhanSabhaId': regional_admin.vidhan_sabha_id,
+                'VidhanSabhaId': RegionalAdminVidhanSabha.objects.filter(
+                    regional_admin=regional_admin, status=True, vidhan_sabha__isnull=False
+                ).order_by('id').values_list('vidhan_sabha_id', flat=True).first(),
                 'DistrictId': regional_admin.district_id,
-                'PanchayatId': regional_admin.panchayat_id,
+                'PanchayatId': RegionalAdminPanchayat.objects.filter(
+                    regional_admin=regional_admin, status=True, panchayat__isnull=False
+                ).order_by('id').values_list('panchayat_id', flat=True).first(),
                 'CenterId': regional_admin.center_id,
                 'VillageId': regional_admin.village_id,
                 'CreatedOn': regional_admin.created_on,
@@ -5798,8 +5929,16 @@ def get_regional_admin_by_id(regional_admin_id):
                 'UserEmail': user.email,
                 'UserPicture': user.picture.url if user.picture else None,
                 'DistrictName': regional_admin.district.name if regional_admin.district else None,
-                'VidhanSabhaName': regional_admin.vidhan_sabha.name if regional_admin.vidhan_sabha else None,
-                'PanchayatName': regional_admin.panchayat.name if regional_admin.panchayat else None,
+                'VidhanSabhaName': RegionalAdminVidhanSabha.objects.filter(
+                    regional_admin=regional_admin, status=True, vidhan_sabha__isnull=False
+                ).select_related('vidhan_sabha').order_by('id')
+                .values_list('vidhan_sabha__name', flat=True).first(),
+                'PanchayatName': (
+                    RegionalAdminPanchayat.objects.filter(
+                        regional_admin=regional_admin, status=True, panchayat__isnull=False
+                    ).select_related('panchayat').order_by('id')
+                    .values_list('panchayat__name', flat=True).first()
+                ),
                 'CenterName': regional_admin.center.center_name if regional_admin.center else None,
                 'VillageName': regional_admin.village.name if regional_admin.village else None,
             }

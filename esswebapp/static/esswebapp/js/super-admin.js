@@ -194,11 +194,11 @@ async function handleFormSubmit(e) {
     };
 
     // Validation
-    if (!payload.name || !payload.email || !payload.phone_number) {
+    if (!payload.name || !payload.phone_number) {
         showToast('Please fill in all required fields.', 'error');
         return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
+    if (payload.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
         showToast('Please enter a valid email.', 'error');
         return;
     }

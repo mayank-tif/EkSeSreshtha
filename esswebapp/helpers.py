@@ -499,16 +499,30 @@ def get_regional_admin_assignments(user_id):
     Returns dict with district_ids, vidhan_sabha_ids, panchayat_ids, village_ids.
     Returns None for Super Admin (meaning all).
     """
-    from APIS.models import RegionalAdmin
+    from APIS.models import RegionalAdmin, RegionalAdminPanchayat, RegionalAdminVidhanSabha
     try:
         ra = RegionalAdmin.objects.filter(user_id=user_id, status=True).first()
         if not ra:
             return {'district_ids': [], 'vidhan_sabha_ids': [], 'panchayat_ids': [], 'village_ids': []}
-                
+
+        # Source of truth for panchayats AND vidhan sabhas are the assignment tables
+        # (an RA can cover many of each). The legacy single FKs are removed.
+        panchayat_ids = list(
+            RegionalAdminPanchayat.objects
+            .filter(regional_admin=ra, status=True, panchayat__isnull=False)
+            .values_list('panchayat_id', flat=True)
+            .distinct()
+        )
+        vidhan_sabha_ids = list(
+            RegionalAdminVidhanSabha.objects
+            .filter(regional_admin=ra, status=True, vidhan_sabha__isnull=False)
+            .values_list('vidhan_sabha_id', flat=True)
+            .distinct()
+        )
         return {
             'district_ids': [ra.district_id] if ra.district_id else [],
-            'vidhan_sabha_ids': [ra.vidhan_sabha_id] if ra.vidhan_sabha_id else [],
-            'panchayat_ids': [ra.panchayat_id] if ra.panchayat_id else [],
+            'vidhan_sabha_ids': vidhan_sabha_ids,
+            'panchayat_ids': panchayat_ids,
             'village_ids': [ra.village_id] if ra.village_id else [],
         }
     except Exception:

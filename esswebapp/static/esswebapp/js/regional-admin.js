@@ -88,7 +88,6 @@ function bindEvents() {
 
 // Global functions called from template inline handlers
 window.onRaDistrictChange = onDistrictChange;
-window.onRaVsChange = onVsChange;
 window.resetRegionalAdminForm = resetForm;
 
 // ── Image Preview ─────────────────────────────────────────────────
@@ -113,7 +112,51 @@ function handleImageChange(event) {
     reader.readAsDataURL(file);
 }
 
-// ── Cascading Dropdowns ───────────────────────────────────────────
+// ── Cascading Dropdowns ──
+
+// Checkbox-style multi-select (select2 with checkbox in every option row)
+function multiSelectTemplates($select, marker) {
+    return {
+        templateResult: (state) => {
+            if (!state.id) return state.text; // placeholder
+            const checked = ($select.val() || []).includes(String(state.id)) ? 'checked' : '';
+            return $('<span><input type="checkbox" ' + marker + '="' + String(state.id) + '" ' + checked +
+                ' style="margin-right:8px;vertical-align:middle;">' + escapeHtml(state.text) + '</span>');
+        },
+        templateSelection: (state) => state.text
+    };
+}
+
+// Show "N selected" inside the closed select2 box instead of individual tag chips
+function applyCountSummary($select) {
+    const render = () => {
+        const inst = $select.data('select2');
+        if (!inst || !inst.$selection) return;
+        const $rendered = inst.$selection.find('.select2-selection__rendered');
+        const count = ($select.val() || []).length;
+        $rendered.find('li.select2-selection__choice').hide();
+        $rendered.find('.ra-count-item').remove();
+        if (count > 0) {
+            $rendered.prepend($('<li class="select2-selection__choice ra-count-item">' +
+                count + ' selected</li>'));
+        }
+    };
+    $select.off('change.raCount').on('change.raCount', render);
+    render();
+}
+
+function bindMultiCheckboxSync($select, marker) {
+    // namespaced + de-duplicated so repeated re-inits never stack handlers
+    $select.off('select2:select.raCb select2:unselect.raCb');
+    const toggle = (id, checked) => {
+        const inst = $select.data('select2');
+        if (inst && inst.$dropdown) {
+            inst.$dropdown.find('input[' + marker + '="' + String(id) + '"]').prop('checked', checked);
+        }
+    };
+    $select.on('select2:select.raCb', (e) => toggle(e.params.data.id, true));
+    $select.on('select2:unselect.raCb', (e) => toggle(e.params.data.id, false));
+}
 async function loadDistrictDropdown() {
     showGlobalLoader();
     try {
@@ -171,15 +214,16 @@ async function onDistrictChange() {
 
     showGlobalLoader();
     try {
-        const url = getUrl('vidhan-sabha') + '?district_id=' + districtId + '&page=1&page_size=1000';
-        const res = await fetch(url, { 
+        // 1) Vidhan Sabha options for this district
+        const vsUrl = getUrl('vidhan-sabha') + '?district_id=' + districtId + '&page=1&page_size=1000';
+        const vsRes = await fetch(vsUrl, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         });
-        const data = await res.json();
+        const vsData = await vsRes.json();
 
         if (!els.vs) return;
-        els.vs.innerHTML += (data.results || []).map(v =>
+        els.vs.innerHTML += (vsData.results || []).map(v =>
             `<option value="${v.id}">${escapeHtml(v.name)}</option>`
         ).join('');
         els.vs.disabled = false;
@@ -188,46 +232,28 @@ async function onDistrictChange() {
             $(els.vs).select2('destroy');
         }
         if ($.fn.select2) {
-            $(els.vs).select2({
-                placeholder: 'Select Vidhan Sabha',
-                allowClear: true,
+            $(els.vs).select2(Object.assign({
+                placeholder: 'Select Vidhan Sabha(s)',
                 width: '100%',
-                dropdownParent: $(els.vs).parent()
-            });
-            $(els.vs).off('select2:select').on('select2:select', onVsChange);
+                dropdownParent: $(els.vs).parent(),
+                closeOnSelect: false
+            }, multiSelectTemplates($(els.vs), 'data-vs-cb')));
+            bindMultiCheckboxSync($(els.vs), 'data-vs-cb');
+            applyCountSummary($(els.vs));
         }
-    } catch (e) {
-        console.error('Failed to load Vidhan Sabhas:', e);
-        showToast('Failed to load Vidhan Sabhas', 'error');
-    } finally {
-        hideGlobalLoader();
-    }
-}
 
-async function onVsChange() {
-    const vsId = els.vs?.value;
-
-    if (els.panchayat) {
-        els.panchayat.innerHTML = '<option value="">Select Panchayat</option>';
-        els.panchayat.disabled = true;
-        if ($.fn.select2 && $(els.panchayat).data('select2')) {
-            $(els.panchayat).select2('destroy');
-        }
-    }
-
-    if (!vsId) return;
-
-    showGlobalLoader();
-    try {
-        const url = getUrl('panchayat') + '?vidhan_sabha_id=' + vsId + '&page=1&page_size=1000';
-        const res = await fetch(url, { 
+        // 2) Panchayat options: ALL panchayats of the district (loaded once).
+        //    Deliberately NOT filtered by the selected Vidhan Sabhas, so the option
+        //    list is stable and existing selections can never be wiped.
+        const panUrl = getUrl('panchayat') + '?district_id=' + districtId + '&page=1&page_size=2000';
+        const panRes = await fetch(panUrl, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         });
-        const data = await res.json();
+        const panData = await panRes.json();
 
         if (!els.panchayat) return;
-        els.panchayat.innerHTML += (data.results || []).map(p =>
+        els.panchayat.innerHTML += (panData.results || []).map(p =>
             `<option value="${p.id}">${escapeHtml(p.name)}</option>`
         ).join('');
         els.panchayat.disabled = false;
@@ -236,16 +262,18 @@ async function onVsChange() {
             $(els.panchayat).select2('destroy');
         }
         if ($.fn.select2) {
-            $(els.panchayat).select2({
-                placeholder: 'Select Panchayat',
-                allowClear: true,
+            $(els.panchayat).select2(Object.assign({
+                placeholder: 'Select Panchayat(s)',
                 width: '100%',
-                dropdownParent: $(els.panchayat).parent()
-            });
+                dropdownParent: $(els.panchayat).parent(),
+                closeOnSelect: false
+            }, multiSelectTemplates($(els.panchayat), 'data-pan-cb')));
+            bindMultiCheckboxSync($(els.panchayat), 'data-pan-cb');
+            applyCountSummary($(els.panchayat));
         }
     } catch (e) {
-        console.error('Failed to load Panchayats:', e);
-        showToast('Failed to load Panchayats', 'error');
+        console.error('Failed to load Vidhan Sabhas / Panchayats:', e);
+        showToast('Failed to load dropdown options', 'error');
     } finally {
         hideGlobalLoader();
     }
@@ -297,6 +325,12 @@ function renderList(items) {
         const avatarHtml = ra.picture
             ? `<img src="${escapeHtml(ra.picture)}" alt="${escapeHtml(ra.name)}">`
             : getInitials(ra.name);
+        const panchayatNames = (ra.panchayat_names && ra.panchayat_names.length)
+            ? ra.panchayat_names.join(', ')
+            : (ra.panchayat_name || '');
+        const vsNames = (ra.vidhan_sabha_names && ra.vidhan_sabha_names.length)
+            ? ra.vidhan_sabha_names.join(', ')
+            : (ra.vidhan_sabha_name || '');
 
         return `
             <div class="user-list-item">
@@ -304,7 +338,7 @@ function renderList(items) {
                 <div class="user-list-info">
                     <div class="user-list-name">${escapeHtml(ra.name || '')}</div>
                     <div class="user-list-meta">${escapeHtml(ra.email || '')} · ${escapeHtml(ra.phone_number || '')}</div>
-                    <div class="user-list-meta">${escapeHtml(ra.district_name || '')} / ${escapeHtml(ra.vidhan_sabha_name || '')} / ${escapeHtml(ra.panchayat_name || '')}</div>
+                    <div class="user-list-meta">${escapeHtml(ra.district_name || '')} / ${escapeHtml(vsNames)} / ${escapeHtml(panchayatNames)}</div>
                 </div>
                 <div class="user-list-actions">
                     <button class="row-action-btn btn-edit" data-id="${ra.id}" title="Edit">
@@ -351,16 +385,16 @@ async function handleFormSubmit(e) {
         whats_app: els.whatsapp.value.trim() || null,
         password: els.password.value,
         district_id: els.district.value ? parseInt(els.district.value, 10) : null,
-        vidhan_sabha_id: els.vs.value ? parseInt(els.vs.value, 10) : null,
-        panchayat_id: els.panchayat.value ? parseInt(els.panchayat.value, 10) : null
+        vidhan_sabha_ids: (els.vs ? ($(els.vs).val() || []) : []).map(v => parseInt(v, 10)),
+        panchayat_ids: (els.panchayat ? ($(els.panchayat).val() || []) : []).map(v => parseInt(v, 10))
     };
 
     // Validation
-    if (!payload.name || !payload.email || !payload.phone_number) {
+    if (!payload.name || !payload.phone_number) {
         showToast('Please fill in all required fields.', 'error');
         return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
+    if (payload.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) {
         showToast('Please enter a valid email.', 'error');
         return;
     }
@@ -376,8 +410,8 @@ async function handleFormSubmit(e) {
         showToast('Passwords do not match.', 'error');
         return;
     }
-    if (!payload.district_id || !payload.vidhan_sabha_id || !payload.panchayat_id) {
-        showToast('Please select District, Vidhan Sabha, and Panchayat.', 'error');
+    if (!payload.district_id || !payload.vidhan_sabha_ids.length || !payload.panchayat_ids.length) {
+        showToast('Please select District, Vidhan Sabha(s), and Panchayat(s).', 'error');
         return;
     }
 
@@ -448,19 +482,13 @@ async function openEditForm(id) {
             await loadDistrictDropdown();
             els.district.value = data.district_id;
             if ($.fn.select2) $(els.district).val(data.district_id).trigger('change');
-            await onDistrictChange();
+            await onDistrictChange();   // loads ALL VS + ALL panchayat options for the district
 
-            if (data.vidhan_sabha_id) {
-                await new Promise(r => setTimeout(r, 100));
-                els.vs.value = data.vidhan_sabha_id;
-                if ($.fn.select2) $(els.vs).val(data.vidhan_sabha_id).trigger('change');
-                await onVsChange();
-
-                if (data.panchayat_id) {
-                    await new Promise(r => setTimeout(r, 100));
-                    els.panchayat.value = data.panchayat_id;
-                    if ($.fn.select2) $(els.panchayat).val(data.panchayat_id).trigger('change');
-                }
+            if (data.vidhan_sabha_ids && data.vidhan_sabha_ids.length) {
+                if ($.fn.select2) $(els.vs).val(data.vidhan_sabha_ids.map(String)).trigger('change');
+            }
+            if (data.panchayat_ids && data.panchayat_ids.length) {
+                if ($.fn.select2) $(els.panchayat).val(data.panchayat_ids.map(String)).trigger('change');
             }
         }
 
