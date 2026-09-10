@@ -97,7 +97,6 @@ class LoginView(View):
         return render(request, self.template_name, {'form': form})
     
     def post(self, request):
-        print("request", request.POST)
         form = LoginForm(request.POST)
         
         if not form.is_valid():
@@ -106,19 +105,21 @@ class LoginView(View):
                 'error': 'Please fill in all required fields'
             })
         
-        email = form.cleaned_data['email']
+        login_id = form.cleaned_data['login_id'].strip()
         password = form.cleaned_data['password']
-        print(email, password)
-        try:
-            user = User.objects.select_related('role').get(email=email, status=True)
-        except User.DoesNotExist:
+        
+        # Match by email OR mobile number (both unique on User)
+        user = User.objects.select_related('role').filter(
+            models.Q(email__iexact=login_id) | models.Q(phone_number=login_id),
+            status=True,
+        ).first()
+        if user is None:
             return render(request, self.template_name, {
                 'form': form,
                 'error': 'User does not exists!'
             })
         
         # Check password using same hashing as APIS app
-        print("user.password", user.password, hash_password(password))
         if hash_password(password) != user.password:
             return render(request, self.template_name, {
                 'form': form,
@@ -2724,10 +2725,9 @@ class DistrictView(PermissionRequiredMixin, View):
             if district_id:
                 try:
                     district = District.objects.filter(status=True).annotate(
-                        vidhan_sabha_count=Count('vidhan_sabhas', filter=models.Q(vidhan_sabhas__status=True)),
-                        panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True))
+                        vidhan_sabha_count=Count('vidhan_sabhas', filter=models.Q(vidhan_sabhas__status=True), distinct=True),
+                        panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True), distinct=True)
                     ).get(id=district_id)
-
                     return JsonResponse({
                         'id': district.id,
                         'district_guid_id': district.district_guid_id,
@@ -2746,10 +2746,11 @@ class DistrictView(PermissionRequiredMixin, View):
             # Otherwise return paginated list
             districts = self._get_districts_queryset()
             
-            # Add related counts
+            # Add related counts (distinct=True prevents the join fan-out:
+            # VS count x Panchayat count, e.g. 15 x 651 = 9765)
             districts = districts.annotate(
-                vidhan_sabha_count=Count('vidhan_sabhas', filter=models.Q(vidhan_sabhas__status=True)),
-                panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True))
+                vidhan_sabha_count=Count('vidhan_sabhas', filter=models.Q(vidhan_sabhas__status=True), distinct=True),
+                panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True), distinct=True)
             )
             
             # Pagination params
@@ -2954,7 +2955,7 @@ class VidhanSabhaView(PermissionRequiredMixin, View):
             if vs_id:
                 try:
                     vs = VidhanSabha.objects.filter(status=True).select_related('district').annotate(
-                        panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True))
+                        panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True), distinct=True)
                     ).get(id=vs_id)
                     
                     return JsonResponse({
@@ -2981,9 +2982,9 @@ class VidhanSabhaView(PermissionRequiredMixin, View):
             if district_id:
                 queryset = queryset.filter(district_id=district_id)
             
-            # Add panchayat count
+            # Add panchayat count (distinct=True guards against join fan-out)
             queryset = queryset.annotate(
-                panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True))
+                panchayat_count=Count('panchayats', filter=models.Q(panchayats__status=True), distinct=True)
             )
             
             page = int(request.GET.get('page', 1))

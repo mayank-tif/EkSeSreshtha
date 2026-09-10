@@ -5,6 +5,7 @@ Run: python manage.py import_data
 """
 import os
 import re
+import uuid
 import requests
 import tempfile
 import hashlib
@@ -47,14 +48,14 @@ class Command(BaseCommand):
         parser.add_argument(
             '--excel-file',
             type=str,
-            default='All_Coordinators_Issues_v8.xlsx',
-            help='Path to Excel file (default: All_Coordinators_Issues_v8.xlsx)'
+            default='All_Coordinators_Issues_v11.xlsx',
+            help='Path to Excel file (default: All_Coordinators_Issues_v11.xlsx)'
         )
         parser.add_argument(
             '--sheet-name',
             type=str,
-            default='FinalData',
-            help='Sheet name to import (default: FinalData)'
+            default='1. Full Data',
+            help='Sheet name to import (default: first sheet, 1. Full Data)'
         )
         parser.add_argument(
             '--download-photos',
@@ -202,6 +203,8 @@ class Command(BaseCommand):
 
     def parse_data(self, rows):
         """Parse Excel rows into structured data"""
+        from collections import defaultdict
+
         self.district_names = set()
         self.constituency_names = set()
         self.panchayat_names = set()
@@ -214,6 +217,13 @@ class Command(BaseCommand):
         # Regional Admin data parsed from the same sheet:
         # col A = coordinator name (canonical), col B = their phone number
         self.coordinators = {}
+
+        # Area maps for correct hierarchy placement:
+        # panchayat -> {(district, constituency)} and
+        # village -> {(district, constituency, panchayat)}.
+        # Same-name panchayats/villages CAN exist in different areas.
+        self.panchayat_area = defaultdict(set)
+        self.village_area = defaultdict(set)
 
         for row in rows:
             # Pad short rows so indexing never fails
@@ -271,6 +281,13 @@ class Command(BaseCommand):
             if village_name:
                 self.village_names.add(village_name)
 
+            # Real hierarchy placement for this row
+            if district_name and constituency_name:
+                if panchayat_name:
+                    self.panchayat_area[panchayat_name].add((district_name, constituency_name))
+                if village_name:
+                    self.village_area[village_name].add((district_name, constituency_name, panchayat_name))
+
             teacher_name = str(row[9]).strip() if row[9] else ''
             teacher_gender = str(row[10]).strip() if row[10] else ''
             teacher_dob = self.format_date(row[11])
@@ -302,6 +319,11 @@ class Command(BaseCommand):
 
             if not student_village:
                 student_village = village_name
+
+            # Student villages may differ from the center's village -
+            # make sure their village row gets created in the right area too
+            if student_village and district_name and constituency_name:
+                self.village_area[student_village].add((district_name, constituency_name, panchayat_name))
 
             if center_name and center_name not in self.centers:
                 self.centers[center_name] = {
@@ -367,6 +389,8 @@ class Command(BaseCommand):
                     'school_name': school_name,
                     'village_name': student_village,
                     'panchayat_name': panchayat_name,
+                    'district_name': district_name,
+                    'constituency_name': constituency_name,
                 })
 
         # Log distinct counts
@@ -383,23 +407,41 @@ class Command(BaseCommand):
     def create_distinct_hierarchy(self):
         """
         Create distinct District, VidhanSabha, Panchayat, Village entries
-        based on the unique values from Excel
+        based on the unique values from Excel.
+
+        Placement rules (critical - the old logic attached everything to the
+        first district/VS, which corrupted the whole hierarchy):
+          - VidhanSabha   -> its own district (constituency -> district map)
+          - Panchayat     -> its real (district, constituency) pair
+          - Village       -> its real (district, constituency, panchayat) tuple
+        Same-name panchayats/villages exist in different areas, so maps are
+        keyed by (name, district, constituency[, panchayat]).
         """
         if self.skip_hierarchy:
             return
 
-        self.district_map = {}
-        self.vidhan_sabha_map = {}
-        self.panchayat_map = {}
-        self.village_map = {}
+        from collections import defaultdict
 
-        for district_name in self.district_names:
+        self.district_map = {}
+        self.vidhan_sabha_map = {}          # name -> VS
+        self.panchayat_map = {}             # (name, district, vs) -> Panchayat
+        self.village_map = {}               # (name, district, vs, pan) -> Village
+
+        # constituency -> district (from the coordinator area map; validated elsewhere)
+        cons_district = {}
+        for name, info in self.coordinators.items():
+            for (d, c) in info['areas']:
+                if d and c:
+                    cons_district.setdefault(c, d)
+
+        # 1. Districts
+        for district_name in sorted(self.district_names):
             if not district_name:
                 continue
             district, created = District.objects.get_or_create(
                 name=district_name,
                 defaults={
-                    'district_guid_id': f'DIST-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.district_map)+1:03d}',
+                    'district_guid_id': f'DIST-{uuid.uuid4().hex[:8]}',
                     'status': True,
                     'created_on': timezone.now(),
                     'created_by': 1
@@ -409,35 +451,19 @@ class Command(BaseCommand):
             if created:
                 self.created_counts['districts'] = self.created_counts.get('districts', 0) + 1
                 self.stdout.write(f'  Created District: {district_name} (ID: {district.id})')
-            else:
-                self.stdout.write(f'  Using existing District: {district_name} (ID: {district.id})')
 
-        # Use the first district as default (Hamirpur)
-        default_district = next(iter(self.district_map.values())) if self.district_map else None
-        if not default_district:
-            # Create default district if none exists
-            default_district, _ = District.objects.get_or_create(
-                name="Hamirpur",
-                defaults={
-                    'district_guid_id': f'DIST-{timezone.now().strftime("%Y%m%d%H%M%S")}-001',
-                    'status': True,
-                    'created_on': timezone.now(),
-                    'created_by': 1
-                }
-            )
-            self.district_map["Hamirpur"] = default_district
-
-        self.default_district = default_district
-
-        # 2. Create all VidhanSabhas (Constituencies)
-        for constituency_name in self.constituency_names:
+        # 2. VidhanSabhas - each in its OWN district
+        for constituency_name in sorted(self.constituency_names):
             if not constituency_name:
                 continue
+            district = self.district_map.get(cons_district.get(constituency_name)) \
+                       or self.district_map.get('Hamirpur') \
+                       or next(iter(self.district_map.values()), None)
             vs, created = VidhanSabha.objects.get_or_create(
                 name=constituency_name,
-                district=self.default_district,
+                district=district,
                 defaults={
-                    'vidhan_sabha_guid_id': f'VS-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.vidhan_sabha_map)+1:03d}',
+                    'vidhan_sabha_guid_id': f'VS-{uuid.uuid4().hex[:8]}',
                     'status': True,
                     'created_on': timezone.now(),
                     'created_by': 1
@@ -446,91 +472,82 @@ class Command(BaseCommand):
             self.vidhan_sabha_map[constituency_name] = vs
             if created:
                 self.created_counts['vidhan_sabhas'] = self.created_counts.get('vidhan_sabhas', 0) + 1
-                self.stdout.write(f'  Created VidhanSabha: {constituency_name} (ID: {vs.id})')
-            else:
-                self.stdout.write(f'  Using existing VidhanSabha: {constituency_name} (ID: {vs.id})')
+                self.stdout.write(
+                    f'  Created VidhanSabha: {constituency_name} (ID: {vs.id}, District: {district.name if district else None})')
 
-        # Use the first vidhan_sabha as default
-        default_vs = next(iter(self.vidhan_sabha_map.values())) if self.vidhan_sabha_map else None
-        if not default_vs:
-            default_vs, _ = VidhanSabha.objects.get_or_create(
-                name="Hamirpur",
-                district=self.default_district,
-                defaults={
-                    'vidhan_sabha_guid_id': f'VS-{timezone.now().strftime("%Y%m%d%H%M%S")}-001',
-                    'status': True,
-                    'created_on': timezone.now(),
-                    'created_by': 1
-                }
-            )
-            self.vidhan_sabha_map["Hamirpur"] = default_vs
-
-        self.default_vidhan_sabha = default_vs
-
-        # 3. Create all Panchayats
-        for panchayat_name in self.panchayat_names:
+        # 3. Panchayats - each in its real (district, constituency)
+        for panchayat_name in sorted(self.panchayat_names):
             if not panchayat_name:
                 continue
-            # Find the constituency for this panchayat (use first one or default)
-            vs = next(iter(self.vidhan_sabha_map.values())) if self.vidhan_sabha_map else default_vs
-            
-            panchayat, created = Panchayat.objects.get_or_create(
-                name=panchayat_name,
-                district=default_district,
-                vidhan_sabha=vs,
-                defaults={
-                    'panchayat_guid_id': f'PAN-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.panchayat_map)+1:03d}',
-                    'status': True,
-                    'created_on': timezone.now(),
-                    'created_by': 1
-                }
-            )
-            self.panchayat_map[panchayat_name] = panchayat
-            if created:
-                self.created_counts['panchayats'] = self.created_counts.get('panchayats', 0) + 1
-                self.stdout.write(f'  Created Panchayat: {panchayat_name} (ID: {panchayat.id})')
-            else:
-                self.stdout.write(f'  Using existing Panchayat: {panchayat_name} (ID: {panchayat.id})')
-
-        # 4. Create all Villages
-        for village_name in self.village_names:
-            if not village_name:
-                continue
-            # Find panchayat for this village
-            panchayat = self.panchayat_map.get(village_name)
-            if not panchayat:
-                # Try to find by name or create
-                panchayat, _ = Panchayat.objects.get_or_create(
-                    name=village_name,
-                    district=default_district,
-                    vidhan_sabha=default_vs,
+            areas = self.panchayat_area.get(panchayat_name) or {(None, None)}
+            for (dist_name, cons_name) in sorted(areas):
+                district = self.district_map.get(dist_name) \
+                           or self.district_map.get('Hamirpur') \
+                           or next(iter(self.district_map.values()), None)
+                vs = self.vidhan_sabha_map.get(cons_name) \
+                     or next(iter(self.vidhan_sabha_map.values()), None)
+                key = (panchayat_name, dist_name, cons_name)
+                panchayat, created = Panchayat.objects.get_or_create(
+                    name=panchayat_name,
+                    district=district,
+                    vidhan_sabha=vs,
                     defaults={
-                        'panchayat_guid_id': f'PAN-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.panchayat_map)+1:03d}',
+                        'panchayat_guid_id': f'PAN-{uuid.uuid4().hex[:8]}',
                         'status': True,
                         'created_on': timezone.now(),
                         'created_by': 1
                     }
                 )
-                self.panchayat_map[village_name] = panchayat
-            
-            village, created = Village.objects.get_or_create(
-                name=village_name,
-                district=default_district,
-                vidhan_sabha=default_vs,
-                panchayat=panchayat,
-                defaults={
-                    'village_guid_id': f'VIL-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.village_map)+1:03d}',
-                    'status': True,
-                    'created_on': timezone.now(),
-                    'created_by': 1
-                }
-            )
-            self.village_map[village_name] = village
-            if created:
-                self.created_counts['villages'] = self.created_counts.get('villages', 0) + 1
-                self.stdout.write(f'  Created Village: {village_name} (ID: {village.id})')
-            else:
-                self.stdout.write(f'  Using existing Village: {village_name} (ID: {village.id})')
+                self.panchayat_map[key] = panchayat
+                if created:
+                    self.created_counts['panchayats'] = self.created_counts.get('panchayats', 0) + 1
+
+        # 4. Villages - each in its real (district, constituency, panchayat)
+        for village_name in sorted(self.village_names):
+            if not village_name:
+                continue
+            areas = self.village_area.get(village_name) or {(None, None, None)}
+            for (dist_name, cons_name, pan_name) in sorted(areas):
+                district = self.district_map.get(dist_name) \
+                           or self.district_map.get('Hamirpur') \
+                           or next(iter(self.district_map.values()), None)
+                vs = self.vidhan_sabha_map.get(cons_name) \
+                     or next(iter(self.vidhan_sabha_map.values()), None)
+                # Panchayat: resolve via area map; if the village's panchayat
+                # name is itself a known panchayat, reuse it (same area first)
+                pan_key = (pan_name, dist_name, cons_name)
+                panchayat = self.panchayat_map.get(pan_key)
+                if panchayat is None and pan_name:
+                    panchayat, created = Panchayat.objects.get_or_create(
+                        name=pan_name,
+                        district=district,
+                        vidhan_sabha=vs,
+                        defaults={
+                            'panchayat_guid_id': f'PAN-{uuid.uuid4().hex[:8]}',
+                            'status': True,
+                            'created_on': timezone.now(),
+                            'created_by': 1
+                        }
+                    )
+                    self.panchayat_map[pan_key] = panchayat
+                    if created:
+                        self.created_counts['panchayats'] = self.created_counts.get('panchayats', 0) + 1
+                village, created = Village.objects.get_or_create(
+                    name=village_name,
+                    district=district,
+                    vidhan_sabha=vs,
+                    panchayat=panchayat,
+                    defaults={
+                        'village_guid_id': f'VIL-{uuid.uuid4().hex[:8]}',
+                        'status': True,
+                        'created_on': timezone.now(),
+                        'created_by': 1
+                    }
+                )
+                key = (village_name, dist_name, cons_name, pan_name)
+                self.village_map[key] = village
+                if created:
+                    self.created_counts['villages'] = self.created_counts.get('villages', 0) + 1
 
         self.stdout.write(self.style.SUCCESS(
             f'Hierarchy summary: '
@@ -640,7 +657,7 @@ class Command(BaseCommand):
             created = user is None
             if created:
                 first_name = name.split()[0] if name else 'Admin'
-                plain_password = f'{first_name}@123'
+                plain_password = f'{first_name.capitalize()}@123#'
                 user = User.objects.create(
                     name=name,
                     role=role,
@@ -707,46 +724,29 @@ class Command(BaseCommand):
         """Create Centers using distinct hierarchy"""
         center_count = 0
         for c_name, c_data in self.centers.items():
-            # Get hierarchy objects
+            # Get hierarchy objects - keyed by the center's REAL area
+            dist_name = c_data.get('district', '')
+            cons_name = c_data.get('constituency', '')
             panchayat_name = c_data.get('panchayat', '')
             village_name = c_data.get('village', '')
-            
-            panchayat = self.panchayat_map.get(panchayat_name)
-            village = self.village_map.get(village_name)
-            
-            # If not found, try to get from database
+
+            district = (self.district_map.get(dist_name)
+                        or self.district_map.get('Hamirpur')
+                        or next(iter(self.district_map.values()), None))
+            vidhan_sabha = (self.vidhan_sabha_map.get(cons_name)
+                            or next(iter(self.vidhan_sabha_map.values()), None))
+            panchayat = self.panchayat_map.get((panchayat_name, dist_name, cons_name))
+            village = self.village_map.get((village_name, dist_name, cons_name, panchayat_name))
+
+            # Fallback: try to resolve from DB by name + area
             if not panchayat and panchayat_name:
-                try:
-                    panchayat = Panchayat.objects.get(name=panchayat_name)
-                    self.panchayat_map[panchayat_name] = panchayat
-                except Panchayat.DoesNotExist:
-                    panchayat = Panchayat.objects.create(
-                        name=panchayat_name,
-                        district=self.default_district,
-                        vidhan_sabha=self.default_vidhan_sabha,
-                        panchayat_guid_id=f'PAN-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.panchayat_map)+1:03d}',
-                        status=True,
-                        created_on=timezone.now(),
-                        created_by=1,
-                    )
-                    self.panchayat_map[panchayat_name] = panchayat
-            
+                panchayat = Panchayat.objects.filter(
+                    name=panchayat_name, district=district
+                ).first()
             if not village and village_name:
-                try:
-                    village = Village.objects.get(name=village_name)
-                    self.village_map[village_name] = village
-                except Village.DoesNotExist:
-                    village = Village.objects.create(
-                        name=village_name,
-                        district=self.default_district,
-                        vidhan_sabha=self.default_vidhan_sabha,
-                        panchayat=panchayat,
-                        village_guid_id=f'VIL-{timezone.now().strftime("%Y%m%d%H%M%S")}-{len(self.village_map)+1:03d}',
-                        status=True,
-                        created_on=timezone.now(),
-                        created_by=1,
-                    )
-                    self.village_map[village_name] = village
+                village = Village.objects.filter(
+                    name=village_name, district=district, panchayat=panchayat
+                ).first()
 
             try:
                 # The center's own coordinator acts as its Regional Admin
@@ -755,8 +755,8 @@ class Command(BaseCommand):
                     center_name=c_name,
                     defaults={
                         'center_guid_id': f'center-{c_name.lower().replace(" ", "-")}-{center_count+1:03d}',
-                        'district': self.default_district,
-                        'vidhan_sabha': self.default_vidhan_sabha,
+                        'district': district,
+                        'vidhan_sabha': vidhan_sabha,
                         'panchayat': panchayat,
                         'village': village,
                         'status': True,
@@ -773,7 +773,8 @@ class Command(BaseCommand):
                     center_count += 1
                     self.created_counts['centers'] = self.created_counts.get('centers', 0) + 1
                     self.stdout.write(self.style.SUCCESS(
-                        f'  [OK] Center created: {c_name} (ID: {center.id}, RA: {coord_ra.name if coord_ra else None})'
+                        f'  [OK] Center created: {c_name} (ID: {center.id}, '
+                        f'{dist_name}/{cons_name}, RA: {coord_ra.name if coord_ra else None})'
                     ))
                 else:
                     self.stdout.write(f'  [--] Center exists: {c_name} (ID: {center.id})')
@@ -818,17 +819,24 @@ class Command(BaseCommand):
                 continue
 
             center = c_data['obj']
+            dist_name = c_data.get('district', '')
+            cons_name = c_data.get('constituency', '')
             village_name = c_data.get('village', '')
             panchayat_name = c_data.get('panchayat', '')
-            
-            village = self.village_map.get(village_name)
-            panchayat = self.panchayat_map.get(panchayat_name)
+
+            district = (self.district_map.get(dist_name)
+                        or self.district_map.get('Hamirpur')
+                        or next(iter(self.district_map.values()), None))
+            vidhan_sabha = (self.vidhan_sabha_map.get(cons_name)
+                            or next(iter(self.vidhan_sabha_map.values()), None))
+            village = self.village_map.get((village_name, dist_name, cons_name, panchayat_name))
+            panchayat = self.panchayat_map.get((panchayat_name, dist_name, cons_name))
 
             t = teacher_details
             
-            # Generate plain password: first name + @123
+            # Generate plain password: Firstname (capitalized) + @123#
             first_name = t['name'].split()[0] if t['name'] else 'Teacher'
-            plain_password = f"{first_name}@123"
+            plain_password = f"{first_name.capitalize()}@123#"
             hashed_password = hash_password(plain_password)
             
             # Store plain password for export
@@ -870,8 +878,8 @@ class Command(BaseCommand):
                 user=user,
                 defaults={
                     'teacher_guid_id': f'teacher-{user.id}',
-                    'district': self.default_district,
-                    'vidhan_sabha': self.default_vidhan_sabha,
+                    'district': district,
+                    'vidhan_sabha': vidhan_sabha,
                     'panchayat': panchayat,
                     'village': village,
                     'center': center,
@@ -916,8 +924,27 @@ class Command(BaseCommand):
                 continue
 
             school = self.schools.get(s['school_name'])
-            village = self.village_map.get(s['village_name'])
-            panchayat = self.panchayat_map.get(s.get('panchayat_name', ''))
+
+            # Student's own area (falls back to the center's area if missing)
+            dist_name = s.get('district_name') or center.get('district', '')
+            cons_name = s.get('constituency_name') or center.get('constituency', '')
+            pan_name = s.get('panchayat_name', '')
+            vil_name = s.get('village_name', '')
+
+            district = (self.district_map.get(dist_name)
+                        or self.district_map.get('Hamirpur')
+                        or next(iter(self.district_map.values()), None))
+            vidhan_sabha = (self.vidhan_sabha_map.get(cons_name)
+                            or next(iter(self.vidhan_sabha_map.values()), None))
+            panchayat = self.panchayat_map.get((pan_name, dist_name, cons_name))
+            village = self.village_map.get((vil_name, dist_name, cons_name, pan_name))
+
+            # Fallback: DB lookup by name + district if not in the maps
+            if not panchayat and pan_name:
+                panchayat = Panchayat.objects.filter(name=pan_name, district=district).first()
+            if not village and vil_name:
+                village = Village.objects.filter(name=vil_name, district=district, panchayat=panchayat).first() \
+                          or Village.objects.filter(name=vil_name, district=district).first()
 
             photo_path = None
             if s['photo_url']:
@@ -959,8 +986,8 @@ class Command(BaseCommand):
                     'category': s['category'],
                     'father_mobile_number': s['father_mobile'],
                     'roll_number': i + 1,
-                    'district': self.default_district,
-                    'vidhan_sabha': self.default_vidhan_sabha,
+                    'district': district,
+                    'vidhan_sabha': vidhan_sabha,
                     'panchayat': panchayat,
                     'village': village,
                     'center': center['obj'],
@@ -974,8 +1001,8 @@ class Command(BaseCommand):
                 student.full_name = s['name']
                 student.profile_image = photo_path
                 student.profile_image_url = s['photo_url']
-                student.district = self.default_district
-                student.vidhan_sabha = self.default_vidhan_sabha
+                student.district = district
+                student.vidhan_sabha = vidhan_sabha
                 student.panchayat = panchayat
                 student.village = village
                 student.center = center['obj']
@@ -1263,7 +1290,7 @@ class Command(BaseCommand):
                 else:
                     # Fallback: generate based on name
                     first_name = user.name.split()[0] if user.name else 'Teacher'
-                    plain_password = f"{first_name}@123"
+                    plain_password = f"{first_name.capitalize()}@123#"
                     self.plain_passwords[mobile] = plain_password
                 
                 writer.writerow([
@@ -1288,5 +1315,5 @@ class Command(BaseCommand):
         # Also print a summary
         self.stdout.write('\n📋 Login Credentials Summary:')
         self.stdout.write('  - Teachers: Use Phone Number as username')
-        self.stdout.write('  - Password format: [First Name]@123 (e.g., John@123)')
+        self.stdout.write('  - Password format: [Firstname]@123# (e.g., John@123#)')
         self.stdout.write(f'  - CSV file: {output_path}')

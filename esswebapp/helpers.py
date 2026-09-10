@@ -20,7 +20,7 @@ from decimal import Decimal
 
 from django.db import transaction
 
-from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User, ActivityLog
+from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User, ActivityLog, ClassModel
 from django.db.models import Count
 
 logger = logging.getLogger(__name__)
@@ -1038,18 +1038,22 @@ def get_student_monthly_attendance(student_id, year, month):
     if end_date > today:
         end_date = today
     
-    # Count working days (Mon-Sat) in the period
-    working_days = 0
-    current = start_date
-    while current <= end_date:
-        if current.weekday() < 6:  # Mon-Sat
-            working_days += 1
-        current += timedelta(days=1)
+    # Only days on which a class was actually conducted count (no-class days are NOT absent)
+    center_id = Student.objects.filter(id=student_id).values_list('center_id', flat=True).first()
+    class_dates = set()
+    if center_id:
+        session_rows = ClassModel.objects.filter(
+            center_id=center_id,
+            started_date__date__gte=start_date,
+            started_date__date__lte=end_date,
+        ).exclude(status=3).values_list('started_date', flat=True)  # status 3 = cancelled
+        class_dates = {d.date() if hasattr(d, 'date') else d for d in session_rows}
+    working_days = sum(1 for d in class_dates if start_date <= d <= end_date)
     
     history = get_student_attendance_history(student_id, start_date, end_date)
     
     present = sum(1 for r in history if r['status'] == 'Present')
-    absent = sum(1 for r in history if r['status'] == 'Absent')
+    absent = max(working_days - present, 0)
     total_recorded = present + absent
     
     # Percentage based on working days, not just recorded days
@@ -1089,6 +1093,19 @@ def get_student_daily_attendance(student_id, year, month):
     # Build lookup
     attendance_map = {r['date']: r['status'] for r in history}
     
+    # Dates on which a class was actually conducted at this student's center.
+    # Days without a class session are shown as 'No Class' (NOT Absent).
+    # Absent applies ONLY when a class was conducted and the student has no Present record.
+    center_id = Student.objects.filter(id=student_id).values_list('center_id', flat=True).first()
+    class_dates = set()
+    if center_id:
+        session_rows = ClassModel.objects.filter(
+            center_id=center_id,
+            started_date__date__gte=datetime(year, month, 1).date(),
+            started_date__date__lte=datetime(year, month, days_in_month).date(),
+        ).exclude(status=3).values_list('started_date', flat=True)  # status 3 = cancelled
+        class_dates = {d.date() if hasattr(d, 'date') else d for d in session_rows}
+    
     result = []
     for day in range(1, days_in_month + 1):
         date = datetime(year, month, day).date()
@@ -1097,7 +1114,13 @@ def get_student_daily_attendance(student_id, year, month):
         if date.weekday() == 6:  # Skip Sundays
             continue
         
-        status = attendance_map.get(date, 'Absent')
+        if date in attendance_map:
+            status = attendance_map[date]              # recorded (class present/absent or manual)
+        elif date in class_dates:
+            status = 'Absent'                          # class was held, student not present
+        else:
+            status = 'No Class'                        # no class conducted that day
+        
         result.append({
             'day': day,
             'date': date,

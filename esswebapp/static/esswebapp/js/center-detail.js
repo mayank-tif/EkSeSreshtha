@@ -889,6 +889,17 @@ async function renderDayWiseAttendance(monthValue) {
                 // Skip Sundays
                 if (date.getDay() === 0) continue;
                 
+                // No class conducted that day -> neutral badge, not counted as absent
+                if (day.status === 'No Class') {
+                    rows.push(`
+                        <tr>
+                            <td>${formatDate(day.date)}</td>
+                            <td><span class="badge badge-neutral">No Class</span></td>
+                        </tr>
+                    `);
+                    continue;
+                }
+
                 total++;
                 if (day.status === 'Present') present++; else absent++;
 

@@ -8,6 +8,7 @@ Restricts access to URL patterns based on the request domain:
 """
 
 import logging
+import os
 from django.http import HttpResponseForbidden, JsonResponse
 from django.conf import settings
 from EkSeSreshtha.env_details import ATTENDANCE_ALLOWED_IPS
@@ -163,6 +164,7 @@ class AttendanceIPRestrictionMiddleware:
             for ip in raw_ips.split(',')
             if ip.strip()
         }
+        print(f"AttendanceIPRestrictionMiddleware initialized: allowed_ips={self.allowed_ips}, local_hosts={self.local_hosts}")
 
         logger.info(
             f"AttendanceIPRestrictionMiddleware initialized: "
@@ -184,10 +186,22 @@ class AttendanceIPRestrictionMiddleware:
 
     def _client_ip(self, request):
         """
-        Best-effort client IP: REMOTE_ADDR, falling back to the Host header
-        comparison used by the existing domain middleware.
+        Resolve the real client IP.
+
+        - If ATTENDANCE_TRUST_PROXY=1 is set in .env (i.e. Django sits behind
+          nginx / a load balancer), the client IP is taken from the
+          X-Forwarded-For header (first entry = original client).
+        - Otherwise REMOTE_ADDR is used directly.
         """
         remote = request.META.get('REMOTE_ADDR', '')
+        if os.getenv('ATTENDANCE_TRUST_PROXY', '').strip().lower() in ('1', 'true', 'yes'):
+            xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+            if xff:
+                # left-most = original client; the rest are proxies
+                return self._normalize_ip(xff.split(',')[0])
+            real_ip = request.META.get('HTTP_X_REAL_IP', '')
+            if real_ip:
+                return self._normalize_ip(real_ip)
         return self._normalize_ip(remote)
 
     def _is_protected(self, request):
@@ -201,19 +215,21 @@ class AttendanceIPRestrictionMiddleware:
 
     def __call__(self, request):
         if self._is_protected(request):
-            # Decision is based on the CLIENT IP only (REMOTE_ADDR).
-            # The Host header is deliberately NOT trusted here - an attacker
-            # could send 'Host: localhost' to abuse the local bypass.
             client = self._client_ip(request)
+            remote = self._normalize_ip(request.META.get('REMOTE_ADDR', ''))
+            xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
 
             allowed = (
                 client in self.allowed_ips
                 or client in self.local_hosts
             )
+            print(f"AttendanceIP: client={client} remote={remote} xff='{xff}' "
+                  f"allowed={allowed} path={request.path}")
 
             if not allowed:
                 logger.warning(
-                    f"AttendanceIPBlock: '{client}' blocked from '{request.path}'"
+                    f"AttendanceIPBlock: client '{client}' (remote '{remote}', "
+                    f"xff '{xff}') blocked from '{request.path}'"
                 )
                 return JsonResponse(
                     {'message': 'Access denied: unauthorized source.'},

@@ -2,16 +2,16 @@ from django import forms
 
 
 class LoginForm(forms.Form):
-    """Login form with email and password fields"""
-    email = forms.EmailField(
+    """Login form accepting email OR mobile number + password"""
+    login_id = forms.CharField(
         max_length=254,
-        widget=forms.EmailInput(attrs={
+        widget=forms.TextInput(attrs={
             'class': 'form-input',
-            'placeholder': 'you@ekseshreshtha.org',
-            'autocomplete': 'email',
+            'placeholder': 'you@ekseshreshtha.org or mobile number',
+            'autocomplete': 'username',
             'required': True,
         }),
-        label='Email address'
+        label='Email or mobile number'
     )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
