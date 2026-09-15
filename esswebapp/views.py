@@ -11,7 +11,8 @@ import logging
 from datetime import datetime
 
 from APIS.models import *
-from APIS.utils import hash_password
+from APIS.utils import (hash_password, generate_ra_enrolment_roll_id,
+                        generate_student_roll_number)
 from .helpers import *
 from .forms import LoginForm
 import base64
@@ -1210,6 +1211,18 @@ class StudentsView(PermissionRequiredMixin, View):
                 if Student.objects.filter(roll_number=roll_number, center_id=center_id, status=True).exists():
                     return JsonResponse({'detail': 'Roll number already exists for this centre'}, status=400)
             
+            if not roll_number:
+                # Nothing supplied: number the student from 1 inside its own scope
+                # (district + vidhan sabha + panchayat + village + centre + class).
+                student_data['roll_number'] = generate_student_roll_number(
+                    district_id=student_data.get('district_id'),
+                    vidhan_sabha_id=student_data.get('vidhan_sabha_id'),
+                    panchayat_id=student_data.get('panchayat_id'),
+                    village_id=student_data.get('village_id'),
+                    center_id=student_data.get('center_id'),
+                    grade=student_data.get('grade'),
+                )
+            
             # Handle profile image - decode base64 and save as file
             profile_image_data = data.get('image') or data.get('profile_image')
             if profile_image_data and isinstance(profile_image_data, str) and profile_image_data.startswith('data:image'):
@@ -1642,6 +1655,9 @@ class StudentsView(PermissionRequiredMixin, View):
                 except Exception as e:
                     logger.warning(f"Failed to save profile image: {e}")
             
+            original_center_id = student.center_id
+            original_grade = student.grade
+            
             for model_field, data_field in field_mapping.items():
                 # Skip profile_image as it's handled above
                 if model_field == 'profile_image':
@@ -1663,6 +1679,21 @@ class StudentsView(PermissionRequiredMixin, View):
                         value = value if value else None
                     print("Updating field", model_field, "to value", value)
                     setattr(student, model_field, value)
+            
+            # Roll number upkeep: fill rows that never got one, and re-number when
+            # the student moved to a different centre or class so the number stays
+            # sequential from 1 within the new scope.
+            if not student.roll_number or (
+                    student.center_id != original_center_id or student.grade != original_grade):
+                student.roll_number = generate_student_roll_number(
+                    district_id=student.district_id,
+                    vidhan_sabha_id=student.vidhan_sabha_id,
+                    panchayat_id=student.panchayat_id,
+                    village_id=student.village_id,
+                    center_id=student.center_id,
+                    grade=student.grade,
+                    exclude_pk=student.id,
+                )
             
             student.updated_by = request.web_user.get('user_id')
             student.updated_on = datetime.now()
@@ -2466,8 +2497,23 @@ class RegionalAdminView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
-    @transaction.atomic
     def _create_regional_admin(self, request):
+        """
+        Thin wrapper: the work itself runs inside a transaction that is committed or
+        rolled back HERE, outside the exception handler. Without this, a statement
+        that fails mid-transaction leaves the connection marked for rollback and the
+        handler reports Django's secondary "An error occurred in the current
+        transaction..." instead of the actual cause.
+        """
+        try:
+            with transaction.atomic():
+                return self._create_regional_admin_tx(request)
+        except Exception as e:
+            logger.exception('RegionalAdmin create failed')
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    @transaction.atomic
+    def _create_regional_admin_tx(self, request):
         try:
             data = json.loads(request.body)
             print("data", data)
@@ -2478,6 +2524,10 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             whats_app = (data.get('whats_app') or '').strip()
             password = (data.get('password') or '').strip()
             enrolment_roll_id = (data.get('enrolment_roll_id') or '').strip()
+            # Users.EnrolmentRollId must not stay NULL: fall back to the same
+            # RA-DIRECT-NNN series that generate_mysql_import.py writes for imported RAs.
+            if not enrolment_roll_id:
+                enrolment_roll_id = generate_ra_enrolment_roll_id()
             district_id = data.get('district_id')
             # Multi-select: accept vidhan_sabha_ids[] / panchayat_ids[] (legacy single ids still accepted)
             vidhan_sabha_ids = self._normalize_id_list(
@@ -2593,10 +2643,23 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 'message': 'Regional Admin created successfully'
             }, status=201)
         except Exception as e:
-            return JsonResponse({'detail': str(e)}, status=500)
+            # Re-raise instead of returning JSON: the caller's transaction.atomic()
+            # must roll back. Swallowing here used to COMMIT the half-written row
+            # (Users record with no RegionalAdmin profile / assignments).
+            raise
+
     
-    @transaction.atomic
     def _update_regional_admin(self, request):
+        """See _create_regional_admin: transaction boundary sits outside the handler."""
+        try:
+            with transaction.atomic():
+                return self._update_regional_admin_tx(request)
+        except Exception as e:
+            logger.exception('RegionalAdmin update failed')
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    @transaction.atomic
+    def _update_regional_admin_tx(self, request):
         try:
             data = json.loads(request.body)
             user_id = data.get('id')  # This is now user_id
@@ -2609,6 +2672,10 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 ra = RegionalAdmin.objects.get(user=user, status=True)
             except (User.DoesNotExist, RegionalAdmin.DoesNotExist):
                 return JsonResponse({'detail': 'Regional Admin not found'}, status=404)
+
+            if not user.enrolment_roll_id:
+                # backfill rows that were created before the roll id was populated
+                user.enrolment_roll_id = generate_ra_enrolment_roll_id()
             
             name = (data.get('name') or '').strip()
             email = (data.get('email') or '').strip().lower()
@@ -2715,7 +2782,11 @@ class RegionalAdminView(PermissionRequiredMixin, View):
                 'message': 'Regional Admin updated successfully'
             })
         except Exception as e:
-            return JsonResponse({'detail': str(e)}, status=500)
+            # Re-raise instead of returning JSON: the caller's transaction.atomic()
+            # must roll back. Swallowing here used to COMMIT the half-written row
+            # (Users record with no RegionalAdmin profile / assignments).
+            raise
+
     
     @staticmethod
     def _normalize_id_list(value):

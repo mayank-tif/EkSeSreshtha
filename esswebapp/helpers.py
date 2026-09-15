@@ -64,21 +64,26 @@ def log_web_activity(request, action, module, record_id=None, record_name=None, 
         # Generate human-readable message
         message = _generate_activity_message(action, module, record_name, user_name, data)
         
-        ActivityLog.objects.create(
-            user_id=user_id,
-            user_name=user_name,
-            role=role,
-            action=action,
-            module=module,
-            record_id=record_id,
-            record_name=record_name,
-            message=message,
-            data=json.dumps(data) if data else None,
-            ip_address=get_client_ip(request),
-            user_agent=request.META.get('HTTP_USER_AGENT', '')[:500]
-        )
+        # Runs in its own savepoint: if this INSERT fails while the caller is
+        # inside transaction.atomic(), the connection would otherwise be marked
+        # for rollback and the caller's NEXT query would raise Django's
+        # "An error occurred in the current transaction..." - hiding the real error.
+        with transaction.atomic():
+            ActivityLog.objects.create(
+                user_id=user_id,
+                user_name=user_name,
+                role=role,
+                action=action,
+                module=module,
+                record_id=record_id,
+                record_name=record_name,
+                message=message,
+                data=json.dumps(data) if data else None,
+                ip_address=get_client_ip(request),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')[:500]
+            )
     except Exception as e:
-        logger.error(f'Failed to log activity: {e}')
+        logger.exception(f'Failed to log activity: {e}')
 
 
 def _generate_activity_message(action, module, record_name, user_name=None, data=None):

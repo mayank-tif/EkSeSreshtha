@@ -1767,7 +1767,12 @@ def save_user(user_data):
                     user.created_on = existing_created_on
                     user.role = role or user.role
                     user.password = user_data.get('Password') or existing_password
-                
+
+                if (not user.enrolment_roll_id and user.role
+                        and user.role.role_code == 'REGIONAL_ADMIN'):
+                    # backfill NULL roll ids when an existing RA is updated
+                    user.enrolment_roll_id = generate_ra_enrolment_roll_id()
+
                 user.updated_on = datetime.now()
                 user.updated_by = user_data.get('CreatedBy') or user_id
                 user.save()
@@ -1802,73 +1807,76 @@ def save_user(user_data):
                         regional_admin.updated_by = user_data.get('CreatedBy') or user_id
                         regional_admin.save()
                         
-                        # Handle ListOfPanchayatIds for RegionalAdmin
+                        # Handle ListOfPanchayatIds for RegionalAdmin.
+                        # Contract, matching vidhan sabhas below:
+                        #   key absent or null -> leave assignments untouched
+                        #   ""                 -> clear every assignment
+                        #   "11681,11682"      -> replace with exactly these
                         list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                        if list_of_panchayat_ids:
-                            if isinstance(list_of_panchayat_ids, str):
-                                panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
-                            else:
-                                panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
-                            
-                            if panchayat_list:
-                                # Get the regional admin object
-                                regional_admin = RegionalAdmin.objects.filter(user=user).first()
-                                if regional_admin:
-                                    # Soft delete existing records
-                                    RegionalAdminPanchayat.objects.filter(
-                                        regional_admin=regional_admin
-                                    ).update(
-                                        status=False,
-                                        updated_on=datetime.now(),
-                                        updated_by=user_data.get('CreatedBy') or user_id
-                                    )
+                        if list_of_panchayat_ids is not None:
+                            panchayat_list = parse_id_list(list_of_panchayat_ids)
+
+                            # Get the regional admin object
+                            regional_admin = RegionalAdmin.objects.filter(user=user).first()
+                            if regional_admin:
+                                # Soft delete existing records
+                                RegionalAdminPanchayat.objects.filter(
+                                    regional_admin=regional_admin
+                                ).update(
+                                    status=False,
+                                    updated_on=datetime.now(),
+                                    updated_by=user_data.get('CreatedBy') or user_id
+                                )
                                     
-                                    # Insert new records
-                                    for panchayat_id in panchayat_list:
-                                        panchayat = Panchayat.objects.filter(id=panchayat_id).first()
-                                        if panchayat:
-                                            RegionalAdminPanchayat.objects.create(
-                                                regional_admin=regional_admin,
-                                                panchayat_id=panchayat_id,
-                                                panchayat_name=panchayat.name,
-                                                status=True,
-                                                created_on=datetime.now(),
-                                                created_by=user_data.get('CreatedBy') or user_id
-                                            )
+                                # Insert new records
+                                for panchayat_id in panchayat_list:
+                                    panchayat = Panchayat.objects.filter(id=panchayat_id).first()
+                                    if panchayat:
+                                        RegionalAdminPanchayat.objects.create(
+                                            regional_admin=regional_admin,
+                                            panchayat_id=panchayat_id,
+                                            panchayat_name=panchayat.name,
+                                            status=True,
+                                            created_on=datetime.now(),
+                                            created_by=user_data.get('CreatedBy') or user_id
+                                        )
                         
-                        # Handle ListOfVidhanSabhaIds for RegionalAdmin
-                        list_of_vidhan_sabha_ids = user_data.get('ListOfVidhanSabhaIds')
-                        if list_of_vidhan_sabha_ids:
-                            if isinstance(list_of_vidhan_sabha_ids, str):
-                                vidhan_sabha_list = [int(x.strip()) for x in list_of_vidhan_sabha_ids.split(',') if x.strip()]
-                            else:
-                                vidhan_sabha_list = list_of_vidhan_sabha_ids if isinstance(list_of_vidhan_sabha_ids, list) else []
-                            
-                            if vidhan_sabha_list:
-                                regional_admin = RegionalAdmin.objects.filter(user=user).first()
-                                if regional_admin:
-                                    # Soft delete existing records
-                                    RegionalAdminVidhanSabha.objects.filter(
-                                        regional_admin=regional_admin
-                                    ).update(
-                                        status=False,
-                                        updated_on=datetime.now(),
-                                        updated_by=user_data.get('CreatedBy') or user_id
-                                    )
+                        # Vidhan Sabha assignments come in through the existing
+                        # VidhanSabhaId field (single id or comma-separated list).
+                        # Contract:
+                        #   key absent or null -> leave assignments untouched
+                        #   ""                 -> clear every assignment
+                        #   "288,289"          -> replace with exactly these
+                        raw_vidhan_sabha = user_data.get('VidhanSabhaId')
+                        if user_data.get('ListOfVidhanSabhaIds') is not None:
+                            raw_vidhan_sabha = user_data.get('ListOfVidhanSabhaIds')
+                        if raw_vidhan_sabha is not None:
+                            vidhan_sabha_list = parse_id_list(raw_vidhan_sabha)
+
+                            regional_admin = RegionalAdmin.objects.filter(user=user).first()
+                            if regional_admin:
+                                # Soft delete existing records
+                                RegionalAdminVidhanSabha.objects.filter(
+                                    regional_admin=regional_admin
+                                ).update(
+                                    status=False,
+                                    updated_on=datetime.now(),
+                                    updated_by=user_data.get('CreatedBy') or user_id
+                                )
                                     
-                                    # Insert new records
-                                    for vidhan_sabha_id in vidhan_sabha_list:
-                                        vidhan_sabha = VidhanSabha.objects.filter(id=vidhan_sabha_id).first()
-                                        if vidhan_sabha:
-                                            RegionalAdminVidhanSabha.objects.create(
-                                                regional_admin=regional_admin,
-                                                vidhan_sabha_id=vidhan_sabha_id,
-                                                vidhan_sabha_name=vidhan_sabha.name,
-                                                status=True,
-                                                created_on=datetime.now(),
-                                                created_by=user_data.get('CreatedBy') or user_id
-                                            )
-                                    # Note: single FKs removed - assignments live in the tables
+                                # Insert new records
+                                for vidhan_sabha_id in vidhan_sabha_list:
+                                    vidhan_sabha = VidhanSabha.objects.filter(id=vidhan_sabha_id).first()
+                                    if vidhan_sabha:
+                                        RegionalAdminVidhanSabha.objects.create(
+                                            regional_admin=regional_admin,
+                                            vidhan_sabha_id=vidhan_sabha_id,
+                                            vidhan_sabha_name=vidhan_sabha.name,
+                                            status=True,
+                                            created_on=datetime.now(),
+                                            created_by=user_data.get('CreatedBy') or user_id
+                                        )
+                                # Note: single FKs removed - assignments live in the tables
                 
                 elif user_type == 3:  # Teacher
                     teacher = Teacher.objects.filter(user=user).first()
@@ -1921,12 +1929,6 @@ def save_user(user_data):
                 date_of_birth = user_data.get('DateOfBirth', '')
                 gender = user_data.get('Gender', '')
                 
-                enrolment_roll_id = f"{name[:2]}-{date_of_birth}-"
-                if gender and gender.lower() == 'male':
-                    enrolment_roll_id += 'M'
-                else:
-                    enrolment_roll_id += 'F'
-                
                 # Get role
                 role = None
                 user_type = int(user_data.get('Type'))
@@ -1934,6 +1936,22 @@ def save_user(user_data):
                 # Try to get role by RoleId first (from .NET request)
                 if user_type:
                     role = Role.objects.filter(id=user_type).first()
+
+                # Enrolment roll id: Regional Admins (Type 2) get the same
+                # 'RA-DIRECT-NNN' series used by generate_mysql_import.py - the
+                # name/DOB formula below is a student convention and produced
+                # meaningless values (and NULLs) for staff accounts.
+                explicit_roll = user_data.get('EnrolmentRollId')
+                if explicit_roll:
+                    enrolment_roll_id = explicit_roll
+                elif user_type == 2:
+                    enrolment_roll_id = generate_ra_enrolment_roll_id()
+                else:
+                    enrolment_roll_id = f"{name[:2]}-{date_of_birth}-"
+                    if gender and gender.lower() == 'male':
+                        enrolment_roll_id += 'M'
+                    else:
+                        enrolment_roll_id += 'F'
                     
                 # Create user with role
                 picture_data = user_data.get('Picture')
@@ -2006,14 +2024,10 @@ def save_user(user_data):
                     )
                     regional_admin.save()
                     
-                    # Handle ListOfPanchayatIds for RegionalAdmin
-                    list_of_panchayat_ids = user_data.get('ListOfPanchayatIds')
-                    if list_of_panchayat_ids:
-                        if isinstance(list_of_panchayat_ids, str):
-                            panchayat_list = [int(x.strip()) for x in list_of_panchayat_ids.split(',') if x.strip()]
-                        else:
-                            panchayat_list = list_of_panchayat_ids if isinstance(list_of_panchayat_ids, list) else []
-                        
+                    # Panchayat assignments arrive as a comma-separated list in
+                    # ListOfPanchayatIds.
+                    panchayat_list = parse_id_list(user_data.get('ListOfPanchayatIds'))
+                    if panchayat_list:
                         for panchayat_id in panchayat_list:
                             panchayat = Panchayat.objects.filter(id=panchayat_id).first()
                             if panchayat:
@@ -2026,14 +2040,14 @@ def save_user(user_data):
                                     created_by=user_data.get('CreatedBy') or 1
                                 )
                     
-                    # Handle ListOfVidhanSabhaIds for RegionalAdmin
-                    list_of_vidhan_sabha_ids = user_data.get('ListOfVidhanSabhaIds')
-                    if list_of_vidhan_sabha_ids:
-                        if isinstance(list_of_vidhan_sabha_ids, str):
-                            vidhan_sabha_list = [int(x.strip()) for x in list_of_vidhan_sabha_ids.split(',') if x.strip()]
-                        else:
-                            vidhan_sabha_list = list_of_vidhan_sabha_ids if isinstance(list_of_vidhan_sabha_ids, list) else []
-                        
+                    # Vidhan Sabha assignments arrive in the existing VidhanSabhaId
+                    # field - one id ("288") or a comma-separated list
+                    # ("288,289,290"). ListOfVidhanSabhaIds is still honoured for
+                    # clients that send it.
+                    vidhan_sabha_list = parse_id_list(
+                        user_data.get('ListOfVidhanSabhaIds') or user_data.get('VidhanSabhaId')
+                    )
+                    if vidhan_sabha_list:
                         for vidhan_sabha_id in vidhan_sabha_list:
                             vidhan_sabha = VidhanSabha.objects.filter(id=vidhan_sabha_id).first()
                             if vidhan_sabha:
@@ -2131,6 +2145,11 @@ def get_user_by_id(user_id):
             'centerName': None,
             'listOfPanchayat': None,
             'listOfVidhanSabha': None,
+            # always present, mirroring login_user()'s contract
+            'listOfVidhanSabhaId': None,
+            'regionalAdminVidhanSabha': None,
+            'listOfPanchayatId': None,
+            'regionalAdminPanchayat': None,
             'listOfCenters': None,
             'center': None,
             'assignedDate': None,
@@ -2237,6 +2256,21 @@ def get_user_by_id(user_id):
                     ),
                     'listOfPanchayat': list_of_panchayat,
                     'listOfVidhanSabha': list_of_vidhan_sabha,
+                    # Parity with login_user()'s payload. The mobile app reads these
+                    # exact keys after login, but this endpoint only returned
+                    # listOfVidhanSabha / listOfPanchayat - so every edit screen that
+                    # loads the user through GetUserById saw the assignments as null
+                    # even though the rows were saved.
+                    'listOfVidhanSabhaId': [
+                        rav.vidhan_sabha_id for rav in regional_admin_vidhan_sabhas
+                        if rav.vidhan_sabha_id
+                    ],
+                    'regionalAdminVidhanSabha': list_of_vidhan_sabha,
+                    'listOfPanchayatId': [
+                        rap.panchayat_id for rap in regional_admin_panchayats
+                        if rap.panchayat_id
+                    ],
+                    'regionalAdminPanchayat': list_of_panchayat,
                     'listOfCenters': list_of_centers,
                     'assignedDate': None
                 })
@@ -2779,7 +2813,7 @@ def get_class_current_status(center_id, teacher_id):
         for h in holidays:
             result['data'].append({
                 'name': h.name,
-                'type': 1,
+                'type': 4,
                 'startedDate': h.start_date,
                 'endDate': h.end_date
             })
@@ -2795,7 +2829,7 @@ def get_class_current_status(center_id, teacher_id):
         for c in cancels:
             result['data'].append({
                 'name': c.reason,
-                'type': 2,
+                'type': 3,
                 'startedDate': c.starting_date,
                 'endDate': c.ending_date
             })
@@ -2810,7 +2844,7 @@ def get_class_current_status(center_id, teacher_id):
         if active_class:
             result['data'].append({
                 'name': 'Class is going on',
-                'type': 3,
+                'type': 1,
                 'subStatus': active_class.sub_status,
                 'id': active_class.id,
                 'startedDate': active_class.started_date,
@@ -2828,7 +2862,7 @@ def get_class_current_status(center_id, teacher_id):
         if completed_class:
             result['data'].append({
                 'name': 'Class Ended',
-                'type': 4,
+                'type': 2,
                 'id': completed_class.id,
                 'startedDate': completed_class.started_date,
                 'endDate': completed_class.end_date
@@ -4338,6 +4372,8 @@ def save_student(student_data):
                 last_class = student.last_class
                 active_class_status = student.active_class_status
                 counter = student.counter
+                original_center_id = student.center_id
+                original_grade = student.grade
                 
                 # Update fields from request data
                 if student_data.get('FullName') is not None:
@@ -4407,6 +4443,20 @@ def save_student(student_data):
                 student.updated_by = student_data.get('CreatedBy')
                 student.manual_attendance = 0
                 
+                # Roll number upkeep, mirroring the web app: fill rows that never got
+                # one and re-number students moved to another centre or class.
+                if not student.roll_number or (
+                        student.center_id != original_center_id or student.grade != original_grade):
+                    student.roll_number = generate_student_roll_number(
+                        district_id=student.district_id,
+                        vidhan_sabha_id=student.vidhan_sabha_id,
+                        panchayat_id=student.panchayat_id,
+                        village_id=student.village_id,
+                        center_id=student.center_id,
+                        grade=student.grade,
+                        exclude_pk=student.id,
+                    )
+                
                 student.save()
                 
             except Student.DoesNotExist:
@@ -4416,8 +4466,20 @@ def save_student(student_data):
             # Insert new student
             enrollment_id = student_data.get('EnrollmentId') or str(uuid.uuid4())
             
+            # Roll number starts at 1 within district + vidhan sabha + panchayat +
+            # village + centre + class. An explicit RollNumber still wins.
+            roll_number = student_data.get('RollNumber') or generate_student_roll_number(
+                district_id=student_data.get('DistrictId'),
+                vidhan_sabha_id=student_data.get('VidhanSabhaId'),
+                panchayat_id=student_data.get('PanchayatId'),
+                village_id=student_data.get('VillageId'),
+                center_id=student_data.get('CenterId'),
+                grade=student_data.get('Grade'),
+            )
+            
             student = Student(
                 enrollment_id=enrollment_id,
+                roll_number=roll_number,
                 full_name=student_data.get('FullName'),
                 mother_name=student_data.get('MotherName'),
                 father_name=student_data.get('FatherName'),

@@ -130,6 +130,10 @@ class GenerateCenterAttendanceTokenView(TokenObtainPairView):
 class CenterAttendanceView(APIView):
     """Returns center attendance data for a specific date and optional center."""
     permission_classes = [AllowAny]
+    # These app tokens are issued for DummyUser (no matching APIS.User row on
+    # every environment), so DRF must not try to resolve a database user here.
+    # The Bearer token is validated explicitly inside post().
+    authentication_classes = []
     
     def post(self, request):
         # Validate JWT token from Authorization header
@@ -167,6 +171,9 @@ class CenterAttendanceView(APIView):
 class ExternalCenterDataView(APIView):
     """Returns all center data for external applications."""
     permission_classes = [AllowAny]
+    # Same as CenterAttendanceView: validate the app token manually, never
+    # resolve a database user from the token's user_id claim.
+    authentication_classes = []
 
     def post(self, request):
         logger.info("ExternalCenterDataView : Post : Started")

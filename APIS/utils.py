@@ -5,6 +5,8 @@ import pandas as pd
 from datetime import datetime
 from .models import *
 from django.urls import resolve
+from django.db import transaction
+from django.db.models import Max
 from rest_framework import status
 
 import hashlib
@@ -322,15 +324,20 @@ def log_activity(request, module, action, record_id=None, data=None):
             import json
             data = json.dumps(data)
         
-        ActivityLog.objects.create(
-            user_id=user_id,
-            module=module,
-            action=action,
-            record_id=record_id or 0,
-            data=data,
-            ip_address=ip_address,
-            created_on=datetime.now()
-        )
+        # Own savepoint on purpose: when the caller is inside transaction.atomic(),
+        # a failed audit INSERT would otherwise mark the connection for rollback and
+        # the caller's NEXT query raises the misleading
+        # "An error occurred in the current transaction..." instead of the real error.
+        with transaction.atomic():
+            ActivityLog.objects.create(
+                user_id=user_id,
+                module=module,
+                action=action,
+                record_id=record_id or 0,
+                data=data,
+                ip_address=ip_address,
+                created_on=datetime.now()
+            )
         logger.info(f"Activity logged: User {user_id} {action} {module} {record_id}")
     except Exception as e:
         logger.error(f"Failed to log activity: {str(e)}")
@@ -348,15 +355,87 @@ def log_activity_before(request, module, action, **kwargs):
             **kwargs
         }
         
-        ActivityLog.objects.create(
-            user_id=user_id,
-            module=module,
-            action=f"{action}_STARTED",
-            record_id=0,
-            data=json.dumps(data),
-            ip_address=ip_address,
-            created_on=datetime.now()
-        )
+        # See log_activity: savepoint keeps a failed audit write from poisoning
+        # the caller's transaction.
+        with transaction.atomic():
+            ActivityLog.objects.create(
+                user_id=user_id,
+                module=module,
+                action=f"{action}_STARTED",
+                record_id=0,
+                data=json.dumps(data),
+                ip_address=ip_address,
+                created_on=datetime.now()
+            )
         logger.info(f"Activity started: User {user_id} {action} {module}")
     except Exception as e:
         logger.error(f"Failed to log activity start: {str(e)}")
+
+
+def generate_ra_enrolment_roll_id():
+    """
+    Return the next free 'RA-DIRECT-NNN' enrolment roll id for a Regional Admin.
+
+    Mirrors the series written by generate_mysql_import.py, which assigns
+    RA-DIRECT-001, RA-DIRECT-002, ... to imported Regional Admins, so rows
+    created through the webapp / mobile API stay consistent with imported ones.
+    Users.EnrolmentRollId is UNIQUE, so the candidate is re-checked against the
+    table and bumped until it is free.
+    """
+    prefix = 'RA-DIRECT-'
+    pattern = re.compile(r'^RA-DIRECT-(\d+)$')
+    highest = 0
+    for existing in User.objects.filter(
+            enrolment_roll_id__startswith=prefix).values_list('enrolment_roll_id', flat=True):
+        match = pattern.match(existing or '')
+        if match:
+            highest = max(highest, int(match.group(1)))
+    candidate = f'{prefix}{highest + 1:03d}'
+    while User.objects.filter(enrolment_roll_id=candidate).exists():
+        highest += 1
+        candidate = f'{prefix}{highest + 1:03d}'
+    return candidate
+
+
+def generate_student_roll_number(district_id=None, vidhan_sabha_id=None, panchayat_id=None,
+                                 village_id=None, center_id=None, grade=None, exclude_pk=None):
+    """
+    Next roll number for a student, numbered from 1 within one scope:
+    district + vidhan sabha + panchayat + village + center + class (Grade).
+
+    The first student of a centre/class gets 1, the next 2, and so on. Rows that
+    already carry a number in the same scope decide the next value, so re-saving
+    an existing student never renumbers its neighbours. Deactivated students are
+    counted as well, which keeps a number from being reused by a new admission.
+    """
+    scope = Student.objects.filter(
+        district_id=district_id,
+        vidhan_sabha_id=vidhan_sabha_id,
+        panchayat_id=panchayat_id,
+        village_id=village_id,
+        center_id=center_id,
+        grade=grade,
+    )
+    if exclude_pk:
+        scope = scope.exclude(pk=exclude_pk)
+    highest = scope.aggregate(Max('roll_number'))['roll_number__max'] or 0
+    return int(highest) + 1
+
+
+def parse_id_list(value):
+    """
+    Normalise an id carrier into a list of positive ints.
+
+    Accepts 288, "288", "288,289,290", [288, "289"], None and "" - the last two
+    return an empty list, so callers can tell "nothing selected" from garbage by
+    checking the raw value before parsing.
+    """
+    if value in (None, ''):
+        return []
+    items = value if isinstance(value, (list, tuple)) else str(value).split(',')
+    ids = []
+    for item in items:
+        text = str(item).strip()
+        if text.isdigit() and int(text) > 0:
+            ids.append(int(text))
+    return ids

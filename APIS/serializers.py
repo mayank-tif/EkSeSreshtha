@@ -1056,15 +1056,19 @@ class UserSaveSuperAdminRequestSerializer(RequestSerializer):
 
 
 class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
+    # VidhanSabhaId is validated in validate() because it now also accepts a
+    # comma-separated list, which the generic single-pk check cannot handle.
     foreign_key_fields = {
-        "VidhanSabhaId": VidhanSabha,
         "DistrictId": District,
         "VillageId": Village,
     }
     
     DeviceId = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     Education = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    VidhanSabhaId = serializers.IntegerField(required=False, allow_null=True)
+    # Carries a single id ("288") or several ("288,289,290") - Regional Admins
+    # may own multiple vidhan sabhas, so the existing field is reused instead of
+    # adding a new key to the mobile contract.
+    VidhanSabhaId = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     DistrictId = serializers.IntegerField(required=False, allow_null=True)
     VillageId = serializers.IntegerField(required=False, allow_null=True)
     PanchayatId = serializers.IntegerField(required=False, allow_null=True)
@@ -1076,6 +1080,22 @@ class UserSaveUserRequestSerializer(UserSaveSuperAdminRequestSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+
+        # VidhanSabhaId: single id or comma-separated list. Empty/None is left
+        # alone (means "not provided"); anything else must resolve to real rows.
+        raw_vidhan_sabha = attrs.get('VidhanSabhaId')
+        if raw_vidhan_sabha not in (None, ''):
+            vidhan_sabha_ids = [
+                int(x.strip()) for x in str(raw_vidhan_sabha).split(',') if str(x).strip().isdigit()
+            ]
+            existing = set(
+                VidhanSabha.objects.filter(pk__in=vidhan_sabha_ids).values_list('id', flat=True)
+            )
+            missing = [vid for vid in vidhan_sabha_ids if vid not in existing]
+            if missing:
+                raise serializers.ValidationError({
+                    'VidhanSabhaId': f'VidhanSabha ids do not exist: {missing}'
+                })
         
         # RegionalAdmin (Type=2) requires ListOfPanchayatIds
         if attrs.get('Type') == 2:
