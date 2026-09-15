@@ -6231,3 +6231,85 @@ def get_center_attendance_data(center_id, attendance_date):
     except Exception as e:
         logger.error(f"CenterAttendanceHelper : GetCenterAttendanceData : {str(e)}")
         raise e
+    
+    
+# Add to helper.py
+
+def get_external_center_data(center_id=None):
+    """Get center data for external applications using ORM"""
+    logger.info(f"ExternalCenterHelper : GetExternalCenterData : Started")
+
+    try:
+        queryset = Center.objects.select_related(
+            'district', 'vidhan_sabha', 'panchayat', 'village', 'location_verified_by'
+        ).order_by('-id')
+
+        if center_id:
+            queryset = queryset.filter(id=center_id)
+
+        centers = list(queryset)
+
+        # Teacher / Regional Admin names (User.id -> name)
+        staff_ids = {c.assigned_teachers for c in centers if c.assigned_teachers}
+        staff_ids |= {c.assigned_regional_admin for c in centers if c.assigned_regional_admin}
+        staff_names = dict(
+            User.objects.filter(id__in=staff_ids).values_list('id', 'name')
+        ) if staff_ids else {}
+
+        # Active students per center: id + name only
+        center_ids = [c.id for c in centers]
+        students_by_center = {}
+        if center_ids:
+            for student in (
+                Student.objects
+                .filter(center_id__in=center_ids, status=True)
+                .order_by('full_name', 'id')
+                .values_list('center_id', 'id', 'full_name')
+            ):
+                students_by_center.setdefault(student[0], []).append({
+                    'student_id': student[1],
+                    'student_name': student[2],
+                })
+
+        result = []
+        for center in centers:
+            students = students_by_center.get(center.id, [])
+            result.append({
+                'center': {
+                    'center_id': center.id,
+                    'center_guid_id': center.center_guid_id,
+                    'center_name': center.center_name,
+                    'district': center.district.name if center.district else None,
+                    'vidhan_sabha': center.vidhan_sabha.name if center.vidhan_sabha else None,
+                    'panchayat': center.panchayat.name if center.panchayat else None,
+                    'village': center.village.name if center.village else None,
+                    'latitude': center.latitude,
+                    'longitude': center.longitude,
+                    'address': center.address,
+                    'status': center.status,
+                    'location_status': center.location_status,
+                },
+                'teacher': {
+                    'teacher_id': center.assigned_teachers,
+                    'teacher_name': staff_names.get(center.assigned_teachers),
+                },
+                'regional_admin': {
+                    'regional_admin_id': center.assigned_regional_admin,
+                    'regional_admin_name': staff_names.get(center.assigned_regional_admin),
+                },
+                'total_students': len(students),
+                'students': students,
+            })
+
+        logger.info(
+            f"ExternalCenterHelper : GetExternalCenterData : End - Found {len(result)} centers, "
+            f"{sum(r['total_students'] for r in result)} students"
+        )
+
+        if center_id:
+            return result[0] if result else None
+        return result
+
+    except Exception as e:
+        logger.error(f"ExternalCenterHelper : GetExternalCenterData : {str(e)}")
+        raise e

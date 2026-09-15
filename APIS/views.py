@@ -161,6 +161,64 @@ class CenterAttendanceView(APIView):
             return Response({"message": "No attendance data found."}, status=status.HTTP_404_NOT_FOUND)
         
         return Response(data, status=status.HTTP_200_OK)
+    
+
+
+class ExternalCenterDataView(APIView):
+    """Returns all center data for external applications."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        logger.info("ExternalCenterDataView : Post : Started")
+
+        # Validate JWT token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return Response(
+                {"message": "JWT token not provided or invalid."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        token = auth_header.split(' ')[1]
+        jwt_authenticator = JWTAuthentication()
+        try:
+            jwt_authenticator.get_validated_token(token)
+        except Exception as e:
+            return Response(
+                {"message": "Invalid or expired token."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Validate request body
+        serializer = api_serializers.ExternalCenterQuerySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        center_id = serializer.validated_data.get('center_id')
+
+        # Get center data
+        data = get_external_center_data(center_id)
+
+        if data is None:
+            return Response(
+                {"message": "No center data found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Serialize response
+        if center_id:
+            response_serializer = api_serializers.ExternalCenterDataSerializer(data)
+        else:
+            response_serializer = api_serializers.ExternalCenterDataSerializer(data, many=True)
+
+        logger.info(f"ExternalCenterDataView : Post : Returning data for center_id={center_id}")
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_200_OK
+        )
 
 
 class ModelSaveView(DotNetAPIView):

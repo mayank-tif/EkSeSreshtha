@@ -5,6 +5,7 @@ urlpatterns = [
     path("generate-app-token/", GenerateAppTokenView.as_view(), name="generate-app-token"),
     path("generate-center-attendance-token/", GenerateCenterAttendanceTokenView.as_view(), name="generate-center-attendance-token"),
     path("center-attendance/", CenterAttendanceView.as_view(), name="center-attendance"),
+    path('external/centers/', ExternalCenterDataView.as_view(), name='external-center-data'),
     
     path('Announcement/SaveAnnouncement', AnnouncementSaveannouncementPostView.as_view(), name='announcement-saveannouncement-post'),
     path('Announcement/GetAnnouncement', AnnouncementGetannouncementGetView.as_view(), name='announcement-getannouncement-get'),

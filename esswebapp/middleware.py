@@ -129,11 +129,12 @@ class DomainURIRestrictionMiddleware:
 
 class AttendanceIPRestrictionMiddleware:
     """
-    Restricts the Center Attendance endpoints to a single trusted client IP.
+    Restricts the Center Attendance / external center-data endpoints to trusted client IPs.
 
     Applies ONLY to:
       - POST /api/generate-center-attendance-token/
       - POST /api/center-attendance/
+      - POST /api/external/centers/
 
     Requests from any other source receive 403 with a JSON body.
     The allowed IP is configured via settings.ATTENDANCE_IP_RESTRICTIONS.
@@ -144,6 +145,7 @@ class AttendanceIPRestrictionMiddleware:
     PROTECTED_PATHS = frozenset({
         '/api/generate-center-attendance-token',
         '/api/center-attendance',
+        '/api/external/centers',
     })
 
     def __init__(self, get_response):

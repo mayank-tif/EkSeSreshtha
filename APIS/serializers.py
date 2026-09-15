@@ -1483,3 +1483,48 @@ class RegionalAdminDtoSerializer(serializers.Serializer):
     vidhanSabhaName = serializers.CharField(source='vidhan_sabha__name', allow_null=True, required=False)
     villageName = serializers.CharField(source='village__name', allow_null=True, required=False)
     panchayatName = serializers.CharField(source='panchayat__name', allow_null=True, required=False)
+    
+
+class ExternalCenterQuerySerializer(serializers.Serializer):
+    center_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class ExternalCenterStudentSerializer(serializers.Serializer):
+    """Minimal student identity exposed to external apps"""
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField(allow_null=True, required=False)
+
+
+class ExternalCenterInfoSerializer(serializers.Serializer):
+    """Nested 'center' object"""
+    center_id = serializers.IntegerField()
+    center_guid_id = serializers.CharField(allow_null=True, required=False)
+    center_name = serializers.CharField(allow_null=True, required=False)
+    district = serializers.CharField(allow_null=True, required=False)
+    vidhan_sabha = serializers.CharField(allow_null=True, required=False)
+    panchayat = serializers.CharField(allow_null=True, required=False)
+    village = serializers.CharField(allow_null=True, required=False)
+    latitude = serializers.DecimalField(max_digits=10, decimal_places=7, allow_null=True, required=False)
+    longitude = serializers.DecimalField(max_digits=10, decimal_places=7, allow_null=True, required=False)
+    address = serializers.CharField(allow_null=True, required=False)
+    status = serializers.BooleanField(allow_null=True, required=False)
+    location_status = serializers.CharField(allow_null=True, required=False)
+
+
+class ExternalCenterTeacherSerializer(serializers.Serializer):
+    teacher_id = serializers.IntegerField(allow_null=True, required=False)
+    teacher_name = serializers.CharField(allow_null=True, required=False)
+
+
+class ExternalCenterRegionalAdminSerializer(serializers.Serializer):
+    regional_admin_id = serializers.IntegerField(allow_null=True, required=False)
+    regional_admin_name = serializers.CharField(allow_null=True, required=False)
+
+
+class ExternalCenterDataSerializer(serializers.Serializer):
+    """One center: nested center details, teacher, regional admin and its students"""
+    center = ExternalCenterInfoSerializer()
+    teacher = ExternalCenterTeacherSerializer(allow_null=True, required=False)
+    regional_admin = ExternalCenterRegionalAdminSerializer(allow_null=True, required=False)
+    total_students = serializers.IntegerField(required=False)
+    students = ExternalCenterStudentSerializer(many=True, required=False)
