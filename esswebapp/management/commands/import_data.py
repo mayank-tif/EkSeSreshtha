@@ -20,7 +20,7 @@ from django.utils import timezone
 from APIS.models import (
     District, VidhanSabha, Panchayat, Village, Center,
     School, Teacher, RegionalAdmin, Student, User, Role,
-    CenterAssignUser
+    CenterAssignUser, RegionalAdminPanchayat, RegionalAdminVidhanSabha
 )
 
 
@@ -256,6 +256,7 @@ class Command(BaseCommand):
                 info = self.coordinators.setdefault(coordinator_name, {
                     'phone': '',
                     'areas': set(),
+                    'panchayats': set(),
                     'legacy_names': set(),
                     'rows': 0,
                 })
@@ -271,6 +272,8 @@ class Command(BaseCommand):
                     info['legacy_names'].add(legacy_coordinator_name)
                 if district_name or constituency_name:
                     info['areas'].add((district_name, constituency_name))
+                if district_name and constituency_name and panchayat_name:
+                    info['panchayats'].add((district_name, constituency_name, panchayat_name))
 
             if district_name:
                 self.district_names.add(district_name)
@@ -646,12 +649,8 @@ class Command(BaseCommand):
                 raise CommandError(
                     f"District '{district_name}' not found for coordinator '{name}'"
                 )
-            primary_vs = self.vidhan_sabha_map.get(vs_names[0])
-            if primary_vs is None:
-                raise CommandError(
-                    f"Vidhan Sabha '{vs_names[0]}' not found for coordinator '{name}'"
-                )
-
+            # No 'primary' Vidhan Sabha - all assignments go to RegionalAdminVidhanSabha;
+            # the legacy single FKs are removed.
             # --- User (phone number straight from the sheet) ---
             user = User.objects.filter(phone_number=phone).first()
             created = user is None
@@ -698,10 +697,58 @@ class Command(BaseCommand):
                 }
             )
             ra.district = district
-            ra.vidhan_sabha = primary_vs
             ra.contact = phone
             ra.status = True
             ra.save()
+
+            # --- RegionalAdminVidhanSabha rows (one per constituency the coordinator covers) ---
+            now = timezone.now()
+            vs_keep_ids = []
+            for vs_name in vs_names:
+                vs_obj = self.vidhan_sabha_map.get(vs_name)
+                if vs_obj is None:
+                    self.stdout.write(self.style.WARNING(
+                        f"  Vidhan Sabha '{vs_name}' not found for coordinator '{name}' - skipped"
+                    ))
+                    continue
+                vs_row, _ = RegionalAdminVidhanSabha.objects.get_or_create(
+                    regional_admin=ra,
+                    vidhan_sabha=vs_obj,
+                    defaults={
+                        'vidhan_sabha_name': vs_obj.name,
+                        'status': True,
+                        'created_by': 1,
+                        'created_on': now,
+                    }
+                )
+                vs_keep_ids.append(vs_row.id)
+            RegionalAdminVidhanSabha.objects.filter(regional_admin=ra).exclude(
+                id__in=vs_keep_ids
+            ).update(status=False, updated_by=1, updated_on=now)
+
+            # --- RegionalAdminPanchayat rows (one per panchayat where their centers sit) ---
+            pan_keep_ids = []
+            for (pan_dist, pan_cons, pan_name) in sorted(info.get('panchayats', set())):
+                pan_obj = self.panchayat_map.get((pan_name, pan_dist, pan_cons))
+                if pan_obj is None:
+                    self.stdout.write(self.style.WARNING(
+                        f"  Panchayat '{pan_name}' ({pan_dist}/{pan_cons}) not found for coordinator '{name}' - skipped"
+                    ))
+                    continue
+                pan_row, _ = RegionalAdminPanchayat.objects.get_or_create(
+                    regional_admin=ra,
+                    panchayat=pan_obj,
+                    defaults={
+                        'panchayat_name': pan_obj.name,
+                        'status': True,
+                        'created_by': 1,
+                        'created_on': now,
+                    }
+                )
+                pan_keep_ids.append(pan_row.id)
+            RegionalAdminPanchayat.objects.filter(regional_admin=ra).exclude(
+                id__in=pan_keep_ids
+            ).update(status=False, updated_by=1, updated_on=now)
 
             self.coord_ra_user[name] = user
             if created:
@@ -710,9 +757,10 @@ class Command(BaseCommand):
             vs_note = ''
             if len(vs_names) > 1:
                 vs_note = f' (covers {len(vs_names)} constituencies: {vs_names}; primary VS: {vs_names[0]})'
+            pan_note = f'; {len(pan_keep_ids)} panchayat(s)' if pan_keep_ids else ''
             self.stdout.write(
                 f"  RA: {name} | phone {phone} | {district_name} / "
-                f"{vs_names[0]}{' | NEW' if created else ' | updated'}{vs_note}"
+                f"{vs_names[0]}{' | NEW' if created else ' | updated'}{vs_note}{pan_note}"
             )
 
         self.stdout.write(self.style.SUCCESS(

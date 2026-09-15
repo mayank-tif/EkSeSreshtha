@@ -129,6 +129,8 @@ def main():
     centers = {}                             # name -> area dict
     schools = set()
     coordinators = {}                        # name -> phone
+    coord_panchayats = defaultdict(set)      # coordinator -> {(district, constituency, panchayat)}
+    coord_vidhan_sabhas = defaultdict(set)   # coordinator -> {(district, constituency)}
     teachers = {}                            # mobile -> teacher dict
     students = []
 
@@ -183,6 +185,10 @@ def main():
                 panchayat_area[pan].add((dist, cons))
             if vil:
                 village_area[vil].add((dist, cons, pan))
+        if coord and dist and cons:
+            coord_vidhan_sabhas[coord].add((dist, cons))
+            if pan:
+                coord_panchayats[coord].add((dist, cons, pan))
         if s_sch:
             schools.add(s_sch)
         if cen and cen not in centers:
@@ -236,6 +242,7 @@ def main():
     w('DELETE FROM CenterAssignUser;')
     w('DELETE FROM StudentAttendance;')
     w('DELETE FROM RegionalAdminPanchayat;')
+    w('DELETE FROM RegionalAdminVidhanSabha;')
     w('DELETE FROM Student;')
     w('DELETE FROM Teacher;')
     w('DELETE FROM RegionalAdmin;')
@@ -335,7 +342,8 @@ def main():
     w('')
 
     # ---- 7. RegionalAdmin rows ----
-    w('-- 7) RegionalAdmin rows (district + vidhan sabha matched via column A areas)')
+    w('-- 7) RegionalAdmin rows (district matched via column A areas; VidhanSabhaId/PanchayatId')
+    w('--    single FKs removed - assignments live in RegionalAdminVidhanSabha / RegionalAdminPanchayat)')
     # derive each coordinator's area from centers
     coord_area = {}
     for c_name, c in centers.items():
@@ -345,10 +353,42 @@ def main():
         if not d:
             continue
         w(
-            f"INSERT INTO RegionalAdmin (RegionalAdminGuidId, UserId, DistrictId, VidhanSabhaId, Contact, AssignedRegionalAdminStatus, Status, CreatedBy, CreatedOn) "
-            f"SELECT {sqn(guid('RA', name))}, {USER_ID(phone)}, {DIST_ID(d)}, {VS_ID(c)}, {sqn(phone)}, 1, 1, {CREATED_BY}, NOW() FROM DUAL "
+            f"INSERT INTO RegionalAdmin (RegionalAdminGuidId, UserId, DistrictId, Contact, AssignedRegionalAdminStatus, Status, CreatedBy, CreatedOn) "
+            f"SELECT {sqn(guid('RA', name))}, {USER_ID(phone)}, {DIST_ID(d)}, {sqn(phone)}, 1, 1, {CREATED_BY}, NOW() FROM DUAL "
             f"WHERE NOT EXISTS (SELECT 1 FROM RegionalAdmin WHERE UserId = {USER_ID(phone)});"
         )
+    w('')
+
+    # ---- 7b. RegionalAdminVidhanSabha assignments (RA can cover multiple constituencies) ----
+    w('-- 7b) RegionalAdminVidhanSabha rows (all constituencies per coordinator)')
+    vs_rows_added = 0
+    for name in sorted(coord_vidhan_sabhas):
+        phone = coordinators.get(name)
+        if not phone:
+            continue
+        for (d, c) in sorted(coord_vidhan_sabhas[name]):
+            w(
+                f"INSERT INTO RegionalAdminVidhanSabha (RegionalAdminId, VidhanSabhaId, VidhanSabhaName, Status, CreatedBy, CreatedOn) "
+                f"SELECT (SELECT Id FROM RegionalAdmin WHERE UserId = {USER_ID(phone)} LIMIT 1), {VS_ID(c)}, {sqn(c)}, 1, {CREATED_BY}, NOW() FROM DUAL "
+                f"WHERE NOT EXISTS (SELECT 1 FROM RegionalAdminVidhanSabha WHERE RegionalAdminId = (SELECT Id FROM RegionalAdmin WHERE UserId = {USER_ID(phone)} LIMIT 1) AND VidhanSabhaId = {VS_ID(c)});"
+            )
+            vs_rows_added += 1
+    w('')
+
+    # ---- 7c. RegionalAdminPanchayat assignments (all panchayats per coordinator) ----
+    w('-- 7c) RegionalAdminPanchayat rows (all panchayats per coordinator)')
+    pan_rows_added = 0
+    for name in sorted(coord_panchayats):
+        phone = coordinators.get(name)
+        if not phone:
+            continue
+        for (d, c, p) in sorted(coord_panchayats[name]):
+            w(
+                f"INSERT INTO RegionalAdminPanchayat (RegionalAdminId, PanchayatId, PanchayatName, Status, CreatedBy, CreatedOn) "
+                f"SELECT (SELECT Id FROM RegionalAdmin WHERE UserId = {USER_ID(phone)} LIMIT 1), {PAN_ID(p, d)}, {sqn(p)}, 1, {CREATED_BY}, NOW() FROM DUAL "
+                f"WHERE NOT EXISTS (SELECT 1 FROM RegionalAdminPanchayat WHERE RegionalAdminId = (SELECT Id FROM RegionalAdmin WHERE UserId = {USER_ID(phone)} LIMIT 1) AND PanchayatId = {PAN_ID(p, d)});"
+            )
+            pan_rows_added += 1
     w('')
 
     # ---- 8. Centers ----
@@ -452,7 +492,8 @@ def main():
     print(f'Generated {OUT_FILE} ({len(out)} statements)')
     print(f'  districts={len(districts)} vidhan_sabhas={len(cons_district)} panchayats={len(panchayat_area)} '
           f'villages={len(village_area)} schools={len(schools)} centers={len(centers)} '
-          f'ras={len(coordinators)} teachers={len(teachers)} students={len(students)}')
+          f'ras={len(coordinators)} teachers={len(teachers)} students={len(students)} '
+          f'ra_vs_rows={vs_rows_added} ra_pan_rows={pan_rows_added}')
 
 
 if __name__ == '__main__':
