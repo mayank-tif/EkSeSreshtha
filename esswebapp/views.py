@@ -4462,6 +4462,16 @@ class CenterView(PermissionRequiredMixin, View):
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', PAGE_SIZE))
             search = request.GET.get('search', '').strip().lower()
+            # Location verification filter: empty / unknown value = show all centres.
+            location_status = request.GET.get('location_status', '').strip().upper()
+            # Regional Admin filter: empty = show all centres.
+            regional_admin = request.GET.get('regional_admin', '').strip()
+            
+            if location_status in ('VERIFIED', 'PENDING'):
+                queryset = queryset.filter(location_status=location_status)
+            
+            if regional_admin:
+                queryset = queryset.filter(assigned_regional_admin=regional_admin)
             
             if search:
                 queryset = queryset.filter(

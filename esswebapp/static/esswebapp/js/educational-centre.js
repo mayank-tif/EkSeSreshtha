@@ -12,6 +12,8 @@ const state = {
     page: 1,
     pageSize: AppConfig.pageSize,
     search: '',
+    locationStatus: '',      // '' = all, otherwise VERIFIED / PENDING
+    regionalAdminId: '',     // '' = all, otherwise RA user ID
     editingId: null,
     mapPin: { lat: null, lng: null }
 };
@@ -19,6 +21,8 @@ const state = {
 // ── DOM References ────────────────────────────────────────────────
 const els = {
     get search() { return document.getElementById('centre-search'); },
+    get locationFilter() { return document.getElementById('centre-location-filter'); },
+    get raFilter() { return document.getElementById('centre-ra-filter'); },
     get tbody() { return document.getElementById('centre-tbody'); },
     get count() { return document.getElementById('centre-count'); },
     get pagination() { return document.getElementById('centre-pagination'); },
@@ -90,6 +94,24 @@ function bindEvents() {
 
     // Form submit
     if (els.form) els.form.addEventListener('submit', handleFormSubmit);
+
+    // Location verification filter (default empty = every centre)
+    if (els.locationFilter) {
+        els.locationFilter.addEventListener('change', () => {
+            state.page = 1;
+            state.locationStatus = els.locationFilter.value || '';
+            fetchAndRender();
+        });
+    }
+
+    // Regional Admin filter
+    if (els.raFilter) {
+        els.raFilter.addEventListener('change', () => {
+            state.page = 1;
+            state.regionalAdminId = els.raFilter.value || '';
+            fetchAndRender();
+        });
+    }
 
     // Add button opens modal
     if (els.addBtn) els.addBtn.addEventListener('click', openAddModal);
@@ -342,21 +364,31 @@ async function loadRegionalAdminDropdown() {
     try {
         const regionalAdmins = await fetchRegionalAdminsForDropdown(true);
 
-        if (!els.ra) return;
-        els.ra.innerHTML = '<option value="">Select Regional Admin</option>' +
-            regionalAdmins.map(ra =>
-                `<option value="${ra.id}">${escapeHtml(ra.name)}</option>`
-            ).join('');
+        // Populate modal dropdown
+        if (els.ra) {
+            els.ra.innerHTML = '<option value="">Select Regional Admin</option>' +
+                regionalAdmins.map(ra =>
+                    `<option value="${ra.id}">${escapeHtml(ra.name)}</option>`
+                ).join('');
 
-        if ($.fn.select2 && $(els.ra).data('select2')) {
-            $(els.ra).select2('destroy');
+            if ($.fn.select2 && $(els.ra).data('select2')) {
+                $(els.ra).select2('destroy');
+            }
+            if ($.fn.select2) {
+                $(els.ra).select2({
+                    placeholder: 'Select Regional Admin',
+                    allowClear: true,
+                    width: '100%'
+                });
+            }
         }
-        if ($.fn.select2) {
-            $(els.ra).select2({
-                placeholder: 'Select Regional Admin',
-                allowClear: true,
-                width: '100%'
-            });
+
+        // Populate filter dropdown (plain select, no Select2 - matches location filter)
+        if (els.raFilter) {
+            els.raFilter.innerHTML = '<option value="">All Regional Admins</option>' +
+                regionalAdmins.map(ra =>
+                    `<option value="${ra.id}">${escapeHtml(ra.name)}</option>`
+                ).join('');
         }
     } catch (e) {
         console.error('Failed to load Regional Admins:', e);
@@ -403,6 +435,9 @@ async function fetchAndRender() {
             page_size: state.pageSize,
             search: state.search
         });
+        if (state.locationStatus) params.set('location_status', state.locationStatus);
+        if (state.regionalAdminId) params.set('regional_admin', state.regionalAdminId);
+
         const url = getUrl('centres') + '?' + params.toString();
         const res = await fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -424,12 +459,23 @@ async function fetchAndRender() {
     }
 }
 
+// ── Location verification badge ───────────────────────────────────
+// Anything that is not VERIFIED (including NULL from older rows) reads as
+// Pending, so a missing value never shows as "verified" by accident.
+function locationBadge(status) {
+    const value = String(status || 'PENDING').trim().toUpperCase();
+    const verified = value === 'VERIFIED';
+    const label = verified ? 'Verified' : 'Pending';
+    return `<span class="loc-badge ${verified ? 'loc-verified' : 'loc-pending'}" ` +
+           `title="Location verification: ${escapeHtml(value)}">${label}</span>`;
+}
+
 function renderTable(items) {
     if (!els.tbody) return;
     if (!items.length) {
         els.tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="empty-state-cell">
+                <td colspan="9" class="empty-state-cell">
                     <div class="empty-state">
                         <div class="empty-state-icon">🏫</div>
                         <div class="empty-state-title">No Centres found</div>
@@ -452,6 +498,7 @@ function renderTable(items) {
                 <td>${escapeHtml(c.assigned_teacher_name || 'Unassigned')}</td>
                 <td><span class="count-pill">${c.student_count || 0}</span></td>
                 <td>${c.started_date ? formatDate(c.started_date) : '—'}</td>
+                <td>${locationBadge(c.location_status)}</td>
                 <td>
                     <div class="table-actions">
                         <button class="row-action-btn view btn-view" data-id="${c.id}" title="View details">

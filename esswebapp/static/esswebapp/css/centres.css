@@ -305,3 +305,39 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
+
+/* ── Location verification: list badge + header filter ─────────────── */
+.loc-badge {
+    display: inline-block;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-full);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.loc-verified {
+    background-color: var(--success-light);
+    color: var(--success);
+}
+
+.loc-pending {
+    background-color: var(--warning-light);
+    color: #b45309;
+}
+
+.centre-list-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.centre-location-filter {
+    width: auto;
+    min-width: 130px;
+    flex: 0 0 auto;
+}
