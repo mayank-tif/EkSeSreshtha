@@ -1307,7 +1307,7 @@ def verify_attendance_location(center_id, student_latitude, student_longitude):
         c = 2 * atan2(sqrt(a), sqrt(1-a))
         distance = R * c
         
-        is_valid = distance <= 100  # 100 meter radius
+        is_valid = distance <= 300  # 100 meter radius
         
         logger.info(f"StudentHelper : VerifyAttendanceLocation : Distance = {distance:.1f}m, Valid = {is_valid}")
         
