@@ -1329,7 +1329,7 @@ class ClassUpdateEndClassTimePostView(APIView):
                     if not is_valid_loc:
                         return Response({
                             "status": False,
-                            "error": f"Location verification failed. Distance from center: {distance:.1f}m (max 100m). Center status: {center_status}",
+                            "error": f"Location verification failed. Distance from center: {distance:.1f}m. Center status: {center_status}",
                             "code": status.HTTP_400_BAD_REQUEST
                         }, status=status.HTTP_400_BAD_REQUEST)
                             
@@ -3542,6 +3542,28 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": -14
                 }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Check manual attendance limit for each student (when is_manual=True)
+            student_ids_raw = attendance_data.get('StudentIds', '')
+            if isinstance(student_ids_raw, str):
+                student_ids = [int(s.strip()) for s in student_ids_raw.split(',') if s.strip()]
+            else:
+                student_ids = student_ids_raw if isinstance(student_ids_raw, list) else []
+            
+            for student_id in student_ids:
+                allowed, current, remaining, limit = check_manual_attendance_limit(student_id)
+                if not allowed:
+                    return Response({
+                        "status": False,
+                        "error": f"Monthly manual attendance limit reached for student {student_id} ({current}/{limit}). Next reset: 1st of next month.",
+                        "code": status.HTTP_400_BAD_REQUEST,
+                        "ErrorCode": -15,
+                        "StudentId": student_id,
+                        "CurrentCount": current,
+                        "Limit": limit,
+                        "Remaining": remaining
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
             print("common", attendance_data)
             result = save_student_attendance(attendance_data, is_automatic=False, is_manual=True)
 
@@ -3611,6 +3633,9 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                         data=attendance_data,
                         request=request
                     )
+                # Increment manual attendance counter for each student
+                for student_id in student_ids:
+                    increment_manual_attendance(student_id)
                 return Response(
                     {
                         "status": True,
@@ -3781,7 +3806,7 @@ class StudentSaveAutomaticAttendanceView(APIView):
             )
 
 class StudentSaveManualAttendanceView(APIView):
-    """Saves manual student attendance with GPS validation and 3/month limit"""
+    """Saves manual student attendance with GPS validation and monthly limit (configurable via MANUAL_ATTENDANCE_MONTHLY_LIMIT env, default 30)"""
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def post(self, request):
@@ -3873,7 +3898,7 @@ class StudentSaveManualAttendanceView(APIView):
                     "ErrorCode": -14
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Check manual attendance limit (3/month)
+            # Check manual attendance limit (configurable via env, default 30)
             allowed, current, remaining, limit = check_manual_attendance_limit(student_id)
             if not allowed:
                 return Response({

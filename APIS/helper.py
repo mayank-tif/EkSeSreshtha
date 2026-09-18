@@ -14,6 +14,12 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from .utils import *
 
+# Load env details (loads .env file)
+from EkSeSreshtha.env_details import (
+    MANUAL_ATTENDANCE_MONTHLY_LIMIT,
+    ATTENDANCE_GPS_RADIUS_METERS,
+)
+
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -33,6 +39,10 @@ logger = logging.getLogger(__name__)
 CLASS_STATUS_ACTIVE = 1
 CLASS_STATUS_COMPLETED = 2
 CLASS_STATUS_CANCEL = 3
+
+# Attendance configuration loaded from env_details.py (which loads .env)
+# MANUAL_ATTENDANCE_MONTHLY_LIMIT
+# ATTENDANCE_GPS_RADIUS_METERS
 
 def save_profile_image(image_file, user_id):
     """Save profile image and return the relative path for ImageField"""
@@ -1275,7 +1285,8 @@ def verify_center_location(center_data, request):
         raise e
 
 def verify_attendance_location(center_id, student_latitude, student_longitude):
-    """Verify if student GPS location is within 100m radius of center for attendance marking.
+    """Verify if student GPS location is within configurable radius (default 500m) of center for attendance marking.
+    Radius configured via ATTENDANCE_GPS_RADIUS_METERS env variable.
     Returns tuple: (is_valid: bool, distance_m: float, center_lat: float, center_lng: float, center_status: str)"""
     logger.info(f"StudentHelper : VerifyAttendanceLocation : Started for center {center_id}")
     
@@ -1307,7 +1318,7 @@ def verify_attendance_location(center_id, student_latitude, student_longitude):
         c = 2 * atan2(sqrt(a), sqrt(1-a))
         distance = R * c
         
-        is_valid = distance <= 300  # 100 meter radius
+        is_valid = distance <= ATTENDANCE_GPS_RADIUS_METERS
         
         logger.info(f"StudentHelper : VerifyAttendanceLocation : Distance = {distance:.1f}m, Valid = {is_valid}")
         
@@ -1318,7 +1329,7 @@ def verify_attendance_location(center_id, student_latitude, student_longitude):
         return False, 999999, 0, 0, "ERROR"
 
 def check_manual_attendance_limit(student_id):
-    """Check if student has reached monthly manual attendance limit (3/month).
+    """Check if student has reached monthly manual attendance limit.
     Returns tuple: (allowed: bool, current_count: int, remaining: int, limit: int)"""
     logger.info(f"StudentHelper : CheckManualAttendanceLimit : Started for student {student_id}")
     
@@ -1334,7 +1345,7 @@ def check_manual_attendance_limit(student_id):
             defaults={'count': 0}
         )
         
-        limit = 3  # Hardcoded limit of 3 per month
+        limit = MANUAL_ATTENDANCE_MONTHLY_LIMIT
         current = limit_record.count
         remaining = max(0, limit - current)
         allowed = current < limit
