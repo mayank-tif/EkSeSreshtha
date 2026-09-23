@@ -4,7 +4,7 @@
 {% block title %}Educational Centres - Ek Se Sreshtha{% endblock %}
 
 {% block extra-css %}
-    <link rel="stylesheet" href="{% static 'esswebapp/css/centres.css' %}?v=3">
+    <link rel="stylesheet" href="{% static 'esswebapp/css/centres.css' %}?v=4">
 {% endblock %}
 
 
@@ -53,8 +53,8 @@
         </div>
     </div>
     <div class="card-body" style="padding: 0;">
-        <div class="table-wrapper" style="border-radius: 0; border: none;">
-            <table class="table">
+        <div class="table-wrapper" style="border-radius: 0; border: none; overflow-x: auto;">
+            <table class="table" style="min-width: 1100px;">
                 <thead>
                     <tr>
                         <th style="width: 60px;">#</th>
@@ -64,8 +64,10 @@
                         <th>Assigned Teacher</th>
                         <th>Students</th>
                         <th>Started</th>
-                        <th>Location Verification</th>
-                        <th style="width: 150px;">Actions</th>
+                        <th>Status</th>
+                        <th>Verified At</th>
+                        <th>Verified By</th>
+                        <th style="width: 150px; min-width: 150px; white-space: nowrap;">Actions</th>
                     </tr>
                 </thead>
                 <tbody id="centre-tbody">
@@ -127,16 +129,11 @@
                     <textarea id="centre-address" class="form-textarea" placeholder="Full address" required></textarea>
                 </div>
 
-                <!-- Google Maps pin location picker (mock) -->
+                <!-- Leaflet Map pin location picker -->
                 <div class="form-group">
                     <label class="form-label">Pin location on map <span class="text-muted">(optional)</span></label>
                     <div class="map-picker">
-                        <div class="map-picker-canvas" id="map-canvas">
-                            <div class="map-picker-hint">Click anywhere on the map to drop a pin</div>
-                            <div class="map-picker-pin" id="map-pin" hidden>
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="var(--brand-red)"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                            </div>
-                        </div>
+                        <div id="map-canvas" style="height: 300px; border-radius: var(--radius-md); border: 1px solid var(--border-color);"></div>
                         <div class="map-picker-coords">
                             <div>
                                 <label class="form-label">Latitude</label>
@@ -227,6 +224,7 @@
 {% endblock %}
 
 {% block extra-js %}
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places&callback=initGoogleMaps" async defer></script>
     <script src="{% static 'esswebapp/js/educational-centre.js' %}?v=1"></script>
     <script>
         renderShell({

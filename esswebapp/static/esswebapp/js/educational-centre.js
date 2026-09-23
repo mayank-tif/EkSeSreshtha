@@ -14,8 +14,7 @@ const state = {
     search: '',
     locationStatus: '',      // '' = all, otherwise VERIFIED / PENDING
     regionalAdminId: '',     // '' = all, otherwise RA user ID
-    editingId: null,
-    mapPin: { lat: null, lng: null }
+    editingId: null
 };
 
 // ── DOM References ────────────────────────────────────────────────
@@ -49,8 +48,6 @@ const els = {
     get teacher() { return document.getElementById('centre-teacher'); },
     get editingId() { return document.getElementById('centre-editing-id'); },
     get addBtn() { return document.getElementById('add-centre-btn'); },
-    get mapPin() { return document.getElementById('map-pin'); },
-    get mapCanvas() { return document.getElementById('map-canvas'); },
     get viewBody() { return document.getElementById('centre-view-body'); }
 };
 
@@ -67,7 +64,7 @@ async function init() {
     await loadTeacherDropdown();
     await fetchAndRender();
     bindEvents();
-    initMapPicker();
+    // initMapPicker() moved to openAddModal/openEditModal - map needs visible container
 }
 
 // Handle case where DOMContentLoaded already fired
@@ -155,38 +152,156 @@ function bindEvents() {
     });
 }
 
-// ── Map Pin Picker ────────────────────────────────────────────────
+// ── Map Pin Picker (Google Maps) ────────────────────────────────────
+let googleMap = null;
+let googleMarker = null;
+let placesAutocomplete = null;
+let mapsLoaded = false;
+
 function initMapPicker() {
-    const canvas = els.mapCanvas;
-    const pin = els.mapPin;
-    if (!canvas || !pin) return;
+    const canvas = document.getElementById('map-canvas');
+    if (!canvas) return;
 
-    canvas.addEventListener('click', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
+    // Destroy existing map if any
+    if (googleMap) {
+        destroyMapPicker();
+    }
 
-        // Calculate percentage position
-        const pctX = x / rect.width;
-        const pctY = y / rect.height;
+    // Initialize Google Map centered on India
+    googleMap = new google.maps.Map(canvas, {
+        center: { lat: 22.9734, lng: 78.6569 },
+        zoom: 5,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: true,
+        gestureHandling: 'cooperative'
+    });
 
-        // Map to approximate lat/lng for India (Panipat area as default)
-        // These are rough bounds - in production you'd use actual map tiles
-        const lat = 29.0 + (1 - pctY) * 2.0;  // ~29.0 to 31.0
-        const lng = 75.5 + pctX * 3.0;         // ~75.5 to 78.5
-
-        state.mapPin = { lat, lng };
-
-        // Position pin
-        pin.style.left = `${pctX * 100}%`;
-        pin.style.top = `${pctY * 100}%`;
-        pin.hidden = false;
-
-        // Update inputs
+    // Add Places Autocomplete search box
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.id = 'map-search-input';
+    searchInput.placeholder = 'Search location...';
+    searchInput.style.cssText = 'background: white; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); font-size: 14px; width: 280px; margin: 10px;';
+    
+    // Add to map controls
+    googleMap.controls[google.maps.ControlPosition.TOP_LEFT].push(searchInput);
+    
+    // Initialize Places Autocomplete
+    placesAutocomplete = new google.maps.places.Autocomplete(searchInput, {
+        types: ['geocode'],
+        componentRestrictions: { country: 'in' },
+        fields: ['geometry', 'formatted_address', 'name']
+    });
+    
+    placesAutocomplete.addListener('place_changed', () => {
+        const place = placesAutocomplete.getPlace();
+        if (!place.geometry || !place.geometry.location) return;
+        
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        
+        googleMap.setCenter({ lat, lng });
+        googleMap.setZoom(13);
+        positionMapPin(lat, lng);
+        
         if (els.lat) els.lat.value = lat.toFixed(6);
         if (els.lng) els.lng.value = lng.toFixed(6);
     });
+
+    // Click on map to add/move pin
+    googleMap.addListener('click', (e) => {
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+        
+        state.mapPin = { lat, lng };
+        positionMapPin(lat, lng);
+        
+        if (els.lat) els.lat.value = lat.toFixed(6);
+        if (els.lng) els.lng.value = lng.toFixed(6);
+    });
+
+    // Also update map pin when lat/lng inputs change manually
+    if (els.lat) {
+        els.lat.addEventListener('change', updateMapPinFromInputs);
+    }
+    if (els.lng) {
+        els.lng.addEventListener('change', updateMapPinFromInputs);
+    }
 }
+
+function positionMapPin(lat, lng) {
+    if (!googleMap) return;
+    
+    const position = { lat, lng };
+    
+    if (googleMarker) {
+        googleMarker.setPosition(position);
+    } else {
+        googleMarker = new google.maps.Marker({
+            position: position,
+            map: googleMap,
+            draggable: true,
+            title: 'Centre Location'
+        });
+        
+        // Update when marker is dragged
+        googleMarker.addListener('dragend', (e) => {
+            const lat = e.latLng.lat();
+            const lng = e.latLng.lng();
+            state.mapPin = { lat, lng };
+            if (els.lat) els.lat.value = lat.toFixed(6);
+            if (els.lng) els.lng.value = lng.toFixed(6);
+        });
+    }
+    
+    googleMap.setCenter(position);
+    state.mapPin = { lat, lng };
+}
+
+function updateMapPinFromInputs() {
+    if (!googleMap) return;
+    
+    const lat = parseFloat(els.lat?.value);
+    const lng = parseFloat(els.lng?.value);
+    
+    if (!isNaN(lat) && !isNaN(lng)) {
+        positionMapPin(lat, lng);
+    }
+}
+
+function destroyMapPicker() {
+    if (googleMarker) {
+        googleMarker.setMap(null);
+        googleMarker = null;
+    }
+    if (googleMap) {
+        googleMap = null;
+    }
+    if (placesAutocomplete) {
+        placesAutocomplete = null;
+    }
+}
+
+function initGoogleMaps() {
+    mapsLoaded = true;
+    console.log('Google Maps API loaded');
+}
+
+// Wait for Google Maps to load before initializing
+function waitForMaps(callback) {
+    if (mapsLoaded && typeof google !== 'undefined' && google.maps) {
+        callback();
+    } else {
+        setTimeout(() => waitForMaps(callback), 50);
+    }
+}
+
+// Override initMapPicker to wait for Google Maps
+const originalInitMapPicker = initMapPicker;
+window.initMapPicker = function() {
+    waitForMaps(originalInitMapPicker);
+};
 
 // ── Cascading Dropdowns ───────────────────────────────────────────
 // Uses dropdown APIs from common.js (non-paginated, filtered by user access)
@@ -428,6 +543,7 @@ async function loadTeacherDropdown() {
 
 // ── Fetch & Render ────────────────────────────────────────────────
 async function fetchAndRender() {
+    console.log('fetchAndRender called, state:', { ...state });
     showGlobalLoader();
     try {
         const params = new URLSearchParams({
@@ -439,6 +555,7 @@ async function fetchAndRender() {
         if (state.regionalAdminId) params.set('regional_admin', state.regionalAdminId);
 
         const url = getUrl('centres') + '?' + params.toString();
+        console.log('Fetching URL:', url);
         const res = await fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
@@ -499,16 +616,18 @@ function renderTable(items) {
                 <td><span class="count-pill">${c.student_count || 0}</span></td>
                 <td>${c.started_date ? formatDate(c.started_date) : '—'}</td>
                 <td>${locationBadge(c.location_status)}</td>
+                <td>${c.location_verified_at ? formatDate(c.location_verified_at) : '—'}</td>
+                <td>${escapeHtml(c.location_verified_by_name || '—')}</td>
                 <td>
                     <div class="table-actions">
                         <button class="row-action-btn view btn-view" data-id="${c.id}" title="View details">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
                         <button class="row-action-btn btn-edit" data-id="${c.id}" title="Edit">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         </button>
                         <button class="row-action-btn danger btn-delete" data-id="${c.id}" data-name="${escapeHtml(c.center_name)}" title="Deactivate">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
                         </button>
                     </div>
                 </td>
@@ -542,8 +661,8 @@ async function handleFormSubmit(e) {
         center_name: els.name.value.trim(),
         address: els.address.value.trim(),
         started_date: els.startDate.value || null,
-        latitude: els.lat.value ? parseFloat(els.lat.value) : null,
-        longitude: els.lng.value ? parseFloat(els.lng.value) : null,
+        latitude: els.lat.value === '' ? '' : (els.lat.value ? parseFloat(els.lat.value) : null),
+        longitude: els.lng.value === '' ? '' : (els.lng.value ? parseFloat(els.lng.value) : null),
         district_id: els.district.value ? parseInt(els.district.value, 10) : null,
         vidhan_sabha_id: els.vs.value ? parseInt(els.vs.value, 10) : null,
         panchayat_id: els.panchayat.value ? parseInt(els.panchayat.value, 10) : null,
@@ -580,6 +699,7 @@ async function handleFormSubmit(e) {
             body: JSON.stringify(body)
         });
         const data = await res.json();
+        console.log('API Response:', res.status, res.ok, data);
 
         if (res.ok || res.status === 201) {
             showToast(isEdit ? 'Centre updated' : 'Centre created', 'success');
@@ -622,21 +742,17 @@ async function openEditModal(id) {
         // Load cascading dropdowns with pre-selected values
         await loadDropdownsForEdit(data.district_id, data.vidhan_sabha_id, data.panchayat_id, data.village_id);
 
+        // Open modal first (map needs visible container)
+        openModal(els.modal);
+        
+        // Initialize map after modal is visible
+        initMapPicker();
+        
         // Position map pin
-        if (data.latitude && data.longitude && els.mapPin && els.mapCanvas) {
-            // Calculate percentage from lat/lng (reverse of initMapPicker)
-            const lat = parseFloat(data.latitude);
-            const lng = parseFloat(data.longitude);
-            const pctX = (lng - 75.5) / 3.0;
-            const pctY = 1 - (lat - 29.0) / 2.0;
-
-            els.mapPin.style.left = `${Math.max(0, Math.min(100, pctX * 100))}%`;
-            els.mapPin.style.top = `${Math.max(0, Math.min(100, pctY * 100))}%`;
-            els.mapPin.hidden = false;
-            state.mapPin = { lat, lng };
+        if (data.latitude && data.longitude) {
+            positionMapPin(parseFloat(data.latitude), parseFloat(data.longitude));
         }
 
-        openModal(els.modal);
         if (els.name) els.name.focus();
 
         // Set dropdown values AFTER modal is open (required for Select2 dropdownParent)
@@ -789,6 +905,8 @@ function openAddModal() {
         els.startDate.value = today;
     }
     openModal(els.modal);
+    // Initialize map after modal is visible
+    initMapPicker();
 }
 
 function resetForm() {
@@ -797,11 +915,9 @@ function resetForm() {
     if (els.modalTitle) els.modalTitle.textContent = 'Add Educational Centre';
 
     // Reset map pin
-    if (els.mapPin) {
-        els.mapPin.hidden = true;
-        state.mapPin = { lat: null, lng: null };
-    }
-
+    // Reset map
+    destroyMapPicker();
+    
     // Reset cascading dropdowns (suppressed so no cascade/API calls fire)
     setSelectValue(els.district, '');
     resetChildSelect(els.vs, 'Select Vidhan Sabha', onVsChange);

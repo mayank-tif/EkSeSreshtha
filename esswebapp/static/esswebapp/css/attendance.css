@@ -9,6 +9,15 @@
    section headers) and the printable Student ID Card.
    ================================================================ */
 
+/* Attendance action button */
+.btn-attendance {
+    color: var(--brand-purple);
+}
+.btn-attendance:hover {
+    background-color: var(--purple-light);
+    color: var(--brand-purple);
+}
+
 
 /* ================================================================
    CENTRE CARD GRID (center-attendance.html)

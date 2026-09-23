@@ -82,6 +82,13 @@ const BASE_NAV_ITEMS = [
         icon: 'clipboard',
         urlName: 'attendance',
         roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
+    },
+    {
+        id: 'class-attendance-logs',
+        label: 'Class Attendance Logs',
+        icon: 'clipboard',
+        urlName: 'class-attendance-logs',
+        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     }
 ];
 

@@ -518,7 +518,7 @@ class CancelClassDtoSerializer(serializers.Serializer):
 
 class EndClassDtoSerializer(serializers.Serializer):
     Id = serializers.IntegerField(required=True)
-    ClassroomPhoto = serializers.ImageField(required=False, allow_null=True)
+    ClassroomPhoto = serializers.ImageField(required=True, allow_null=True)
     Latitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     Longitude = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 

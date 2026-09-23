@@ -20,9 +20,9 @@
 }
 
 .row-action-btn {
-    padding: var(--space-2);
+    padding: var(--space-3);
     border-radius: var(--radius-md);
-    color: var(--gray-500);
+    color: var(--gray-700);
     transition: all var(--transition-fast);
     display: inline-flex;
     align-items: center;
@@ -35,14 +35,36 @@
     color: var(--brand-blue);
 }
 
+.row-action-btn.danger {
+    color: var(--danger);
+}
 .row-action-btn.danger:hover {
-    background-color: var(--brand-red-light);
-    color: var(--brand-red-dark);
+    background-color: var(--danger-light);
+    color: var(--danger);
 }
 
+.row-action-btn.view {
+    color: var(--info);
+}
 .row-action-btn.view:hover {
     background-color: var(--info-light);
-    color: var(--brand-blue);
+    color: var(--info);
+}
+
+.row-action-btn.btn-edit {
+    color: var(--gray-700);
+}
+.row-action-btn.btn-edit:hover {
+    background-color: var(--gray-100);
+    color: var(--gray-900);
+}
+
+.row-action-btn.btn-attendance {
+    color: var(--brand-purple);
+}
+.row-action-btn.btn-attendance:hover {
+    background-color: var(--purple-light);
+    color: var(--brand-purple);
 }
 
 .table td.row-index {
@@ -57,7 +79,7 @@
     background-color: var(--gray-100);
     color: var(--gray-700);
     border-radius: var(--radius-full);
-    font-size: var(--text-xs);
+    font-size: 11px;
     font-weight: 500;
 }
 
@@ -85,12 +107,9 @@
 }
 
 /* ================================================================
-   MAP PICKER
+   MAP PICKER (Leaflet)
    ----------------------------------------------------------------
-   Interactive map placeholder for pinning centre locations.
-   In production this would embed a real Google Map. Here we
-   show a stylized topographic-looking canvas the user can click
-   to drop a pin.
+   Interactive map for pinning centre locations using Leaflet.
    ================================================================ */
 
 .map-picker {
@@ -99,71 +118,11 @@
     gap: var(--space-4);
 }
 
-/* The clickable map area */
-.map-picker-canvas {
-    position: relative;
-    height: 260px;
-    background:
-        radial-gradient(circle at 20% 30%, rgba(30, 58, 138, 0.08) 0%, transparent 40%),
-        radial-gradient(circle at 80% 60%, rgba(200, 16, 46, 0.06) 0%, transparent 40%),
-        repeating-linear-gradient(
-            45deg,
-            var(--gray-100) 0px,
-            var(--gray-100) 20px,
-            var(--gray-50) 20px,
-            var(--gray-50) 40px
-        );
+/* Leaflet map container */
+#map-canvas {
+    height: 300px;
     border: 1px solid var(--gray-300);
     border-radius: var(--radius-lg);
-    cursor: crosshair;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Grid overlay pattern for a "map" feel */
-.map-picker-canvas::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image:
-        linear-gradient(to right, rgba(148, 163, 184, 0.15) 1px, transparent 1px),
-        linear-gradient(to bottom, rgba(148, 163, 184, 0.15) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-}
-
-/* Initial hint text before the user drops a pin */
-.map-picker-hint {
-    color: var(--gray-500);
-    font-size: var(--text-sm);
-    background-color: rgba(255, 255, 255, 0.85);
-    padding: var(--space-2) var(--space-4);
-    border-radius: var(--radius-md);
-    pointer-events: none;
-    position: relative;
-    z-index: 1;
-}
-
-/* The pin indicator (position gets set by JavaScript on click) */
-.map-picker-pin {
-    position: absolute;
-    transform: translate(-50%, -100%);
-    z-index: 2;
-    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
-    animation: pinDrop 0.4s var(--transition-base);
-}
-
-@keyframes pinDrop {
-    from {
-        transform: translate(-50%, -200%);
-        opacity: 0;
-    }
-    to {
-        transform: translate(-50%, -100%);
-        opacity: 1;
-    }
 }
 
 /* Lat/lng inputs below the map */
@@ -311,7 +270,7 @@
     display: inline-block;
     padding: 2px var(--space-2);
     border-radius: var(--radius-full);
-    font-size: var(--text-xs);
+    font-size: 9px;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.02em;
@@ -340,4 +299,7 @@
     width: auto;
     min-width: 130px;
     flex: 0 0 auto;
+}
+.table td{
+    font-size: 12px;
 }

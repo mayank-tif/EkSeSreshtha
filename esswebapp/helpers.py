@@ -17,10 +17,8 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-
 from django.db import transaction
-
-from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User, ActivityLog, ClassModel
+from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User, ActivityLog, ClassModel, Holidays, RegionalAdminPanchayat, RegionalAdminVidhanSabha
 from django.db.models import Count
 
 logger = logging.getLogger(__name__)
@@ -228,17 +226,34 @@ def _update_center(center_id, center_data, current_user_id):
         center.village_id = center_data['VillageId']
 
     # Latitude/longitude are OPTIONAL for the web app.
-    # Only touch location fields when BOTH are explicitly provided;
-    # otherwise preserve the existing location data/status.
+    # Handle three cases:
+    # 1. Both provided and non-empty -> update lat/long, set VERIFIED, update verified_at/by
+    # 2. Both explicitly provided but empty/falsy -> clear lat/long, set PENDING, preserve verified_at/by
+    # 3. Not provided -> preserve existing location data/status
     latitude = center_data.get('Latitude')
     longitude = center_data.get('Longitude')
-    if latitude is not None and longitude is not None:
-        center.latitude = Decimal(str(latitude))
-        center.longitude = Decimal(str(longitude))
-        center.location_status = 'VERIFIED'
-        center.location_verified_at = datetime.now()
-        if current_user_id:
+    lat_provided = 'Latitude' in center_data
+    lng_provided = 'Longitude' in center_data
+    
+    if lat_provided and lng_provided:
+        # Both explicitly provided in request
+        lat_empty = latitude is None or latitude == ''
+        lng_empty = longitude is None or longitude == ''
+        
+        if lat_empty and lng_empty:
+            # User cleared both lat/long - set to PENDING, clear coordinates
+            center.latitude = None
+            center.longitude = None
+            center.location_status = 'PENDING'
+            # DO NOT change location_verified_at and location_verified_by
+        elif not lat_empty and not lng_empty:
+            # Both have valid values - update coordinates and set VERIFIED
+            center.latitude = Decimal(str(latitude))
+            center.longitude = Decimal(str(longitude))
+            center.location_status = 'VERIFIED'
+            center.location_verified_at = datetime.now()
             center.location_verified_by_id = current_user_id
+        # If one is empty and other is not, don't change anything (invalid state)
 
     center.updated_on = datetime.now()
     center.updated_by = current_user_id
@@ -504,7 +519,6 @@ def get_regional_admin_assignments(user_id):
     Returns dict with district_ids, vidhan_sabha_ids, panchayat_ids, village_ids.
     Returns None for Super Admin (meaning all).
     """
-    from APIS.models import RegionalAdmin, RegionalAdminPanchayat, RegionalAdminVidhanSabha
     try:
         ra = RegionalAdmin.objects.filter(user_id=user_id, status=True).first()
         if not ra:
@@ -754,7 +768,6 @@ def get_user_accessible_teachers_user_queryset(request):
     )
 
 
-# ==================================================================
 # CENTER ATTENDANCE HELPERS
 # ==================================================================
 
@@ -856,6 +869,162 @@ def get_center_attendance_data(center_ids, attendance_date=None):
         }
     
     logger.info(f"WebCenterAttendanceHelper : GetCenterAttendanceData : End - {len(result)} centers")
+    return result
+
+
+def get_center_students_attendance(center_id, attendance_date=None):
+    """
+    Get all students for a center with their attendance status on a specific date.
+    
+    Args:
+        center_id: Center ID
+        attendance_date: date object or None (defaults to today)
+    
+    Returns:
+        dict with:
+            'center_id': center_id,
+            'center_name': center_name,
+            'attendance_date': date,
+            'class_held': bool (whether class was conducted on this date),
+            'class_cancelled': bool (whether class was cancelled on this date),
+            'no_class_reason': str (reason: 'not_started', 'cancelled', or None),
+            'students': list of {
+                'id': student_id,
+                'name': student_name,
+                'enrollment_number': enrollment_number,
+                'status': 'Present' | 'Absent' | 'No Class',
+                'attendance_time': time or None
+            }
+    """
+    logger.info(f"WebCenterAttendanceHelper : GetCenterStudentsAttendance : Started for center={center_id}, date={attendance_date}")
+    
+    if attendance_date is None:
+        attendance_date = datetime.now().date()
+    elif isinstance(attendance_date, str):
+        try:
+            attendance_date = datetime.strptime(attendance_date, '%Y-%m-%d').date()
+        except ValueError:
+            attendance_date = datetime.now().date()
+    
+    # Get all active students for this center
+    students = Student.objects.filter(center_id=center_id, status=True).select_related().order_by('full_name')
+    
+    # Check if ANY attendance records exist for this center on this date
+    # (present or absent records indicate class was conducted)
+    any_attendance = StudentAttendance.objects.filter(
+        center_id=center_id,
+        scan_date__date=attendance_date,
+        status=True
+    ).exists()
+    
+    # Check for holiday on this date
+    holiday = Holidays.objects.filter(
+        center_id=center_id,
+        status=True,
+        start_date__date__lte=attendance_date,
+        end_date__date__gte=attendance_date
+    ).first()
+    
+    is_holiday = False
+    holiday_name = None
+    if holiday:
+        is_holiday = True
+        holiday_name = holiday.name
+    
+    # Check class status for this center on this date
+    # Find the active class for this center
+    active_class = ClassModel.objects.filter(
+        center_id=center_id
+    ).exclude(status=3).first()  # exclude cancelled classes
+    
+    class_cancelled = False
+    no_class_reason = None
+    
+    if active_class:
+        class_start_date = active_class.started_date.date() if active_class.started_date else None
+        if class_start_date and attendance_date < class_start_date:
+            # Class hasn't started yet
+            class_held = False
+            no_class_reason = 'not_started'
+        else:
+            class_held = True
+            # Check if there's a cancelled class on this specific date
+            cancelled_class = ClassModel.objects.filter(
+                center_id=center_id,
+                status=3,  # cancelled
+                cancel_date__date=attendance_date
+            ).exists()
+            if cancelled_class:
+                class_cancelled = True
+                no_class_reason = 'cancelled'
+                class_held = False
+    else:
+        # No active class found for this center
+        class_held = False
+        no_class_reason = 'not_started'
+    
+    # Also check if there's any attendance records (overrides class schedule)
+    if any_attendance:
+        class_held = True
+        class_cancelled = False
+        no_class_reason = None
+        is_holiday = False  # attendance overrides holiday
+        holiday_name = None
+    
+    # Holiday takes precedence over class schedule (if no attendance)
+    if is_holiday and not any_attendance:
+        class_held = False
+        class_cancelled = False
+        no_class_reason = 'holiday'
+    
+    # Get present student IDs for this center on this date
+    present_records = StudentAttendance.objects.filter(
+        center_id=center_id,
+        scan_date__date=attendance_date,
+        status=True,
+        type=True  # present
+    ).values('student_id', 'scan_date').distinct()
+    
+    # Build attendance map
+    attendance_map = {}
+    for r in present_records:
+        attendance_map[r['student_id']] = r['scan_date'].time() if hasattr(r['scan_date'], 'time') else None
+    
+    # Get center name
+    center = Center.objects.filter(id=center_id).first()
+    center_name = center.center_name if center else ''
+    
+    # Build result
+    result = {
+        'center_id': center_id,
+        'center_name': center_name,
+        'attendance_date': attendance_date,
+        'class_held': class_held,
+        'class_cancelled': class_cancelled,
+        'is_holiday': is_holiday,
+        'holiday_name': holiday_name,
+        'no_class_reason': no_class_reason,
+        'students': []
+    }
+    
+    for student in students:
+        present_time = attendance_map.get(student.id)
+        if present_time:
+            status = 'Present'
+        elif class_held:
+            status = 'Absent'
+        else:
+            status = 'No Class'
+        
+        result['students'].append({
+            'id': student.id,
+            'name': student.full_name,
+            'enrollment_number': student.enrollment_id,
+            'status': status,
+            'attendance_time': present_time.isoformat() if present_time else None
+        })
+    
+    logger.info(f"WebCenterAttendanceHelper : GetCenterStudentsAttendance : End - {len(result['students'])} students, class_held={class_held}, class_cancelled={class_cancelled}, reason={no_class_reason}")
     return result
 
 

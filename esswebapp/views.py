@@ -4,7 +4,7 @@ from django.views import View
 from django.urls import re_path
 from django.http import JsonResponse
 from django.db import models, transaction
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 import json
 import uuid
 import logging
@@ -500,6 +500,9 @@ class CenterAttendanceView(PermissionRequiredMixin, View):
         print("request", request.path, request.GET)
         # Check if it's an AJAX request for JSON data
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            action = request.GET.get('action')
+            if action == 'students_attendance':
+                return self._get_center_students_attendance_api(request)
             return self._list_centers_attendance_api(request)
         
         # Render the HTML page
@@ -615,6 +618,354 @@ class CenterAttendanceView(PermissionRequiredMixin, View):
             'started_date': center.started_date.isoformat() if center.started_date else None,
         }
 
+    def _get_center_students_attendance_api(self, request):
+        """Get all students for a center with their attendance status on a specific date."""
+        try:
+            center_id = request.GET.get('center_id')
+            attendance_date = request.GET.get('date')
+            
+            if not center_id:
+                return JsonResponse({'detail': 'Center ID is required'}, status=400)
+            
+            # Check if user has access to this center
+            accessible_center_ids = get_user_accessible_center_ids(request)
+            if accessible_center_ids is not None and int(center_id) not in accessible_center_ids:
+                return JsonResponse({'detail': 'Permission denied'}, status=403)
+            
+            try:
+                center = Center.objects.get(id=center_id, status=True)
+            except Center.DoesNotExist:
+                return JsonResponse({'detail': 'Center not found'}, status=404)
+            
+            from esswebapp.helpers import get_center_students_attendance
+            
+            result = get_center_students_attendance(int(center_id), attendance_date)
+            
+            return JsonResponse(result)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+class ClassAttendanceLogsView(PermissionRequiredMixin, View):
+    """Class Attendance Logs page + API for viewing class session logs"""
+    template_name = 'esswebapp/pages/attendance/class-attendance-logs.html'
+    required_module = 'attendance'
+    
+    def get(self, request):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            action = request.GET.get('action')
+            if action == 'class_logs':
+                return self._get_class_logs_api(request)
+            if action == 'class_log_detail':
+                return self._get_class_log_detail_api(request)
+            return JsonResponse({'detail': 'Invalid action'}, status=400)
+        
+        from EkSeSreshtha.env_details import GOOGLE_MAPS_API_KEY
+        return render(request, self.template_name, {
+            'user': get_user_json(request.web_user),
+            'GOOGLE_MAPS_API_KEY': GOOGLE_MAPS_API_KEY
+        })
+    
+    def _get_class_logs_queryset(self, request):
+        """Get classes with attendance data for the user's accessible centers"""
+        accessible_center_ids = get_user_accessible_center_ids(request)
+        if accessible_center_ids is not None:
+            return ClassModel.objects.filter(center_id__in=accessible_center_ids, active_status=True)
+        return ClassModel.objects.filter(active_status=True)
+    
+    def _get_class_logs_api(self, request):
+        try:
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', PAGE_SIZE))
+            search = request.GET.get('search', '').strip().lower()
+            
+            date_from = request.GET.get('date_from')
+            date_to = request.GET.get('date_to')
+            status_filter = request.GET.get('status')
+            center_id = request.GET.get('center_id')
+            teacher_id = request.GET.get('teacher_id')
+            
+            from django.db.models import Prefetch
+            queryset = self._get_class_logs_queryset(request).select_related(
+                'center', 'center__district', 'center__village', 'closed_by'
+            ).prefetch_related(
+                Prefetch('attendances', queryset=StudentAttendance.objects.filter(status=True).select_related('student'))
+            )
+            
+            if center_id:
+                queryset = queryset.filter(center_id=center_id)
+            if teacher_id:
+                queryset = queryset.filter(users_id=teacher_id)
+            if date_from:
+                try:
+                    queryset = queryset.filter(started_date__date__gte=date_from)
+                except:
+                    pass
+            if date_to:
+                try:
+                    queryset = queryset.filter(started_date__date__lte=date_to)
+                except:
+                    pass
+            if search:
+                queryset = queryset.filter(
+                    models.Q(name__icontains=search) |
+                    models.Q(center__center_name__icontains=search) |
+                    models.Q(class_enrolment_id__icontains=search)
+                )
+            if status_filter:
+                queryset = queryset.filter(status=status_filter)
+            
+            queryset = queryset.order_by('-started_date')
+            
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+            
+            start = (page - 1) * page_size
+            end = start + page_size
+            
+            classes_page = list(queryset[start:end])
+            
+            items = [self._serialize_class_log(c) for c in classes_page]
+            
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _get_class_log_detail_api(self, request):
+        try:
+            class_id = request.GET.get('class_id')
+            if not class_id:
+                return JsonResponse({'detail': 'Class ID required'}, status=400)
+            
+            try:
+                cls = self._get_class_logs_queryset(request).select_related(
+                    'center', 'center__district', 'center__village', 'closed_by'
+                ).prefetch_related(
+                    Prefetch('attendances', queryset=StudentAttendance.objects.filter(status=True).select_related('student__center'))
+                ).get(id=class_id)
+            except ClassModel.DoesNotExist:
+                return JsonResponse({'detail': 'Class not found'}, status=404)
+            
+            return JsonResponse(self._serialize_class_log_detail(cls))
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+    
+    def _get_status_info(self, cls):
+        """Determine status and color for a class log (like Keka)"""
+        from django.utils import timezone
+        now = timezone.now()
+        
+        if cls.status == 3:  # Cancelled
+            return {
+                'key': 'cancelled',
+                'label': 'Cancelled',
+                'color': '#dc2626',
+                'icon': '✕',
+                'tooltip': f'Class was cancelled' + (f' on {cls.cancel_date.strftime("%d %b %Y %I:%M %p")}' if cls.cancel_date else '')
+            }
+        
+        if not cls.started_date:
+            return {
+                'key': 'no_class',
+                'label': 'No Class',
+                'color': '#6b7280',
+                'icon': '—',
+                'tooltip': 'Class not scheduled'
+            }
+        
+        # Check if class is in the future (not started yet)
+        if cls.started_date > now:
+            return {
+                'key': 'no_class',
+                'label': 'Not Started',
+                'color': '#6b7280',
+                'icon': '—',
+                'tooltip': f'Class scheduled for {cls.started_date.strftime("%d %b %Y")}'
+            }
+        
+        # Check if it's a holiday
+        class_date = cls.started_date.date() if cls.started_date else None
+        holiday = None
+        if class_date and cls.center_id:
+            holiday = Holidays.objects.filter(
+                center_id=cls.center_id,
+                status=True,
+                start_date__date__lte=class_date,
+                end_date__date__gte=class_date
+            ).first()
+        
+        if holiday:
+            return {
+                'key': 'holiday',
+                'label': 'Holiday',
+                'color': '#f59e0b',
+                'icon': '🎉',
+                'tooltip': f'Holiday: {holiday.name}'
+            }
+        
+        if cls.status == 2:  # Completed
+            if cls.end_date and cls.started_date:
+                duration = cls.end_date - cls.started_date
+                hours = duration.total_seconds() / 3600
+                gross_hours = round(hours, 2)
+            else:
+                gross_hours = 0
+            
+            attendances = list(cls.attendances.filter(status=True).select_related('student'))
+            if attendances:
+                present = sum(1 for a in attendances if a.type is True)
+                absent = sum(1 for a in attendances if a.type is False)
+                return {
+                    'key': 'completed',
+                    'label': 'Completed',
+                    'color': '#16a34a',
+                    'icon': '✓',
+                    'tooltip': f'Class completed · {gross_hours}h · {present} present, {absent} absent',
+                    'gross_hours': gross_hours,
+                    'present': present,
+                    'absent': absent
+                }
+            else:
+                return {
+                    'key': 'completed_no_attendance',
+                    'label': 'Completed (No Attendance)',
+                    'color': '#f59e0b',
+                    'icon': '⚠',
+                    'tooltip': f'Class completed · {gross_hours}h · No attendance marked',
+                    'gross_hours': gross_hours,
+                    'present': 0,
+                    'absent': 0
+                }
+        
+        if cls.status == 1:  # Active
+            # Check if class started today (only today's classes can be 'In Progress')
+            class_date = cls.started_date.date() if cls.started_date else None
+            today = now.date()
+            
+            if cls.end_date:
+                duration = cls.end_date - cls.started_date
+                hours = duration.total_seconds() / 3600
+                gross_hours = round(hours, 2)
+                return {
+                    'key': 'active_ended',
+                    'label': 'Ended (Not Closed)',
+                    'color': '#3b82f6',
+                    'icon': '⏱',
+                    'tooltip': f'Class ended but not closed · {gross_hours}h',
+                    'gross_hours': gross_hours
+                }
+            elif class_date == today:
+                # Only classes starting TODAY can be 'In Progress'
+                return {
+                    'key': 'in_progress',
+                    'label': 'In Progress',
+                    'color': '#8b5cf6',
+                    'icon': '▶',
+                    'tooltip': 'Class is currently in progress'
+                }
+            elif class_date and class_date < today:
+                # Past date with no end_date = ended but not closed
+                return {
+                    'key': 'active_ended',
+                    'label': 'Ended (Not Closed)',
+                    'color': '#3b82f6',
+                    'icon': '⏱',
+                    'tooltip': 'Class ended but not closed (past date)'
+                }
+            else:
+                # Future date or no date
+                return {
+                    'key': 'no_class',
+                    'label': 'Not Started',
+                    'color': '#6b7280',
+                    'icon': '—',
+                    'tooltip': 'Class not started yet'
+                }
+        
+        return {
+            'key': 'unknown',
+            'label': 'Unknown',
+            'color': '#6b7280',
+            'icon': '?',
+            'tooltip': 'Unknown status'
+        }
+    
+    def _serialize_class_log(self, cls):
+        status_info = self._get_status_info(cls)
+        
+        teacher_name = None
+        if cls.users_id:
+            try:
+                from APIS.models import User
+                teacher = User.objects.filter(id=cls.users_id).first()
+                teacher_name = teacher.name if teacher else None
+            except:
+                pass
+        
+        closed_by_name = cls.closed_by.name if cls.closed_by else None
+        
+        return {
+            'id': cls.id,
+            'class_enrolment_id': cls.class_enrolment_id,
+            'name': cls.name,
+            'teacher_name': teacher_name,
+            'teacher_id': cls.users_id,
+            'center_name': cls.center.center_name if cls.center else None,
+            'center_id': cls.center.id if cls.center else None,
+            'village_name': cls.center.village.name if cls.center and cls.center.village else None,
+            'district_name': cls.center.district.name if cls.center and cls.center.district else None,
+            'started_date': cls.started_date.isoformat() if cls.started_date else None,
+            'end_date': cls.end_date.isoformat() if cls.end_date else None,
+            'status': cls.status,
+            'status_display': cls.get_status_display() if cls.status else None,
+            'session_closed': cls.session_closed,
+            'closed_by': closed_by_name,
+            'cancel_date': cls.cancel_date.isoformat() if cls.cancel_date else None,
+            'cancel_reason': cls.reason,
+            'status_info': status_info,
+            'total_students': cls.total_students or 0,
+        }
+    
+    def _serialize_class_log_detail(self, cls):
+        base = self._serialize_class_log(cls)
+        
+        attendances = list(cls.attendances.select_related('student').all())
+        
+        students_data = []
+        for att in attendances:
+            student = att.student
+            students_data.append({
+                'id': att.id,
+                'student_id': student.id if student else None,
+                'student_name': student.full_name if student else None,
+                'enrollment_number': student.enrollment_id if student else None,
+                'scan_date': att.scan_date.isoformat() if att.scan_date else None,
+                'attendance_type': att.attendance_type,
+                'location_verified': att.location_verified,
+                'captured_latitude': float(att.captured_latitude) if att.captured_latitude else None,
+                'captured_longitude': float(att.captured_longitude) if att.captured_longitude else None,
+                'status': att.type,
+                'manual_reason': att.manual_reason,
+            })
+        
+        present_count = sum(1 for a in attendances if a.type is True)
+        absent_count = sum(1 for a in attendances if a.type is False)
+        
+        base.update({
+            'students': students_data,
+            'present_count': present_count,
+            'absent_count': absent_count,
+            'total_marked': len(attendances),
+        })
+        
+        return base
+
 
 class SchoolDropDownView(LoginRequiredMixin, View):
     """API view for listing schools - used in dropdowns"""
@@ -643,9 +994,15 @@ class CenterDropDownView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
+            # Get accessible center IDs for this user
+            center_ids = get_user_accessible_center_ids(request)
+            
             queryset = Center.objects.filter(status=True).select_related(
                 'district', 'vidhan_sabha', 'panchayat', 'village'
             ).order_by('center_name')
+            
+            if center_ids is not None:
+                queryset = queryset.filter(id__in=center_ids)
             
             centers = list(queryset.values(
                 'id', 'center_name',
@@ -4411,7 +4768,11 @@ class CenterView(PermissionRequiredMixin, View):
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return self._list_centers_api(request)
-        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+        from EkSeSreshtha.env_details import GOOGLE_MAPS_API_KEY
+        return render(request, self.template_name, {
+            'user': get_user_json(request.web_user),
+            'GOOGLE_MAPS_API_KEY': GOOGLE_MAPS_API_KEY
+        })
     
     def post(self, request):
         return self._create_center(request)
@@ -4496,6 +4857,8 @@ class CenterView(PermissionRequiredMixin, View):
                     user_ids.append(c.assigned_regional_admin)
                 if c.assigned_teachers:
                     user_ids.append(c.assigned_teachers)
+                if c.location_verified_by_id:
+                    user_ids.append(c.location_verified_by_id)
             name_map = self._get_user_names_map(user_ids)
             student_counts = self._get_student_counts_map([c.id for c in centers_page])
             
@@ -4635,6 +4998,9 @@ class CenterView(PermissionRequiredMixin, View):
             'latitude': float(center.latitude) if center.latitude else None,
             'longitude': float(center.longitude) if center.longitude else None,
             'location_status': center.location_status,
+            'location_verified_at': center.location_verified_at.isoformat() if center.location_verified_at and hasattr(center.location_verified_at, 'isoformat') else (center.location_verified_at if center.location_verified_at else None),
+            'location_verified_by': center.location_verified_by_id,
+            'location_verified_by_name': name_map.get(center.location_verified_by_id),
             'assigned_teachers': center.assigned_teachers,
             'assigned_teacher_name': name_map.get(center.assigned_teachers),
             'assigned_teacher': teacher_obj,

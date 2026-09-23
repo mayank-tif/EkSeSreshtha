@@ -16,6 +16,7 @@ urlpatterns = [
     
     path('centres/', CenterView.as_view(), name='centres'),
     path('attendance/', CenterAttendanceView.as_view(), name='attendance'),
+    path('attendance/class-logs/', ClassAttendanceLogsView.as_view(), name='class-attendance-logs'),
     
     path('students/', StudentsView.as_view(), name='students'),
     path('students/school-dropdown-list/', SchoolDropDownView.as_view(), name='school-dropdown-list'),

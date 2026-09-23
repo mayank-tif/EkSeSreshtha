@@ -4,6 +4,7 @@
 {% block title %}Center Attendance - Ek Se Sreshtha{% endblock %}
 
 {% block extra-css %}
+    <link rel="stylesheet" href="{% static 'esswebapp/css/components.css' %}">
     <link rel="stylesheet" href="{% static 'esswebapp/css/attendance.css' %}">
 {% endblock %}
 
@@ -68,7 +69,7 @@
                             <th>Assigned Regional Admin</th>
                             <th style="width:130px;">Total Students</th>
                             <th style="width:190px;">Avg Attendance</th>
-                            <th style="width:90px;">View</th>
+                            <th style="width:120px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="centre-table-body">

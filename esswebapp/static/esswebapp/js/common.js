@@ -375,6 +375,8 @@ function classNames(...args) {
  * Show global loading overlay
  * @param {string} text - Loading message
  */
+let loaderHideTimeout = null;
+
 function showGlobalLoader(text = 'Loading...') {
     let loader = document.getElementById('global-loader');
     if (!loader) {
@@ -383,6 +385,11 @@ function showGlobalLoader(text = 'Loading...') {
     }
     loader.querySelector('.loader-text').textContent = text;
     loader.style.display = 'flex';
+    // Clear any pending hide timeout
+    if (loaderHideTimeout) {
+        clearTimeout(loaderHideTimeout);
+        loaderHideTimeout = null;
+    }
 }
 
 /**
@@ -390,7 +397,13 @@ function showGlobalLoader(text = 'Loading...') {
  */
 function hideGlobalLoader() {
     const loader = document.getElementById('global-loader');
-    if (loader) loader.style.display = 'none';
+    if (loader) {
+        // Minimum display time to ensure visibility
+        loaderHideTimeout = setTimeout(() => {
+            loader.style.display = 'none';
+            loaderHideTimeout = null;
+        }, 200);
+    }
 }
 
 /**
