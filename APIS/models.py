@@ -192,7 +192,7 @@ class User(models.Model):
     id = models.AutoField(db_column="Id", primary_key=True)
     enrolment_roll_id = models.CharField(db_column="EnrolmentRollId", max_length=50, null=True, blank=True, unique=True)
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
-    email = models.EmailField(db_column="Email", max_length=50, null=True, blank=True, unique=True)
+    email = models.EmailField(db_column="Email", max_length=50, null=True, blank=True, unique=False)
     password = models.TextField(db_column="Password", null=True, blank=True)
     phone_number = models.CharField(db_column="PhoneNumber", max_length=50, null=True, blank=True, unique=True)
     whats_app = models.CharField(db_column="WhatsApp", max_length=50, null=True, blank=True)
