@@ -306,6 +306,11 @@ function openAttendanceModal(centerId, centerName) {
                         <label class="form-label" for="attendance-date">Select Date</label>
                         <input type="date" id="attendance-date" class="form-input" style="max-width: 250px;">
                     </div>
+                    <div class="attendance-summary" style="margin-bottom: var(--space-4); padding: var(--space-3); background: var(--gray-50); border-radius: var(--radius-md); display: flex; gap: var(--space-6); font-size: var(--text-sm);">
+                        <span id="attendance-present-count" style="color: var(--success); font-weight: 600;">Present: 0</span>
+                        <span id="attendance-absent-count" style="color: var(--danger); font-weight: 600;">Absent: 0</span>
+                        <span id="attendance-total-count" style="color: var(--gray-700); font-weight: 600;">Total: 0</span>
+                    </div>
                     <div class="table-wrapper" style="max-height: 500px; overflow-y: auto;">
                         <table class="table" style="min-width: 600px;">
                             <thead>
@@ -325,11 +330,6 @@ function openAttendanceModal(centerId, centerName) {
                         <div class="empty-state-icon">👥</div>
                         <div class="empty-state-title">No students found</div>
                         <div class="empty-state-desc">No active students enrolled in this centre.</div>
-                    </div>
-                    <div class="attendance-summary" style="margin-top: var(--space-4); padding: var(--space-3); background: var(--gray-50); border-radius: var(--radius-md); display: flex; gap: var(--space-6); font-size: var(--text-sm);">
-                        <span id="attendance-present-count" style="color: var(--success); font-weight: 600;">Present: 0</span>
-                        <span id="attendance-absent-count" style="color: var(--danger); font-weight: 600;">Absent: 0</span>
-                        <span id="attendance-total-count" style="color: var(--gray-700); font-weight: 600;">Total: 0</span>
                     </div>
                 </div>
             </div>

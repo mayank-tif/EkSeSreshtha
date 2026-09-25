@@ -33,7 +33,100 @@
         }
         
         .logs-table {
-            min-width: 1300px;
+            min-width: 1200px;
+        }
+        
+        /* Summary counters */
+        .summary-counters {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            overflow: visible;
+        }
+        
+        .summary-counters-card {
+            flex: 1;
+            min-width: 130px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 14px 16px;
+            position: relative;
+            overflow: visible;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+        
+        .summary-counters-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+            z-index: 10;
+        }
+        
+        .summary-counters-card::before,
+        .summary-counters-card::after {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            z-index: 9999;
+        }
+        
+        .summary-counters-card:hover::before,
+        .summary-counters-card:hover::after {
+            opacity: 1;
+        }
+        
+        .summary-counters-card::before {
+            content: attr(data-tooltip);
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            background: #1f2937;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+            min-width: max-content;
+        }
+        
+        .summary-counters-card::after {
+            content: '';
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-2px);
+            border: 6px solid transparent;
+            border-top-color: #1f2937;
+        }
+        
+        .summary-counters-card .icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            margin-bottom: 8px;
+            flex-shrink: 0;
+        }
+        
+        .summary-counters-card .count {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1f2937;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+        
+        .summary-counters-card .label {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+            line-height: 1.3;
         }
         
         /* Status badge styles */
@@ -84,6 +177,9 @@
         
         .status-no_class { background: #f3f4f6; color: #374151; }
         .status-no_class .status-icon { background: #9ca3af; color: white; }
+        
+        .status-not_started { background: #f3f4f6; color: #374151; }
+        .status-not_started .status-icon { background: #9ca3af; color: white; }
         
         /* Location link */
         .location-link {
@@ -277,42 +373,122 @@
     </div>
 </div>
 
+<!-- Summary Counters -->
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-body" style="padding: 16px;">
+        <div class="summary-counters">
+            <div class="summary-counters-card" data-tooltip="Total Centres">
+                <div class="icon" style="background: #dbeafe; color: #2563eb;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                </div>
+                <div class="count" id="count-total">0</div>
+                <div class="label">Total</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="In Progress">
+                <div class="icon" style="background: #f3e8ff; color: #8b5cf6;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </div>
+                <div class="count" id="count-in_progress">0</div>
+                <div class="label">In Progress</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Ended (Not Closed)">
+                <div class="icon" style="background: #dbeafe; color: #3b82f6;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <div class="count" id="count-active_ended">0</div>
+                <div class="label">Ended (Not Closed)</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Not Ended (No Attendance)">
+                <div class="icon" style="background: #dbeafe; color: #3b82f6;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <div class="count" id="count-active_ended_no_att">0</div>
+                <div class="label">Not Ended (No Att.)</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Completed">
+                <div class="icon" style="background: #dcfce7; color: #16a34a;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+                <div class="count" id="count-completed">0</div>
+                <div class="label">Completed</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Completed (No Attendance)">
+                <div class="icon" style="background: #fef3c7; color: #f59e0b;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <div class="count" id="count-completed_no_attendance">0</div>
+                <div class="label">Completed (No Att.)</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Cancelled">
+                <div class="icon" style="background: #fee2e2; color: #dc2626;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+                <div class="count" id="count-cancelled">0</div>
+                <div class="label">Cancelled</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Holiday">
+                <div class="icon" style="background: #fef3c7; color: #f59e0b;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                </div>
+                <div class="count" id="count-holiday">0</div>
+                <div class="label">Holiday</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Not Started">
+                <div class="icon" style="background: #f3f4f6; color: #6b7280;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <div class="count" id="count-not_started">0</div>
+                <div class="label">Not Started</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Class Not Held">
+                <div class="icon" style="background: #f3f4f6; color: #6b7280;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                </div>
+                <div class="count" id="count-no_class">0</div>
+                <div class="label">Class Not Held</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Filters -->
 <div class="card" style="margin-bottom: 16px;">
     <div class="card-body" style="padding: 16px;">
         <div class="class-logs-filters">
             <div class="form-group">
-                <label class="form-label" for="logs-date-from">From Date</label>
-                <input type="date" id="logs-date-from" class="form-input">
-            </div>
-            <div class="form-group">
-                <label class="form-label" for="logs-date-to">To Date</label>
-                <input type="date" id="logs-date-to" class="form-input">
+                <label class="form-label" for="logs-date">Date</label>
+                <input type="date" id="logs-date" class="form-input" style="width: 180px;">
             </div>
             <div class="form-group">
                 <label class="form-label" for="logs-center-filter">Centre</label>
-                <select id="logs-center-filter" class="form-select">
+                <select id="logs-center-filter" class="form-select" style="width: auto; min-width: 200px; flex: 0 0 auto;">
                     <option value="">All Centres</option>
                 </select>
             </div>
             <div class="form-group">
                 <label class="form-label" for="logs-teacher-filter">Teacher</label>
-                <select id="logs-teacher-filter" class="form-select">
+                <select id="logs-teacher-filter" class="form-select" style="width: auto; min-width: 200px; flex: 0 0 auto;">
                     <option value="">All Teachers</option>
                 </select>
             </div>
             <div class="form-group">
                 <label class="form-label" for="logs-status-filter">Status</label>
-                <select id="logs-status-filter" class="form-select">
+                <select id="logs-status-filter" class="form-select" style="width: auto; min-width: 180px; flex: 0 0 auto;">
                     <option value="">All Status</option>
-                    <option value="1">Active/In Progress</option>
-                    <option value="2">Completed</option>
-                    <option value="3">Cancelled</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="completed_no_attendance">Completed (No Attendance)</option>
+                    <option value="active_ended">Ended (Not Closed)</option>
+                    <option value="active_ended_no_att">Not Ended (No Attendance)</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="holiday">Holiday</option>
+                    <option value="not_started">Not Started</option>
+                    <option value="no_class">Class Not Held</option>
                 </select>
             </div>
             <div class="form-group">
                 <label class="form-label" for="logs-search">Search</label>
-                <input type="text" id="logs-search" class="form-input" placeholder="Class name, center, enrolment ID...">
+                <input type="text" id="logs-search" class="form-input" placeholder="Search centre, teacher..." style="width: 220px;">
             </div>
         </div>
     </div>
@@ -328,8 +504,8 @@
                         <th style="width: 50px;">#</th>
                         <th style="min-width: 150px;">Teacher</th>
                         <th style="min-width: 180px;">Centre / Village</th>
-                        <th style="min-width: 160px;">Start Date / Time</th>
-                        <th style="min-width: 160px;">End Date / Time</th>
+                        <th style="min-width: 160px;">Start Time</th>
+                        <th style="min-width: 160px;">End Time</th>
                         <th style="min-width: 100px;">Gross Hours</th>
                         <th style="min-width: 100px;">Present</th>
                         <th style="min-width: 100px;">Absent</th>
@@ -405,10 +581,6 @@
 {% endblock %}
 
 {% block extra-js %}
-    {% if GOOGLE_MAPS_API_KEY %}
-    <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places" async defer></script>
-    {% endif %}
-    <script src="{% static 'esswebapp/js/class-attendance-logs.js' %}?v=1"></script>
     <script>
         renderShell({
             title: 'Class Attendance Logs',
@@ -416,4 +588,9 @@
             breadcrumbs: [{label: 'Attendance'}, {label: 'Class Logs'}]
         });
     </script>
+    {% if GOOGLE_MAPS_API_KEY %}
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places" async defer></script>
+    {% endif %}
+    <script src="{% static 'esswebapp/js/class-attendance-logs.js' %}?v=1"></script>
+    
 {% endblock %}

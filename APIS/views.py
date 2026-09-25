@@ -124,6 +124,16 @@ class GenerateCenterAttendanceTokenView(TokenObtainPairView):
         token["username"] = username
         token.set_exp(lifetime=timedelta(minutes=10))  # Token valid for 10 minutes
         logger.info("GenerateCenterAttendanceTokenView : Post : Token generated successfully")
+        
+        # Log activity
+        log_activity(
+            module='FeedIndia_GenerateCenterAttendanceToken',
+            action='GENERATE_TOKEN',
+            record_id=None,
+            data={'username': username, 'deviceid': request.data.get('deviceid')},
+            request=request
+        )
+        
         return Response({"access_token": str(token)}, status=status.HTTP_200_OK)
 
 
@@ -160,6 +170,15 @@ class CenterAttendanceView(APIView):
         # Get center attendance data
         data = get_center_attendance_data(center_id, attendance_date)
         logger.info(f"CenterAttendanceView : Post : Retrieved data for center_id={center_id}, attendance_date={attendance_date}")
+        
+        # Log activity
+        log_activity(
+            module='FeedIndia_CenterAttendance',
+            action='VIEW_ATTENDANCE',
+            record_id=center_id,
+            data={'center_id': center_id, 'attendance_date': str(attendance_date)},
+            request=request
+        )
         
         if data is None:
             return Response({"message": "No attendance data found."}, status=status.HTTP_404_NOT_FOUND)
@@ -222,6 +241,16 @@ class ExternalCenterDataView(APIView):
             response_serializer = api_serializers.ExternalCenterDataSerializer(data, many=True)
 
         logger.info(f"ExternalCenterDataView : Post : Returning data for center_id={center_id}")
+        
+        # Log activity
+        log_activity(
+            module='FeedIndia_ExternalCenterData',
+            action='VIEW_CENTERS',
+            record_id=center_id,
+            data={'center_id': center_id},
+            request=request
+        )
+        
         return Response(
             response_serializer.data,
             status=status.HTTP_200_OK
@@ -1132,6 +1161,15 @@ class ClassSaveclassPostView(APIView):
             }
             
             saved_class = save_class(class_data, request)
+            
+            # Handle holiday/Sunday block response
+            if isinstance(saved_class, dict) and saved_class.get('status') == False:
+                return Response({
+                    "status": False,
+                    "error": saved_class.get('error'),
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": saved_class.get('code')
+                }, status=status.HTTP_400_BAD_REQUEST)
             
             if saved_class:
                 # Log activity for save
@@ -3567,6 +3605,15 @@ class StudentattendanceSavestudentattendancePostView(APIView):
             print("common", attendance_data)
             result = save_student_attendance(attendance_data, is_automatic=False, is_manual=True)
 
+            # Handle holiday/Sunday block response
+            if isinstance(result, dict) and result.get('status') == False:
+                return Response({
+                    "status": False,
+                    "error": result.get('error'),
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": result.get('code')
+                }, status=status.HTTP_400_BAD_REQUEST)
+
             logged_user_id = get_user_id_from_token(request)
             
             if result == -1:
@@ -3909,6 +3956,20 @@ class StudentSaveManualAttendanceView(APIView):
                     "CurrentCount": current,
                     "Limit": limit,
                     "Remaining": remaining
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Check holiday/Sunday for the attendance date
+            scan_date = attendance_data.get('ScanDate')
+            check_date = scan_date if scan_date else datetime.now()
+            is_blocked, reason = check_holiday_and_sunday(center.id, check_date)
+            if is_blocked:
+                error_msg = 'Cannot mark attendance on Sunday' if reason == 'sunday' else 'Cannot mark attendance on holiday'
+                error_code = -16 if reason == 'sunday' else -17
+                return Response({
+                    "status": False,
+                    "error": error_msg,
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": error_code
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             # Save attendance

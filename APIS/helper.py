@@ -18,6 +18,7 @@ from .utils import *
 from EkSeSreshtha.env_details import (
     MANUAL_ATTENDANCE_MONTHLY_LIMIT,
     ATTENDANCE_GPS_RADIUS_METERS,
+    ATTENDANCE_SKIP_SUNDAY_CHECK,
 )
 
 logger = logging.getLogger(__name__)
@@ -2512,6 +2513,14 @@ def save_class(class_data, request):
         today = datetime.now().date()
         print(center_id, today)
 
+        # Check holiday/Sunday for today
+        is_blocked, reason = check_holiday_and_sunday(center_id, today)
+        if is_blocked:
+            if reason == 'sunday':
+                return {'status': False, 'error': 'Cannot start class on Sunday', 'code': -18}
+            elif reason == 'holiday':
+                return {'status': False, 'error': 'Cannot start class on holiday', 'code': -19}
+        
         with transaction.atomic():
             # Check if class already exists for today
             existing = ClassModel.objects.filter(
@@ -4884,7 +4893,42 @@ def get_all_schools():
     except Exception as e:
         logger.error(f"SchoolHelper : GetAllSchools : {str(e)}")
         raise e
+
+
+def check_holiday_and_sunday(center_id, check_date):
+    """
+    Check if given date is a holiday or Sunday for the center.
     
+    Args:
+        center_id: Center ID
+        check_date: datetime.date or datetime.datetime object
+    
+    Returns:
+        tuple: (is_holiday_or_sunday, reason)
+        - is_holiday_or_sunday: True if holiday or Sunday
+        - reason: 'holiday', 'sunday', or None
+    """
+    if isinstance(check_date, datetime):
+        check_date = check_date.date()
+    
+    # Check Sunday (weekday 6 = Sunday)
+    if not ATTENDANCE_SKIP_SUNDAY_CHECK and check_date.weekday() == 6:
+        return True, 'sunday'
+    
+    # Check holiday
+    holiday = Holidays.objects.filter(
+        center_id=center_id,
+        status=True,
+        start_date__date__lte=check_date,
+        end_date__date__gte=check_date
+    ).first()
+    
+    if holiday:
+        return True, 'holiday'
+    
+    return False, None
+
+
 #---------------------------------------------------------
 # StudentAttendance APIs Helper Functions
 #---------------------------------------------------------
@@ -4925,6 +4969,23 @@ def save_student_attendance(attendance_data, is_automatic=False, is_manual=False
         
         if not student_ids:
             return -1
+        
+        # Check holiday/Sunday for the attendance date
+        if isinstance(scan_date, str):
+            try:
+                check_date = datetime.fromisoformat(scan_date).date()
+            except ValueError:
+                check_date = datetime.now().date()
+        elif scan_date:
+            check_date = scan_date.date() if hasattr(scan_date, 'date') else datetime.now().date()
+        else:
+            check_date = datetime.now().date()
+        is_blocked, reason = check_holiday_and_sunday(center_id, check_date)
+        if is_blocked:
+            if reason == 'sunday':
+                return {'status': False, 'error': 'Cannot mark attendance on Sunday', 'code': -16}
+            elif reason == 'holiday':
+                return {'status': False, 'error': 'Cannot mark attendance on holiday', 'code': -17}
         
         # Get class and center objects for FK
         class_obj = ClassModel.objects.filter(id=class_id, active_status=True).first()

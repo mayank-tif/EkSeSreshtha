@@ -8,7 +8,7 @@ from django.db.models import Count, Prefetch
 import json
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from APIS.models import *
 from APIS.utils import (hash_password, generate_ra_enrolment_roll_id,
@@ -658,6 +658,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 return self._get_class_logs_api(request)
             if action == 'class_log_detail':
                 return self._get_class_log_detail_api(request)
+            if action == 'class_log_summary':
+                return self._get_class_log_summary_api(request)
             return JsonResponse({'detail': 'Invalid action'}, status=400)
         
         from EkSeSreshtha.env_details import GOOGLE_MAPS_API_KEY
@@ -670,8 +672,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         """Get classes with attendance data for the user's accessible centers"""
         accessible_center_ids = get_user_accessible_center_ids(request)
         if accessible_center_ids is not None:
-            return ClassModel.objects.filter(center_id__in=accessible_center_ids, active_status=True)
-        return ClassModel.objects.filter(active_status=True)
+            return ClassModel.objects.filter(center_id__in=accessible_center_ids, active_status=True, status__in=[1, 2, 3])
+        return ClassModel.objects.filter(active_status=True, status__in=[1, 2, 3])
     
     def _get_class_logs_api(self, request):
         try:
@@ -679,53 +681,201 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             page_size = int(request.GET.get('page_size', PAGE_SIZE))
             search = request.GET.get('search', '').strip().lower()
             
-            date_from = request.GET.get('date_from')
-            date_to = request.GET.get('date_to')
+            # Single date parameter (date-centric view)
+            filter_date = request.GET.get('date')
+            logger.info(f'_get_class_logs_api: filter_date={filter_date}')
             status_filter = request.GET.get('status')
             center_id = request.GET.get('center_id')
             teacher_id = request.GET.get('teacher_id')
             
-            from django.db.models import Prefetch
-            queryset = self._get_class_logs_queryset(request).select_related(
-                'center', 'center__district', 'center__village', 'closed_by'
+            # Get accessible centers for the user
+            accessible_center_ids = get_user_accessible_center_ids(request)
+            if accessible_center_ids is None:
+                # Super admin - get all centers with active classes
+                center_queryset = Center.objects.filter(status=True)
+            else:
+                center_queryset = Center.objects.filter(id__in=accessible_center_ids, status=True)
+            
+            # Apply center filter
+            if center_id:
+                center_queryset = center_queryset.filter(id=center_id)
+            
+            # Apply search on center name
+            if search:
+                center_queryset = center_queryset.filter(center_name__icontains=search)
+            
+            # Add select_related for district and village
+            center_queryset = center_queryset.select_related('district', 'village')
+            
+            # Get all classes for these centers with active_status=True and relevant statuses
+            class_queryset = ClassModel.objects.filter(
+                center__in=center_queryset,
+                active_status=True,
+                status__in=[1, 2, 3]  # Active, Completed, Cancelled
+            ).select_related(
+                'center', 'center__district', 'center__village'
             ).prefetch_related(
-                Prefetch('attendances', queryset=StudentAttendance.objects.filter(status=True).select_related('student'))
+                'attendances'
             )
             
-            if center_id:
-                queryset = queryset.filter(center_id=center_id)
             if teacher_id:
-                queryset = queryset.filter(users_id=teacher_id)
-            if date_from:
+                class_queryset = class_queryset.filter(users_id=teacher_id)
+            
+            # Filter by date if provided - only classes that STARTED on this exact date
+            if filter_date:
                 try:
-                    queryset = queryset.filter(started_date__date__gte=date_from)
+                    filter_date_obj = datetime.strptime(filter_date, '%Y-%m-%d').date()
+                    class_queryset = class_queryset.filter(started_date__date=filter_date_obj)
                 except:
                     pass
-            if date_to:
+            
+            classes = list(class_queryset)
+            
+            # Build center-level data for the selected date
+            center_data = []
+            centers = list(center_queryset)
+            
+            now = datetime.now()
+            
+            if filter_date:
                 try:
-                    queryset = queryset.filter(started_date__date__lte=date_to)
+                    filter_date_obj = datetime.strptime(filter_date, '%Y-%m-%d').date()
                 except:
-                    pass
-            if search:
-                queryset = queryset.filter(
-                    models.Q(name__icontains=search) |
-                    models.Q(center__center_name__icontains=search) |
-                    models.Q(class_enrolment_id__icontains=search)
-                )
+                    filter_date_obj = now.date()
+            else:
+                filter_date_obj = now.date()
+            
+            logger.info(f'_get_class_logs_api: filter_date_obj={filter_date_obj}, today={now.date()}')
+            
+            for center in centers:
+                # Find ALL classes for this center (not just filtered by date range)
+                center_all_classes = [c for c in classes if c.center_id == center.id]
+                
+                # First check: Is there ANY class that STARTED on this exact date?
+                class_on_date = None
+                for cls in center_all_classes:
+                    if cls.started_date and cls.started_date.date() == filter_date_obj:
+                        class_on_date = cls
+                        break
+                    
+                print(f"Center {center.center_name} ({center.id}) - class_on_date: {class_on_date}")
+                
+                if class_on_date:
+                    # There IS a class that started on this exact date
+                    # Check for holiday on filter_date for this center
+                    holiday = Holidays.objects.filter(
+                        center_id=center.id,
+                        status=True,
+                        start_date__date__lte=filter_date_obj,
+                        end_date__date__gte=filter_date_obj
+                    ).first()
+                    
+                    # Check if class was cancelled for this date
+                    cancelled_for_date = False
+                    if class_on_date.cancel_date and class_on_date.cancel_date.date() == filter_date_obj:
+                        cancelled_for_date = True
+                    
+                    if holiday:
+                        status_info = {
+                            'key': 'holiday',
+                            'label': 'Holiday',
+                            'color': '#f59e0b',
+                            'icon': '🎉',
+                            'tooltip': f'Holiday: {holiday.name}',
+                            'present': 0,
+                            'absent': 0,
+                            'gross_hours': 0
+                        }
+                    elif cancelled_for_date:
+                        status_info = {
+                            'key': 'cancelled',
+                            'label': 'Cancelled',
+                            'color': '#dc2626',
+                            'icon': '✕',
+                            'tooltip': f'Class cancelled on {class_on_date.cancel_date.strftime("%d %b %Y %I:%M %p")}',
+                            'present': 0,
+                            'absent': 0,
+                            'gross_hours': 0
+                        }
+                    else:
+                        # Use the class status logic for the specific date
+                        print(f"Getting status info for class {class_on_date.id} on date {filter_date_obj}")
+                        status_info = self._get_status_info_for_date(class_on_date, filter_date_obj)
+                    
+                    center_data.append({
+                        'center': center,
+                        'class_obj': class_on_date,
+                        'status_info': status_info,
+                        'filter_date': filter_date_obj,
+                    })
+                else:
+                    # NO class started on this exact date for this center
+                    # Check holiday
+                    holiday = Holidays.objects.filter(
+                        center_id=center.id,
+                        status=True,
+                        start_date__date__lte=filter_date_obj,
+                        end_date__date__gte=filter_date_obj
+                    ).first()
+                    
+                    if holiday:
+                        status_info = {
+                            'key': 'holiday',
+                            'label': 'Holiday',
+                            'color': '#f59e0b',
+                            'icon': '🎉',
+                            'tooltip': f'Holiday: {holiday.name}',
+                            'present': 0,
+                            'absent': 0,
+                            'gross_hours': 0
+                        }
+                    else:
+                        if filter_date_obj == now.date():
+                            status_info = {
+                                'key': 'not_started',
+                                'label': 'Class Not Started',
+                                'color': '#6b7280',
+                                'icon': '—',
+                                'tooltip': 'Class not started yet for today',
+                                'present': 0,
+                                'absent': 0,
+                                'gross_hours': 0
+                            }
+                        else:
+                            status_info = {
+                                'key': 'no_class',
+                                'label': 'Class Not Held',
+                                'color': '#6b7280',
+                                'icon': '—',
+                                'tooltip': 'No class held on this date',
+                                'present': 0,
+                                'absent': 0,
+                                'gross_hours': 0
+                            }
+                    
+                    center_data.append({
+                        'center': center,
+                        'class_obj': None,  # No class on this date
+                        'status_info': status_info,
+                        'filter_date': filter_date_obj,
+                    })
+            
+            # Apply status filter if provided
             if status_filter:
-                queryset = queryset.filter(status=status_filter)
+                center_data = [cd for cd in center_data if cd['status_info']['key'] == status_filter]
             
-            queryset = queryset.order_by('-started_date')
+            # Sort: centers with classes first, then by center name
+            center_data.sort(key=lambda x: (x['class_obj'] is None, x['center'].center_name or ''))
             
-            total = queryset.count()
+            total = len(center_data)
             total_pages = (total + page_size - 1) // page_size
             
             start = (page - 1) * page_size
             end = start + page_size
             
-            classes_page = list(queryset[start:end])
+            center_data_page = center_data[start:end]
             
-            items = [self._serialize_class_log(c) for c in classes_page]
+            items = [self._serialize_center_log(cd) for cd in center_data_page]
             
             return JsonResponse({
                 'results': items,
@@ -735,6 +885,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'total_pages': total_pages
             })
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return JsonResponse({'detail': str(e)}, status=500)
     
     def _get_class_log_detail_api(self, request):
@@ -756,12 +908,154 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
     
+    def _get_class_log_summary_api(self, request):
+        """Returns summary counts for each status type (for dashboard counters)
+        Works with the date-centric view - shows counts per center for the selected date."""
+        try:
+            # Get accessible centers for the user
+            accessible_center_ids = get_user_accessible_center_ids(request)
+            if accessible_center_ids is None:
+                # Super admin - get all centers with active classes
+                center_queryset = Center.objects.filter(status=True)
+            else:
+                center_queryset = Center.objects.filter(id__in=accessible_center_ids, status=True)
+            
+            # Apply filters
+            search = request.GET.get('search', '').strip().lower()
+            filter_date = request.GET.get('date')
+            center_id = request.GET.get('center_id')
+            teacher_id = request.GET.get('teacher_id')
+            
+            if center_id:
+                center_queryset = center_queryset.filter(id=center_id)
+            if search:
+                center_queryset = center_queryset.filter(center_name__icontains=search)
+            
+            # Add select_related for district and village to avoid N+1 queries
+            center_queryset = center_queryset.select_related('district', 'village')
+            
+            # Get all classes for these centers with active_status=True and relevant statuses
+            class_queryset = ClassModel.objects.filter(
+                center__in=center_queryset,
+                active_status=True,
+                status__in=[1, 2, 3]  # Active, Completed, Cancelled
+            ).select_related(
+                'center', 'center__district', 'center__village'
+            ).prefetch_related(
+                'attendances'
+            )
+            
+            if teacher_id:
+                class_queryset = class_queryset.filter(users_id=teacher_id)
+            
+            # Filter by date if provided - only classes that STARTED on this exact date
+            if filter_date:
+                try:
+                    filter_date_obj = datetime.strptime(filter_date, '%Y-%m-%d').date()
+                    class_queryset = class_queryset.filter(started_date__date=filter_date_obj)
+                except:
+                    filter_date_obj = now.date()
+            else:
+                filter_date_obj = now.date()
+            
+            classes = list(class_queryset)
+            
+            now = datetime.now()
+            
+            summary = {
+                'total': 0,
+                'in_progress': 0,
+                'active_ended': 0,
+                'active_ended_no_att': 0,
+                'completed': 0,
+                'completed_no_attendance': 0,
+                'cancelled': 0,
+                'holiday': 0,
+                'not_started': 0,
+                'no_class': 0
+            }
+            
+            centers = list(center_queryset)
+            
+            for center in centers:
+                center_all_classes = [c for c in classes if c.center_id == center.id]
+                
+                # First check: Is there ANY class that STARTED on this exact date?
+                class_on_date = None
+                for cls in center_all_classes:
+                    if cls.started_date and cls.started_date.date() == filter_date_obj:
+                        class_on_date = cls
+                        break
+                
+                if class_on_date:
+                    holiday = Holidays.objects.filter(
+                        center_id=center.id,
+                        status=True,
+                        start_date__date__lte=filter_date_obj,
+                        end_date__date__gte=filter_date_obj
+                    ).first()
+                    
+                    cancelled_for_date = False
+                    if class_on_date.cancel_date and class_on_date.cancel_date.date() == filter_date_obj:
+                        cancelled_for_date = True
+                    
+                    if holiday:
+                        summary['holiday'] += 1
+                    elif cancelled_for_date:
+                        summary['cancelled'] += 1
+                    else:
+                        status_info = self._get_status_info_for_date(class_on_date, filter_date_obj)
+                        key = status_info['key']
+                        if key in summary:
+                            summary[key] += 1
+                        else:
+                            summary[key] = summary.get(key, 0) + 1
+                else:
+                    # NO class started on this exact date for this center
+                    holiday = Holidays.objects.filter(
+                        center_id=center.id,
+                        status=True,
+                        start_date__date__lte=filter_date_obj,
+                        end_date__date__gte=filter_date_obj
+                    ).first()
+                    
+                    if holiday:
+                        summary['holiday'] += 1
+                    else:
+                        if filter_date_obj == now.date():
+                            summary['not_started'] += 1
+                        else:
+                            summary['no_class'] += 1
+                
+                summary['total'] += 1
+            
+            return JsonResponse(summary)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return JsonResponse({'detail': str(e)}, status=500)
+    
     def _get_status_info(self, cls):
-        """Determine status and color for a class log (like Keka)"""
-        from django.utils import timezone
-        now = timezone.now()
+        """Determine status and color for a class log based on date and attendance.
         
-        if cls.status == 3:  # Cancelled
+        Cases:
+        1. status=3 → Cancelled
+        2. status=2 → Completed (regardless of date)
+        3. status=1 (Active):
+           - If class date is today → In Progress
+           - For other dates:
+             a. Has start & end time + attendance marked → Completed
+             b. Has start & end time + no attendance → Completed (No Attendance)
+             c. Has start, no end time + no attendance → Not Ended (No Attendance)
+             d. Has start, no end time + attendance marked → Ended (Not Closed)
+        4. Holiday takes precedence over all except Cancelled
+        5. Future date → Not Started
+        6. No start date / status=0 → No Class
+        """
+        now = datetime.now()
+        
+        # 1. Cancelled (highest priority after holiday check)
+        if cls.status == 3:
             return {
                 'key': 'cancelled',
                 'label': 'Cancelled',
@@ -770,7 +1064,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'tooltip': f'Class was cancelled' + (f' on {cls.cancel_date.strftime("%d %b %Y %I:%M %p")}' if cls.cancel_date else '')
             }
         
-        if not cls.started_date:
+        # No start date / status 0
+        if cls.status == 0 or not cls.started_date:
             return {
                 'key': 'no_class',
                 'label': 'No Class',
@@ -779,20 +1074,12 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'tooltip': 'Class not scheduled'
             }
         
-        # Check if class is in the future (not started yet)
-        if cls.started_date > now:
-            return {
-                'key': 'no_class',
-                'label': 'Not Started',
-                'color': '#6b7280',
-                'icon': '—',
-                'tooltip': f'Class scheduled for {cls.started_date.strftime("%d %b %Y")}'
-            }
+        class_date = cls.started_date.date()
+        today = now.date()
         
-        # Check if it's a holiday
-        class_date = cls.started_date.date() if cls.started_date else None
+        # Check if it's a holiday (takes precedence over most statuses)
         holiday = None
-        if class_date and cls.center_id:
+        if cls.center_id:
             holiday = Holidays.objects.filter(
                 center_id=cls.center_id,
                 status=True,
@@ -809,13 +1096,24 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'tooltip': f'Holiday: {holiday.name}'
             }
         
-        if cls.status == 2:  # Completed
+        # Future date
+        if cls.started_date > now:
+            return {
+                'key': 'no_class',
+                'label': 'Not Started',
+                'color': '#6b7280',
+                'icon': '—',
+                'tooltip': f'Class scheduled for {cls.started_date.strftime("%d %b %Y")}'
+            }
+        
+        # 2. Status 2 = Completed (regardless of date, if not holiday)
+        if cls.status == 2:
+            duration = 0
+            gross_hours = 0
             if cls.end_date and cls.started_date:
                 duration = cls.end_date - cls.started_date
                 hours = duration.total_seconds() / 3600
                 gross_hours = round(hours, 2)
-            else:
-                gross_hours = 0
             
             attendances = list(cls.attendances.filter(status=True).select_related('student'))
             if attendances:
@@ -843,25 +1141,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     'absent': 0
                 }
         
-        if cls.status == 1:  # Active
-            # Check if class started today (only today's classes can be 'In Progress')
-            class_date = cls.started_date.date() if cls.started_date else None
-            today = now.date()
-            
-            if cls.end_date:
-                duration = cls.end_date - cls.started_date
-                hours = duration.total_seconds() / 3600
-                gross_hours = round(hours, 2)
-                return {
-                    'key': 'active_ended',
-                    'label': 'Ended (Not Closed)',
-                    'color': '#3b82f6',
-                    'icon': '⏱',
-                    'tooltip': f'Class ended but not closed · {gross_hours}h',
-                    'gross_hours': gross_hours
-                }
-            elif class_date == today:
-                # Only classes starting TODAY can be 'In Progress'
+        # 3. Status 1 = Active
+        if cls.status == 1:
+            # 3a. Today's class with no end_date = In Progress
+            if class_date == today and not cls.end_date:
                 return {
                     'key': 'in_progress',
                     'label': 'In Progress',
@@ -869,25 +1152,70 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     'icon': '▶',
                     'tooltip': 'Class is currently in progress'
                 }
-            elif class_date and class_date < today:
-                # Past date with no end_date = ended but not closed
-                return {
-                    'key': 'active_ended',
-                    'label': 'Ended (Not Closed)',
-                    'color': '#3b82f6',
-                    'icon': '⏱',
-                    'tooltip': 'Class ended but not closed (past date)'
-                }
+            
+            # For other dates (past dates)
+            if cls.end_date and cls.started_date:
+                # Has start and end time
+                duration = cls.end_date - cls.started_date
+                hours = duration.total_seconds() / 3600
+                gross_hours = round(hours, 2)
+                
+                attendances = list(cls.attendances.filter(status=True).select_related('student'))
+                if attendances:
+                    # 4a. Has start & end time + attendance marked → Completed
+                    present = sum(1 for a in attendances if a.type is True)
+                    absent = sum(1 for a in attendances if a.type is False)
+                    return {
+                        'key': 'completed',
+                        'label': 'Completed',
+                        'color': '#16a34a',
+                        'icon': '✓',
+                        'tooltip': f'Class completed · {gross_hours}h · {present} present, {absent} absent',
+                        'gross_hours': gross_hours,
+                        'present': present,
+                        'absent': absent
+                    }
+                else:
+                    # 4b. Has start & end time + no attendance → Completed (No Attendance)
+                    return {
+                        'key': 'completed_no_attendance',
+                        'label': 'Completed (No Attendance)',
+                        'color': '#f59e0b',
+                        'icon': '⚠',
+                        'tooltip': f'Class completed · {gross_hours}h · No attendance marked',
+                        'gross_hours': gross_hours,
+                        'present': 0,
+                        'absent': 0
+                    }
             else:
-                # Future date or no date
-                return {
-                    'key': 'no_class',
-                    'label': 'Not Started',
-                    'color': '#6b7280',
-                    'icon': '—',
-                    'tooltip': 'Class not started yet'
-                }
+                # No end_date
+                attendances = list(cls.attendances.filter(status=True).select_related('student'))
+                if attendances:
+                    # 4d. Has start, no end time + attendance marked → Ended (Not Closed)
+                    present = sum(1 for a in attendances if a.type is True)
+                    absent = sum(1 for a in attendances if a.type is False)
+                    return {
+                        'key': 'active_ended',
+                        'label': 'Ended (Not Closed)',
+                        'color': '#3b82f6',
+                        'icon': '⏱',
+                        'tooltip': f'Class ended but not closed · {present} present, {absent} absent',
+                        'present': present,
+                        'absent': absent
+                    }
+                else:
+                    # 4c. Has start, no end time + no attendance → Not Ended (No Attendance)
+                    return {
+                        'key': 'active_ended_no_att',
+                        'label': 'Not Ended (No Attendance)',
+                        'color': '#3b82f6',
+                        'icon': '⏱',
+                        'tooltip': 'Class not ended · No attendance marked',
+                        'present': 0,
+                        'absent': 0
+                    }
         
+        # Default fallback
         return {
             'key': 'unknown',
             'label': 'Unknown',
@@ -896,13 +1224,277 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             'tooltip': 'Unknown status'
         }
     
+    def _get_status_info_for_date(self, cls, filter_date):
+        """Determine status for a class on a specific filter date.
+        
+        This is used for the date-centric view where we show status per center per date.
+        
+        Logic per user requirements:
+        - For status=2: Always Completed (with or without attendance)
+        - For status=3: Cancelled
+        - For status=1 (Active):
+            - If class_date == today and no end_date: In Progress
+            - If class_date == today and has end_date: Completed (with or without attendance)
+            - If class_date < today (past date):
+                - Has end_date: Completed (with or without attendance)
+                - No end_date:
+                    - Has attendance: Not Ended (Not Closed) - active_ended
+                    - No attendance: Not Ended (No Attendance) - active_ended_no_att
+            - If class_date > today (future): Not Started
+        - For status=0 or no start_date or no class for that center:
+            - Today: Not Started
+            - Other: No Class
+        """
+        now = datetime.now()
+        today = now.date()
+        class_date = cls.started_date.date() if cls.started_date else None
+        
+        # Cancelled check - status 3
+        if cls.status == 3:
+            if cls.cancel_date and cls.cancel_date.date() == filter_date:
+                return {
+                    'key': 'cancelled',
+                    'label': 'Cancelled',
+                    'color': '#dc2626',
+                    'icon': '✕',
+                    'tooltip': f'Class cancelled on {cls.cancel_date.strftime("%d %b %Y %I:%M %p")}',
+                    'present': 0,
+                    'absent': 0,
+                    'gross_hours': 0
+                }
+        
+        # No start date / status 0
+        if cls.status == 0 or not cls.started_date:
+            if filter_date == today:
+                return {
+                    'key': 'not_started',
+                    'label': 'Class Not Started',
+                    'color': '#6b7280',
+                    'icon': '—',
+                    'tooltip': 'Class not started yet for today',
+                    'present': 0,
+                    'absent': 0,
+                    'gross_hours': 0
+                }
+            else:
+                return {
+                    'key': 'no_class',
+                    'label': 'Class Not Held',
+                    'color': '#6b7280',
+                    'icon': '—',
+                    'tooltip': 'No class scheduled for this date',
+                    'present': 0,
+                    'absent': 0,
+                    'gross_hours': 0
+                }
+        
+        # Status 2 = Completed (regardless of date)
+        if cls.status == 2:
+            duration = 0
+            gross_hours = 0
+            if cls.end_date and cls.started_date:
+                duration = cls.end_date - cls.started_date
+                hours = duration.total_seconds() / 3600
+                gross_hours = round(hours, 2)
+            
+            attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
+            if attendances:
+                present = sum(1 for a in attendances if a.type is True)
+                absent = sum(1 for a in attendances if a.type is False)
+                return {
+                    'key': 'completed',
+                    'label': 'Completed',
+                    'color': '#16a34a',
+                    'icon': '✓',
+                    'tooltip': f'Class completed · {gross_hours}h · {present} present, {absent} absent',
+                    'gross_hours': gross_hours,
+                    'present': present,
+                    'absent': absent
+                }
+            else:
+                return {
+                    'key': 'completed_no_attendance',
+                    'label': 'Completed (No Attendance)',
+                    'color': '#f59e0b',
+                    'icon': '⚠',
+                    'tooltip': f'Class completed · {gross_hours}h · No attendance marked',
+                    'gross_hours': gross_hours,
+                    'present': 0,
+                    'absent': 0
+                }
+        
+        # Status 1 = Active
+        if cls.status == 1:
+            # Future class relative to filter_date
+            if class_date and class_date > filter_date:
+                return {
+                    'key': 'not_started',
+                    'label': 'Not Started',
+                    'color': '#6b7280',
+                    'icon': '—',
+                    'tooltip': f'Class scheduled for {cls.started_date.strftime("%d %b %Y")}',
+                    'present': 0,
+                    'absent': 0,
+                    'gross_hours': 0
+                }
+            
+            # Class date matches filter_date (today)
+            if class_date == filter_date:
+                if not cls.end_date:
+                    # Today's class with no end_date = In Progress
+                    if filter_date == today:
+                        return {
+                            'key': 'in_progress',
+                            'label': 'In Progress',
+                            'color': '#8b5cf6',
+                            'icon': '▶',
+                            'tooltip': 'Class is currently in progress',
+                            'present': 0,
+                            'absent': 0,
+                            'gross_hours': 0
+                        }
+                    else:
+                        # Past date (same day class but filter_date is in past) - treat as completed
+                        duration = 0
+                        gross_hours = 0
+                        if cls.end_date and cls.started_date:
+                            duration = cls.end_date - cls.started_date
+                            hours = duration.total_seconds() / 3600
+                            gross_hours = round(hours, 2)
+                        attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
+                        if attendances:
+                            present = sum(1 for a in attendances if a.type is True)
+                            absent = sum(1 for a in attendances if a.type is False)
+                            return {
+                                'key': 'completed',
+                                'label': 'Completed',
+                                'color': '#16a34a',
+                                'icon': '✓',
+                                'tooltip': f'Class completed · {gross_hours}h · {present} present, {absent} absent',
+                                'gross_hours': gross_hours,
+                                'present': present,
+                                'absent': absent
+                            }
+                        else:
+                            return {
+                                'key': 'completed_no_attendance',
+                                'label': 'Completed (No Attendance)',
+                                'color': '#f59e0b',
+                                'icon': '⚠',
+                                'tooltip': f'Class completed · {gross_hours}h · No attendance marked',
+                                'gross_hours': gross_hours,
+                                'present': 0,
+                                'absent': 0
+                            }
+                else:
+                    # Has end_date on same day
+                    duration = cls.end_date - cls.started_date
+                    hours = duration.total_seconds() / 3600
+                    gross_hours = round(hours, 2)
+                    attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
+                    if attendances:
+                        present = sum(1 for a in attendances if a.type is True)
+                        absent = sum(1 for a in attendances if a.type is False)
+                        return {
+                            'key': 'completed',
+                            'label': 'Completed',
+                            'color': '#16a34a',
+                            'icon': '✓',
+                            'tooltip': f'Class completed · {gross_hours}h · {present} present, {absent} absent',
+                            'gross_hours': gross_hours,
+                            'present': present,
+                            'absent': absent
+                        }
+                    else:
+                        return {
+                            'key': 'completed_no_attendance',
+                            'label': 'Completed (No Attendance)',
+                            'color': '#f59e0b',
+                            'icon': '⚠',
+                            'tooltip': f'Class completed · {gross_hours}h · No attendance marked',
+                            'gross_hours': gross_hours,
+                            'present': 0,
+                            'absent': 0
+                        }
+            
+            # Class started before filter_date (past date)
+            if class_date and class_date < filter_date:
+                if cls.end_date:
+                    # Has end time - Completed (with or without attendance)
+                    duration = cls.end_date - cls.started_date
+                    hours = duration.total_seconds() / 3600
+                    gross_hours = round(hours, 2)
+                    attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
+                    if attendances:
+                        present = sum(1 for a in attendances if a.type is True)
+                        absent = sum(1 for a in attendances if a.type is False)
+                        return {
+                            'key': 'completed',
+                            'label': 'Completed',
+                            'color': '#16a34a',
+                            'icon': '✓',
+                            'tooltip': f'Class completed · {gross_hours}h · {present} present, {absent} absent',
+                            'gross_hours': gross_hours,
+                            'present': present,
+                            'absent': absent
+                        }
+                    else:
+                        return {
+                            'key': 'completed_no_attendance',
+                            'label': 'Completed (No Attendance)',
+                            'color': '#f59e0b',
+                            'icon': '⚠',
+                            'tooltip': f'Class completed · {gross_hours}h · No attendance marked',
+                            'gross_hours': gross_hours,
+                            'present': 0,
+                            'absent': 0
+                        }
+                else:
+                    # No end_date
+                    attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
+                    if attendances:
+                        present = sum(1 for a in attendances if a.type is True)
+                        absent = sum(1 for a in attendances if a.type is False)
+                        return {
+                            'key': 'active_ended',
+                            'label': 'Not Ended (Not Closed)',
+                            'color': '#3b82f6',
+                            'icon': '⏱',
+                            'tooltip': f'Class not closed · {present} present, {absent} absent',
+                            'present': present,
+                            'absent': absent,
+                            'gross_hours': 0
+                        }
+                    else:
+                        return {
+                            'key': 'active_ended_no_att',
+                            'label': 'Not Ended (No Attendance)',
+                            'color': '#3b82f6',
+                            'icon': '⏱',
+                            'tooltip': 'Class not ended · No attendance marked',
+                            'present': 0,
+                            'absent': 0,
+                            'gross_hours': 0
+                        }
+        
+        # Default fallback
+        return {
+            'key': 'unknown',
+            'label': 'Unknown',
+            'color': '#6b7280',
+            'icon': '?',
+            'tooltip': 'Unknown status',
+            'present': 0,
+            'absent': 0,
+            'gross_hours': 0
+        }
+    
     def _serialize_class_log(self, cls):
         status_info = self._get_status_info(cls)
         
         teacher_name = None
         if cls.users_id:
             try:
-                from APIS.models import User
                 teacher = User.objects.filter(id=cls.users_id).first()
                 teacher_name = teacher.name if teacher else None
             except:
@@ -920,6 +1512,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             'center_id': cls.center.id if cls.center else None,
             'village_name': cls.center.village.name if cls.center and cls.center.village else None,
             'district_name': cls.center.district.name if cls.center and cls.center.district else None,
+            'latitude': float(cls.center.latitude) if cls.center and cls.center.latitude else None,
+            'longitude': float(cls.center.longitude) if cls.center and cls.center.longitude else None,
             'started_date': cls.started_date.isoformat() if cls.started_date else None,
             'end_date': cls.end_date.isoformat() if cls.end_date else None,
             'status': cls.status,
@@ -965,6 +1559,43 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         })
         
         return base
+
+    def _serialize_center_log(self, center_data):
+        """Serialize center-level data for date-centric view"""
+        center = center_data['center']
+        class_obj = center_data.get('class_obj')
+        status_info = center_data.get('status_info', {})
+        filter_date = center_data.get('filter_date')
+        
+        teacher_name = None
+        if class_obj and class_obj.users_id:
+            try:
+                teacher = User.objects.filter(id=class_obj.users_id).first()
+                teacher_name = teacher.name if teacher else None
+            except:
+                pass
+        
+        return {
+            'center': {
+                'id': center.id,
+                'center_name': center.center_name,
+                'latitude': float(center.latitude) if center.latitude else None,
+                'longitude': float(center.longitude) if center.longitude else None,
+                'village_name': center.village.name if center.village else None,
+                'district_name': center.district.name if center.district else None,
+            },
+            'class_obj': {
+                'id': class_obj.id if class_obj else None,
+                'name': class_obj.name if class_obj else None,
+                'teacher_name': teacher_name,
+                'started_date': class_obj.started_date.isoformat() if class_obj and class_obj.started_date else None,
+                'end_date': class_obj.end_date.isoformat() if class_obj and class_obj.end_date else None,
+                'status': class_obj.status if class_obj else None,
+                'cancel_date': class_obj.cancel_date.isoformat() if class_obj and class_obj.cancel_date else None,
+            } if class_obj else None,
+            'status_info': status_info,
+            'filter_date': filter_date.isoformat() if filter_date else None,
+        }
 
 
 class SchoolDropDownView(LoginRequiredMixin, View):
@@ -1463,7 +2094,6 @@ class ClassListView(LoginRequiredMixin, View):
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', 1000))
             
-            from APIS.models import ClassModel
             queryset = ClassModel.objects.filter(
                 center_id=center_id,
                 active_status=True,

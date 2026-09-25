@@ -1,9 +1,9 @@
 /* ================================================================
    EK SE SRESHTHA - CLASS ATTENDANCE LOGS PAGE SCRIPT
    ---------------------------------------------------------------
-   Keka-style class attendance logs with:
-   - Date range filter, center filter, teacher filter, status filter
-   - Table with teacher, timings, present/absent, location, status
+   Date-centric class attendance logs with:
+   - Single date filter, center filter, teacher filter, status filter
+   - Table per center with: Centre, Teacher, Class Time, Status, Present, Absent, Location, Gross Hours
    - Status badges with info tooltips (like Keka)
    - Location link to open Google Maps modal
    - Detail modal with student attendance breakdown
@@ -14,8 +14,7 @@ const state = {
     page: 1,
     pageSize: parseInt(document.body.getAttribute('data-page-size')) || 50,
     search: '',
-    dateFrom: '',
-    dateTo: '',
+    date: '',
     centerId: '',
     teacherId: '',
     statusFilter: '',
@@ -25,10 +24,26 @@ const state = {
     currentMapMarker: null
 };
 
+// ── Google Maps Async Loading ─────────────────────────────────────
+let mapsLoaded = false;
+
+function initGoogleMaps() {
+    mapsLoaded = true;
+    console.log('Google Maps API loaded');
+}
+
+// Wait for Google Maps to load before initializing
+function waitForMaps(callback) {
+    if (mapsLoaded && typeof google !== 'undefined' && google.maps) {
+        callback();
+    } else {
+        setTimeout(() => waitForMaps(callback), 50);
+    }
+}
+
 // ── DOM References ────────────────────────────────────────────────
 const els = {
-    get dateFrom() { return document.getElementById('logs-date-from'); },
-    get dateTo() { return document.getElementById('logs-date-to'); },
+    get date() { return document.getElementById('logs-date'); },
     get centerFilter() { return document.getElementById('logs-center-filter'); },
     get teacherFilter() { return document.getElementById('logs-teacher-filter'); },
     get statusFilter() { return document.getElementById('logs-status-filter'); },
@@ -45,6 +60,21 @@ const els = {
     get mapClassName() { return document.getElementById('map-modal-class-name'); },
     get mapCenterInfo() { return document.getElementById('map-modal-center-info'); },
     get mapCoordinates() { return document.getElementById('map-modal-coordinates'); }
+};
+
+// Summary counter element IDs
+const SUMMARY_IDS = {
+    total: 'count-total',
+    in_progress: 'count-in_progress',
+    completed: 'count-completed',
+    completed_no_attendance: 'count-completed_no_attendance',
+    active_ended: 'count-active_ended',
+    active_ended_no_att: 'count-active_ended_no_att',
+    cancelled: 'count-cancelled',
+    holiday: 'count-holiday',
+    sunday: 'count-sunday',
+    not_started: 'count-not_started',
+    no_class: 'count-no_class'
 };
 
 // ── Status Config (Keka-style) ────────────────────────────────────
@@ -73,6 +103,12 @@ const STATUS_CONFIG = {
         icon: '⏱',
         className: 'status-active_ended'
     },
+    active_ended_no_att: {
+        label: 'Not Ended (No Attendance)',
+        color: '#3b82f6',
+        icon: '⏱',
+        className: 'status-active_ended'
+    },
     cancelled: {
         label: 'Cancelled',
         color: '#dc2626',
@@ -85,9 +121,21 @@ const STATUS_CONFIG = {
         icon: '🎉',
         className: 'status-holiday'
     },
+    sunday: {
+        label: 'Sunday',
+        color: '#6b7280',
+        icon: '☀',
+        className: 'status-sunday'
+    },
+    not_started: {
+        label: 'Not Started',
+        color: '#6b7280',
+        icon: '—',
+        className: 'status-not_started'
+    },
     no_class: {
-        label: 'No Class',
-        color: '#9ca3af',
+        label: 'Class Not Held',
+        color: '#6b7280',
         icon: '—',
         className: 'status-no_class'
     },
@@ -95,22 +143,117 @@ const STATUS_CONFIG = {
         label: 'Unknown',
         color: '#6b7280',
         icon: '?',
-        className: ''
+        className: 'status-unknown'
     }
 };
 
+// ── Utility Functions ─────────────────────────────────────────────
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>')
+        .replace(/"/g, '"')
+        .replace(/'/g, '&#039;');
+}
+
+function formatDateTime(isoString) {
+    if (!isoString) return '—';
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '—';
+        
+        const timeStr = date.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit', 
+            hour12: true 
+        });
+        const dateStr = date.toLocaleDateString('en-GB', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: '2-digit' 
+        });
+        
+        return `<div class="datetime-stack">
+            <span class="datetime-time">${timeStr}</span>
+            <span class="datetime-date">${dateStr}</span>
+        </div>`;
+    } catch {
+        return '—';
+    }
+}
+
+function formatTimeOnly(isoString) {
+    if (!isoString) return '—';
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '—';
+        return date.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit', 
+            hour12: true 
+        });
+    } catch {
+        return '—';
+    }
+}
+
+function formatDateOnly(isoString) {
+    if (!isoString) return '—';
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '—';
+        return date.toLocaleDateString('en-GB', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: '2-digit' 
+        });
+    } catch {
+        return '—';
+    }
+}
+
+function showToast(message, type = 'info') {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+
+function getUrl(name) {
+    const urls = {
+        'class-attendance-logs': '/attendance/class-logs/',
+        'center-dropdown-list': '/centres/dropdown-list/',
+        'teacher-dropdown-list': '/teacher/dropdown-list/'
+    };
+    return urls[name] || '#';
+}
+
+function openModal(modal) {
+    if (!modal) return;
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeModal(modal) {
+    if (!modal) return;
+    modal.classList.remove('active');
+    document.body.style.overflow = '';
+    
+    // Clean up map if closing map modal
+    if (modal === els.mapModal && state.currentMap) {
+        state.currentMap = null;
+        state.currentMapMarker = null;
+    }
+}
+
 // ── Init ──────────────────────────────────────────────────────────
 async function init() {
-    // Set default dates (last 30 days)
+    // Set default date (today)
     const today = new Date();
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(today.getDate() - 30);
     
-    if (els.dateFrom) els.dateFrom.value = thirtyDaysAgo.toISOString().split('T')[0];
-    if (els.dateTo) els.dateTo.value = today.toISOString().split('T')[0];
+    if (els.date) els.date.value = today.toISOString().split('T')[0];
     
-    state.dateFrom = els.dateFrom?.value || '';
-    state.dateTo = els.dateTo?.value || '';
+    state.date = els.date?.value || '';
     
     await loadCenterDropdown();
     await loadTeacherDropdown();
@@ -127,20 +270,11 @@ if (document.readyState === 'loading') {
 
 // ── Event Bindings ────────────────────────────────────────────────
 function bindEvents() {
-    // Date from
-    if (els.dateFrom) {
-        els.dateFrom.addEventListener('change', () => {
+    // Date
+    if (els.date) {
+        els.date.addEventListener('change', () => {
             state.page = 1;
-            state.dateFrom = els.dateFrom.value;
-            fetchAndRender();
-        });
-    }
-    
-    // Date to
-    if (els.dateTo) {
-        els.dateTo.addEventListener('change', () => {
-            state.page = 1;
-            state.dateTo = els.dateTo.value;
+            state.date = els.date.value;
             fetchAndRender();
         });
     }
@@ -220,10 +354,55 @@ function bindEvents() {
     });
 }
 
+// ── Summary Fetching ──────────────────────────────────────────────
+async function fetchSummary() {
+    try {
+        const params = new URLSearchParams({
+            action: 'class_log_summary',
+            page_size: 1
+        });
+        
+        if (state.search) params.append('search', state.search);
+        if (state.date) params.append('date', state.date);
+        if (state.centerId) params.append('center_id', state.centerId);
+        if (state.teacherId) params.append('teacher_id', state.teacherId);
+        if (state.statusFilter) params.append('status', state.statusFilter);
+        
+        const url = getUrl('class-attendance-logs') + '?' + params.toString();
+        const res = await fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to fetch summary');
+        
+        updateSummary(data);
+    } catch (e) {
+        console.error('Summary fetch failed:', e);
+        // Reset counters on error
+        Object.values(SUMMARY_IDS).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = '0';
+        });
+    }
+}
+
+function updateSummary(data) {
+    Object.entries(SUMMARY_IDS).forEach(([key, id]) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = data[key] || 0;
+    });
+}
+
 // ── Data Fetching ─────────────────────────────────────────────────
 async function fetchAndRender() {
     showGlobalLoader();
+    const startTime = Date.now();
     try {
+        // Fetch summary counts
+        await fetchSummary();
+        
         const params = new URLSearchParams({
             action: 'class_logs',
             page: state.page,
@@ -231,8 +410,7 @@ async function fetchAndRender() {
         });
         
         if (state.search) params.append('search', state.search);
-        if (state.dateFrom) params.append('date_from', state.dateFrom);
-        if (state.dateTo) params.append('date_to', state.dateTo);
+        if (state.date) params.append('date', state.date);
         if (state.centerId) params.append('center_id', state.centerId);
         if (state.teacherId) params.append('teacher_id', state.teacherId);
         if (state.statusFilter) params.append('status', state.statusFilter);
@@ -276,46 +454,87 @@ function renderTable(logs) {
     
     els.tbody.innerHTML = logs.map((log, index) => {
         const rowNum = (state.page - 1) * state.pageSize + index + 1;
+        const center = log.center || {};
+        const classObj = log.class_obj || {};
         const statusInfo = log.status_info || {};
         const statusConfig = STATUS_CONFIG[statusInfo.key] || STATUS_CONFIG.unknown;
+        
+        // Format start time
+        let startTimeHtml = '<span class="text-muted">—</span>';
+        let endTimeHtml = '<span class="text-muted">—</span>';
+        if (classObj.started_date) {
+            const startTime = formatTimeOnly(classObj.started_date);
+            const startDate = formatDateOnly(classObj.started_date);
+            startTimeHtml = `<div class="datetime-stack">
+                <span class="datetime-time">${startTime}</span>
+                <span class="datetime-date">${startDate}</span>
+            </div>`;
+        }
+        if (classObj.end_date) {
+            const endTime = formatTimeOnly(classObj.end_date);
+            const endDate = formatDateOnly(classObj.end_date);
+            endTimeHtml = `<div class="datetime-stack">
+                <span class="datetime-time" style="font-weight: 400; color: #6b7280;">${endTime}</span>
+                <span class="datetime-date">${endDate}</span>
+            </div>`;
+        }
+        
+        // Teacher name
+        const teacherName = classObj.teacher_name || '—';
+        
+        // Center info with village/district
+        const centerName = center.center_name || '—';
+        const villageName = center.village_name || '';
+        const districtName = center.district_name || '';
+        const centerLocation = [villageName, districtName].filter(Boolean).join(', ') || '—';
+        
+        // Present/Absent links
+        const classId = classObj.id || 0;
+        const presentHtml = statusInfo.present > 0 ? 
+            `<a href="#" class="count-link" style="color: #16a34a; font-weight: 500;" onclick="openStudentDetailModal(${classId}, 'present'); return false;">${statusInfo.present}</a>` : 
+            '<span style="color: #16a34a; font-weight: 500;">0</span>';
+        const absentHtml = statusInfo.absent > 0 ? 
+            `<a href="#" class="count-link" style="color: #dc2626; font-weight: 500;" onclick="openStudentDetailModal(${classId}, 'absent'); return false;">${statusInfo.absent}</a>` : 
+            '<span style="color: #dc2626; font-weight: 500;">0</span>';
+        
+        // Location link
+        const centerId = center.id || 0;
+        const lat = center.latitude || 0;
+        const lng = center.longitude || 0;
+        const locationHtml = centerId && centerName ? 
+            `<a href="#" class="location-link" onclick="openLocationMap(${centerId}, '${escapeHtml(centerName)}', ${lat}, ${lng}); return false;">
+                <svg class="location-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> View on Map
+            </a>` : 
+            '<span class="text-muted">—</span>';
+        
+        // Status badge
+        let statusLabel = statusConfig.label;
+        if (statusInfo.key === 'holiday' && statusInfo.tooltip) {
+            statusLabel = statusInfo.tooltip.replace('Holiday: ', '');
+        }
+        
+        // Gross hours
+        const grossHoursHtml = statusInfo.gross_hours ? 
+            `<span class="text-muted" style="font-size: 12px;">${statusInfo.gross_hours}h</span>` : 
+            '<span class="text-muted">—</span>';
         
         return `
             <tr>
                 <td class="text-center">${rowNum}</td>
-                <td>${escapeHtml(log.teacher_name || '—')}</td>
-                <td>
-                    <div>${escapeHtml(log.center_name || '—')}</div>
-                    <div class="text-muted" style="font-size: 12px;">${escapeHtml(log.village_name || '')} ${log.district_name ? '· ' + escapeHtml(log.district_name) : ''}</div>
-                </td>
-                <td class="datetime-cell">${formatDateTime(log.started_date)}</td>
-                <td class="datetime-cell">${formatDateTime(log.end_date)}</td>
-                <td class="hours-cell text-center">${statusInfo.gross_hours ? statusInfo.gross_hours + 'h' : '—'}</td>
-                <td class="text-center">
-                    ${statusInfo.present > 0 ? 
-                        `<a href="#" class="count-link" style="color: #16a34a; font-weight: 500;" onclick="openStudentDetailModal(${log.id}, 'present'); return false;">${statusInfo.present}</a>` : 
-                        '<span style="color: #16a34a; font-weight: 500;">0</span>'
-                    }
-                </td>
-                <td class="text-center">
-                    ${statusInfo.absent > 0 ? 
-                        `<a href="#" class="count-link" style="color: #dc2626; font-weight: 500;" onclick="openStudentDetailModal(${log.id}, 'absent'); return false;">${statusInfo.absent}</a>` : 
-                        '<span style="color: #dc2626; font-weight: 500;">0</span>'
-                    }
-                </td>
-                <td>
-                    ${log.center_id && log.center_name ? 
-                        `<a href="#" class="location-link" onclick="openLocationMap(${log.center_id}, '${escapeHtml(log.center_name)}', ${log.latitude || 0}, ${log.longitude || 0}); return false;">
-                            <svg class="location-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg> View on Map
-                        </a>` : 
-                        '<span class="text-muted">—</span>'
-                    }
-                </td>
+                <td>${escapeHtml(teacherName)}</td>
+                <td>${escapeHtml(centerName)}<br><span class="text-muted" style="font-size: 11px;">${escapeHtml(centerLocation)}</span></td>
+                <td>${startTimeHtml}</td>
+                <td>${endTimeHtml}</td>
+                <td class="text-center hours-cell">${grossHoursHtml}</td>
+                <td class="text-center">${presentHtml}</td>
+                <td class="text-center">${absentHtml}</td>
+                <td>${locationHtml}</td>
                 <td>
                     <span class="status-badge ${statusConfig.className}">
                         <span class="status-icon" style="background: ${statusConfig.color};">${statusConfig.icon}</span>
-                        <span class="status-text">${statusConfig.label}</span>
+                        <span class="status-text">${statusLabel}</span>
                     </span>
-                </td
+                </td>
             </tr>
         `;
     }).join('');
@@ -373,7 +592,7 @@ function renderError() {
     if (!els.tbody) return;
     els.tbody.innerHTML = `
         <tr>
-            <td colspan="10" class="empty-state" style="color: #dc2626;":
+            <td colspan="10" class="empty-state" style="color: #dc2626;">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                     <circle cx="12" cy="12" r="10"></circle>
                     <line x1="12" y1="8" x2="12" y2="12"></line>
@@ -420,254 +639,154 @@ async function loadTeacherDropdown() {
     }
 }
 
-// ── Formatters ────────────────────────────────────────────────────
-function formatDateTime(isoString) {
-    if (!isoString) return '<span class="text-muted">—</span>';
+// ── Detail Modal ──────────────────────────────────────────────────
+window.openStudentDetailModal = async function(classId, filterType) {
+    showGlobalLoader();
     try {
-        const date = new Date(isoString);
-        // Two-line format: time on top, date below
-        const time = date.toLocaleString('en-IN', {
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        }).toLowerCase();
-        const dateStr = date.toLocaleString('en-IN', {
-            day: '2-digit',
-            month: 'short',
-            year: '2-digit'
+        const params = new URLSearchParams({
+            action: 'class_log_detail',
+            class_id: classId,
+            filter: filterType
         });
-        return `<div class="datetime-stack"><span class="datetime-time">${time}</span><span class="datetime-date">${dateStr}</span></div>`;
-    } catch {
-        return isoString;
+        
+        const url = getUrl('class-attendance-logs') + '?' + params.toString();
+        const res = await fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to fetch details');
+        
+        const modal = document.getElementById('student-detail-modal');
+        const title = document.getElementById('student-detail-title');
+        const body = document.getElementById('student-detail-body');
+        
+        title.textContent = `${filterType === 'present' ? 'Present' : 'Absent'} Students - ${data.class_name || 'Class'}`;
+        
+        if (!data.students || data.students.length === 0) {
+            body.innerHTML = `
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <p>No ${filterType} students found</p>
+                </div>
+            `;
+        } else {
+            body.innerHTML = `
+                <div class="table-wrapper" style="overflow-x: auto;">
+                    <table class="table" style="min-width: 600px;">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">#</th>
+                                <th>Student Name</th>
+                                <th>Roll Number</th>
+                                <th>Scan Time</th>
+                                <th>Type</th>
+                                <th>Location Verified</th>
+                                <th>Coordinates</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.students.map((s, i) => `
+                                <tr>
+                                    <td class="text-center">${i + 1}</td>
+                                    <td>${escapeHtml(s.name || '—')}</td>
+                                    <td>${escapeHtml(s.roll_number || '—')}</td>
+                                    <td>${escapeHtml(s.scan_time || '—')}</td>
+                                    <td>
+                                        <span class="status-badge ${s.type ? 'status-completed' : 'status-cancelled'}">
+                                            ${s.type ? '✓ Present' : '✕ Absent'}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        ${s.location_verified ? 
+                                            '<span style="color: #16a34a;">✓ Yes</span>' : 
+                                            '<span style="color: #dc2626;">✕ No</span>'
+                                        }
+                                    </td>
+                                    <td class="text-center">${escapeHtml(s.coordinates || '—')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+        
+        openModal(modal);
+    } catch (e) {
+        console.error('Detail fetch failed:', e);
+        showToast('Failed to load student details', 'error');
+    } finally {
+        hideGlobalLoader();
     }
-}
+};
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+window.closeStudentDetailModal = function() {
+    const modal = document.getElementById('student-detail-modal');
+    closeModal(modal);
+};
 
 // ── Location Map Modal ────────────────────────────────────────────
 window.openLocationMap = function(centerId, centerName, latitude, longitude) {
-    if (!els.mapClassName || !els.mapCenterInfo || !els.mapCoordinates) return;
-    
-    els.mapClassName.textContent = centerName;
-    els.mapCenterInfo.textContent = `Centre ID: ${centerId}`;
-    els.mapCoordinates.textContent = `Coordinates: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+    if (els.mapClassName) els.mapClassName.textContent = centerName;
+    if (els.mapCenterInfo) els.mapCenterInfo.textContent = `Centre ID: ${centerId}`;
+    if (els.mapCoordinates) els.mapCoordinates.textContent = `Lat: ${latitude}, Lng: ${longitude}`;
     
     openModal(els.mapModal);
     
-    // Initialize map after modal is visible
-    setTimeout(() => {
-        initLocationMap(latitude, longitude);
-    }, 100);
+    // Initialize map after modal is visible and Google Maps is loaded
+    waitForMaps(() => {
+        setTimeout(() => {
+            initLocationMap(latitude, longitude);
+        }, 100);
+    });
 };
 
 function initLocationMap(lat, lng) {
-    if (!window.google || !google.maps) {
-        console.error('Google Maps not loaded');
-        return;
-    }
+    if (state.currentMap) return;
     
     const canvas = document.getElementById('map-modal-canvas');
     if (!canvas) return;
     
-    // Destroy existing map
-    if (state.currentMap) {
-        state.currentMap = null;
-        state.currentMapMarker = null;
-    }
-    
-    const position = { lat: parseFloat(lat), lng: parseFloat(lng) };
-    
-    state.currentMap = new google.maps.Map(canvas, {
-        center: position,
-        zoom: 15,
-        mapTypeControl: true,
-        streetViewControl: true,
-        fullscreenControl: true,
-        gestureHandling: 'cooperative'
-    });
-    
-    state.currentMapMarker = new google.maps.Marker({
-        position: position,
-        map: state.currentMap,
-        title: 'Centre Location',
-        animation: google.maps.Animation.DROP
-    });
-    
-    // Add info window
-    const infoWindow = new google.maps.InfoWindow({
-        content: `<div style="padding: 8px;"><strong>${els.mapClassName?.textContent || 'Centre'}</strong><br>Lat: ${lat.toFixed(6)}<br>Lng: ${lng.toFixed(6)}</div>`
-    });
-    
-    state.currentMapMarker.addListener('click', () => {
-        infoWindow.open(state.currentMap, state.currentMapMarker);
-    });
-    
-    infoWindow.open(state.currentMap, state.currentMapMarker);
-}
-
-// ── Modal Helpers ─────────────────────────────────────────────────
-function openModal(modal) {
-    if (!modal) return;
-    modal.classList.add('active');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeModal(modal) {
-    if (!modal) return;
-    modal.classList.remove('active');
-    document.body.style.overflow = '';
-    
-    // Clean up map if closing map modal
-    if (modal === els.mapModal && state.currentMap) {
-        state.currentMap = null;
-        state.currentMapMarker = null;
-    }
-}
-
-// ── Global Loader ─────────────────────────────────────────────────
-function showGlobalLoader() {
-    const loader = document.getElementById('global-loader');
-    if (loader) loader.classList.add('active');
-}
-
-function hideGlobalLoader() {
-    const loader = document.getElementById('global-loader');
-    if (loader) loader.classList.remove('active');
-}
-
-// ── Toast ─────────────────────────────────────────────────────────
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container') || createToastContainer();
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `
-        <div class="toast-content">
-            <svg class="toast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                ${type === 'error' ? '<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>' : 
-                  type === 'success' ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>' :
-                  '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>'}
-            </svg>
-            <span>${escapeHtml(message)}</span>
-        </div>
-        <button class="toast-close" aria-label="Close">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-    `;
-    container.appendChild(toast);
-    
-    toast.querySelector('.toast-close').addEventListener('click', () => toast.remove());
-    setTimeout(() => toast.remove(), 5000);
-}
-
-function createToastContainer() {
-    const container = document.createElement('div');
-    container.id = 'toast-container';
-    container.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px;';
-    document.body.appendChild(container);
-    return container;
-}
-
-// ── Student Detail Modal ─────────────────────────────────────────
-function openStudentDetailModal(classId, filterType) {
-    console.log('openStudentDetailModal called:', classId, filterType);
-    const modal = document.getElementById('student-detail-modal');
-    const title = document.getElementById('student-detail-title');
-    const body = document.getElementById('student-detail-body');
-    
-    if (!modal) {
-        console.error('Modal not found! Check if modal HTML exists in DOM');
-        console.log('All modals:', document.querySelectorAll('[id*="modal"]'));
-        return;
-    }
-    if (!title) console.warn('Title element not found');
-    if (!body) console.warn('Body element not found');
-    
-    title.textContent = filterType === 'present' ? 'Present Students' : 'Absent Students';
-    body.innerHTML = '<div style="text-align: center; padding: 40px; color: #9ca3af;">Loading...</div>';
-    modal.style.display = 'flex';
-    console.log('Modal display set to flex');
-    
-    if (typeof showGlobalLoader === 'function') showGlobalLoader('Loading student details...');
-    
-    fetch(getUrl('class-attendance-logs') + `?action=class_log_detail&class_id=${classId}`, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        credentials: 'same-origin'
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (!data.students) {
-            body.innerHTML = '<div style="text-align: center; padding: 40px; color: #9ca3af;">No student data available</div>';
+    try {
+        if (typeof google === 'undefined' || !google.maps) {
+            console.warn('Google Maps not loaded');
+            canvas.innerHTML = '<div style="padding: 20px; text-align: center; color: #6b7280;">Google Maps not available</div>';
             return;
         }
         
-        const students = data.students.filter(s => 
-            filterType === 'present' ? s.status === true : s.status === false
-        );
+        const center = { lat: parseFloat(lat), lng: parseFloat(lng) };
         
-        if (students.length === 0) {
-            body.innerHTML = `<div style="text-align: center; padding: 40px; color: #9ca3af;">No ${filterType} students found</div>`;
-            return;
-        }
+        state.currentMap = new google.maps.Map(canvas, {
+            center: center,
+            zoom: 15,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: true
+        });
         
-        body.innerHTML = `
-            <div style="overflow-x: auto;">
-                <table class="table" style="min-width: 600px;">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Student Name</th>
-                            <th>Enrollment</th>
-                            <th>Scan Time</th>
-                            <th>Type</th>
-                            <th>Location Verified</th>
-                            <th>Coordinates</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${students.map((s, i) => `
-                            <tr>
-                                <td>${i + 1}</td>
-                                <td>${escapeHtml(s.student_name || '—')}</td>
-                                <td>${escapeHtml(s.enrollment_number || '—')}</td>
-                                <td>${s.scan_date ? new Date(s.scan_date).toLocaleString('en-IN') : '—'}</td>
-                                <td>${escapeHtml(s.attendance_type || '—')}</td>
-                                <td>${s.location_verified ? '<span style="color:#16a34a">✓ Yes</span>' : '<span style="color:#dc2626">✕ No</span>'}</td>
-                                <td>
-                                    ${s.captured_latitude && s.captured_longitude ? 
-                                        `${parseFloat(s.captured_latitude).toFixed(6)}, ${parseFloat(s.captured_longitude).toFixed(6)}` : '—'}
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
-    })
-    .catch(e => {
-        console.error('Failed to load student details:', e);
-        body.innerHTML = '<div style="text-align: center; padding: 40px; color: #dc2626;">Failed to load details</div>';
-    })
-    .finally(() => {
-        if (typeof hideGlobalLoader === 'function') hideGlobalLoader();
-    });
+        state.currentMapMarker = new google.maps.Marker({
+            position: center,
+            map: state.currentMap,
+            title: 'Centre Location'
+        });
+        
+        google.maps.event.addListenerOnce(state.currentMap, 'idle', () => {
+            google.maps.event.trigger(state.currentMap, 'resize');
+            state.currentMap.setCenter(center);
+        });
+        
+    } catch (e) {
+        console.error('Map init failed:', e);
+        canvas.innerHTML = '<div style="padding: 20px; text-align: center; color: #dc2626;">Failed to load map</div>';
+    }
 }
 
-function closeStudentDetailModal() {
-    const modal = document.getElementById('student-detail-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-// Expose to global scope for onclick handlers
-window.openStudentDetailModal = openStudentDetailModal;
-window.closeStudentDetailModal = closeStudentDetailModal;
-
-// ── URL Helper ────────────────────────────────────────────────────
-function getUrl(name) {
-    const attr = `data-url-${name}`;
-    return document.body.getAttribute(attr) || '';
-}
+// Expose closeModal globally for modal-backdrop close buttons
+window.closeModal = closeModal;
