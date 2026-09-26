@@ -48,6 +48,7 @@ urlpatterns = [
     # Attendance center detail page
     path('attendance/center-detail/', AttendanceView.as_view(), name='center-detail'),
     path('attendance/center-monthly-attendance/', CenterMonthlyAttendanceView.as_view(), name='center-monthly-attendance'),
+    path('attendance/class-activity-report/', ClassActivityReportView.as_view(), name='class-activity-report'),
     
     # Student attendance history APIs
     path('students/attendance-history/', StudentsView.as_view(), name='student-attendance-history'),

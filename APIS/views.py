@@ -1136,6 +1136,8 @@ class ClassSaveclassPostView(APIView):
     """Saves a new class"""
     
     def post(self, request):
+        # Log activity at the start - log everything coming from frontend
+        log_activity_before(request, 'Class', 'START_CLASS', data=dict(request.data))
         try:
             logger.info("UserView : SaveClass : Started")
             
@@ -1164,9 +1166,16 @@ class ClassSaveclassPostView(APIView):
             
             # Handle holiday/Sunday block response
             if isinstance(saved_class, dict) and saved_class.get('status') == False:
+                error_msg = saved_class.get('error')
+                # Log to ClassActivityLog for holiday/Sunday block
+                try:
+                    center = Center.objects.filter(id=class_data.get('centerId')).first()
+                    log_class_activity(request, 'CLASS_STARTED', None, center, error_msg, attendance_count=0, status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for holiday/Sunday block: {str(e)}")
                 return Response({
                     "status": False,
-                    "error": saved_class.get('error'),
+                    "error": error_msg,
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": saved_class.get('code')
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -1182,6 +1191,14 @@ class ClassSaveclassPostView(APIView):
                         data=saved_class,
                         request=request
                     )
+                
+                # Log to ClassActivityLog for successful CLASS_STARTED
+                try:
+                    class_obj = ClassModel.objects.filter(id=saved_class['Id']).first()
+                    center = Center.objects.filter(id=class_obj.center_id).first()
+                    log_class_activity(request, 'CLASS_STARTED', class_obj, center, 'Class started successfully', attendance_count=0, status='SUCCESS')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for CLASS_STARTED: {str(e)}")
 
                 return Response(
                     {
@@ -1281,6 +1298,8 @@ class ClassUpdateEndClassTimePostView(APIView):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def post(self, request):
+        # Log activity at the start - log everything coming from frontend
+        log_activity_before(request, 'Class', 'END_CLASS', data=dict(request.data))
         try:
             logger.info("UserView : UpdateEndClassTime : Started")
             
@@ -1365,6 +1384,12 @@ class ClassUpdateEndClassTimePostView(APIView):
                     )
                     
                     if not is_valid_loc:
+                        # Log to ClassActivityLog for location error
+                        try:
+                            log_class_activity(request, 'CLASS_ENDED', class_obj, center, f"Location verification failed. Distance from center: {distance:.1f}m. Center status: {center_status}", attendance_count=0, latitude=latitude, longitude=longitude, status='FAILED')
+                        except Exception as e:
+                            logger.error(f"Failed to log ClassActivityLog for location error: {str(e)}")
+                        
                         return Response({
                             "status": False,
                             "error": f"Location verification failed. Distance from center: {distance:.1f}m. Center status: {center_status}",
@@ -1393,6 +1418,13 @@ class ClassUpdateEndClassTimePostView(APIView):
                     },
                     request=request
                 )
+            
+            # Log to ClassActivityLog for successful CLASS_ENDED
+            try:
+                center = Center.objects.filter(id=class_obj.center_id).first()
+                log_class_activity(request, 'CLASS_ENDED', class_obj, center, 'Class ended successfully', attendance_count=present_count, latitude=latitude, longitude=longitude, status='SUCCESS')
+            except Exception as e:
+                logger.error(f"Failed to log ClassActivityLog for CLASS_ENDED: {str(e)}")
 
             return Response(
                 {
@@ -3523,6 +3555,8 @@ class StudentattendanceSavestudentattendancePostView(APIView):
     """Saves student attendance"""
     
     def post(self, request):
+        # Log activity at the start - log everything coming from frontend
+        log_activity_before(request, 'StudentAttendance', 'MARK_ATTENDANCE', data=dict(request.data))
         try:
             logger.info("UserView : SaveStudentAttendance : Started")
             
@@ -3547,8 +3581,15 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                     "code": status.HTTP_400_BAD_REQUEST
                 }, status=status.HTTP_400_BAD_REQUEST)
                             
-                                    
+                                     
             if center.location_status != 'VERIFIED':
+                # Log to ClassActivityLog for center not verified
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'Center location not verified', attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for center not verified: {str(e)}")
                 return Response({
                     "status": False,
                     "error": "Center location not verified. Cannot mark attendance.",
@@ -3560,6 +3601,13 @@ class StudentattendanceSavestudentattendancePostView(APIView):
             latitude = attendance_data.get('Latitude')
             longitude = attendance_data.get('Longitude')
             if not (latitude and longitude):
+                # Log to ClassActivityLog for missing GPS
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'GPS location required', attendance_count=0, status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for missing GPS: {str(e)}")
                 return Response({
                     "status": False,
                     "error": "GPS location required for attendance",
@@ -3574,6 +3622,14 @@ class StudentattendanceSavestudentattendancePostView(APIView):
             logger.info(f"UserView : SaveStudentAttendance : Location check - valid={is_valid_loc}, distance={distance:.1f}m, center_status={center_status}")
                         
             if not is_valid_loc:
+                # Log to ClassActivityLog for location error
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, f"Location verification failed. Distance from center: {distance:.1f}m. Center status: {center_status}", attendance_count=0, latitude=latitude, longitude=longitude, status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for location error: {str(e)}")
+                
                 return Response({
                     "status": False,
                     "error": "Oops — you're outside the centre. You can only mark attendance from the register centre location.",
@@ -3591,9 +3647,17 @@ class StudentattendanceSavestudentattendancePostView(APIView):
             for student_id in student_ids:
                 allowed, current, remaining, limit = check_manual_attendance_limit(student_id)
                 if not allowed:
+                    error_msg = f"Monthly manual attendance limit reached for student {student_id} ({current}/{limit}). Next reset: 1st of next month."
+                    # Log to ClassActivityLog for manual limit reached
+                    try:
+                        class_id = attendance_data.get('ClassId')
+                        class_obj = ClassModel.objects.filter(id=class_id).first()
+                        log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, error_msg, attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                    except Exception as e:
+                        logger.error(f"Failed to log ClassActivityLog for manual limit reached: {str(e)}")
                     return Response({
                         "status": False,
-                        "error": f"Monthly manual attendance limit reached for student {student_id} ({current}/{limit}). Next reset: 1st of next month.",
+                        "error": error_msg,
                         "code": status.HTTP_400_BAD_REQUEST,
                         "ErrorCode": -15,
                         "StudentId": student_id,
@@ -3607,9 +3671,17 @@ class StudentattendanceSavestudentattendancePostView(APIView):
 
             # Handle holiday/Sunday block response
             if isinstance(result, dict) and result.get('status') == False:
+                error_msg = result.get('error')
+                # Log to ClassActivityLog for holiday/Sunday block
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, error_msg, attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for holiday/Sunday block: {str(e)}")
                 return Response({
                     "status": False,
-                    "error": result.get('error'),
+                    "error": error_msg,
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": result.get('code')
                 }, status=status.HTTP_400_BAD_REQUEST)
@@ -3683,6 +3755,16 @@ class StudentattendanceSavestudentattendancePostView(APIView):
                 # Increment manual attendance counter for each student
                 for student_id in student_ids:
                     increment_manual_attendance(student_id)
+                
+                # Log to ClassActivityLog for successful ATTENDANCE_MARKED
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    center = Center.objects.filter(id=attendance_data.get('CenterId')).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'Attendance marked successfully', attendance_count=len(student_ids), latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='SUCCESS')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for ATTENDANCE_MARKED: {str(e)}")
+
                 return Response(
                     {
                         "status": True,
@@ -3707,6 +3789,8 @@ class StudentSaveAutomaticAttendanceView(APIView):
     """Saves automatic student attendance"""
     
     def post(self, request):
+        # Log activity at the start - log everything coming from frontend
+        log_activity_before(request, 'StudentAttendance', 'MARK_AUTOMATIC_ATTENDANCE', data=dict(request.data))
         try:
             logger.info("UserView : SaveAutomaticStudentAttendance : Started")
             
@@ -3731,8 +3815,15 @@ class StudentSaveAutomaticAttendanceView(APIView):
                     "code": status.HTTP_400_BAD_REQUEST
                 }, status=status.HTTP_400_BAD_REQUEST)
                             
-                                    
+                                     
             if center.location_status != 'VERIFIED':
+                # Log to ClassActivityLog for center not verified
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'Center location not verified', attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for center not verified: {str(e)}")
                 return Response({
                     "status": False,
                     "error": "Center location not verified. Cannot mark attendance.",
@@ -3744,6 +3835,13 @@ class StudentSaveAutomaticAttendanceView(APIView):
             latitude = attendance_data.get('Latitude')
             longitude = attendance_data.get('Longitude')
             if not (latitude and longitude):
+                # Log to ClassActivityLog for missing GPS
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'GPS location required', attendance_count=0, status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for missing GPS: {str(e)}")
                 return Response({
                     "status": False,
                     "error": "GPS location required for attendance",
@@ -3758,6 +3856,14 @@ class StudentSaveAutomaticAttendanceView(APIView):
             logger.info(f"UserView : SaveAutomaticStudentAttendance : Location check - valid={is_valid_loc}, distance={distance:.1f}m, center_status={center_status}")
                         
             if not is_valid_loc:
+                # Log to ClassActivityLog for location error
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, f"Location verification failed. Distance from center: {distance:.1f}m. Center status: {center_status}", attendance_count=0, latitude=latitude, longitude=longitude, status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for location error: {str(e)}")
+                
                 return Response({
                     "status": False,
                     "error": "Oops — you're outside the centre. You can only mark attendance from the register centre location.",
@@ -3767,6 +3873,23 @@ class StudentSaveAutomaticAttendanceView(APIView):
 
             result = save_student_attendance(attendance_data, is_automatic=True, is_manual=False)
             logged_user_id = get_user_id_from_token(request)
+            
+            # Handle holiday/Sunday block response
+            if isinstance(result, dict) and result.get('status') == False:
+                error_msg = result.get('error')
+                # Log to ClassActivityLog for holiday/Sunday block
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, error_msg, attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for holiday/Sunday block: {str(e)}")
+                return Response({
+                    "status": False,
+                    "error": error_msg,
+                    "code": status.HTTP_400_BAD_REQUEST,
+                    "ErrorCode": result.get('code')
+                }, status=status.HTTP_400_BAD_REQUEST)
             
             if result == -1:
                 # Log activity for duplicate automatic attendance
@@ -3832,6 +3955,21 @@ class StudentSaveAutomaticAttendanceView(APIView):
                         data=attendance_data,
                         request=request
                     )
+                
+                # Log to ClassActivityLog for successful ATTENDANCE_MARKED
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    center = Center.objects.filter(id=attendance_data.get('CenterId')).first()
+                    student_ids_raw = attendance_data.get('StudentIds', '')
+                    if isinstance(student_ids_raw, str):
+                        student_ids = [int(s.strip()) for s in student_ids_raw.split(',') if s.strip()]
+                    else:
+                        student_ids = student_ids_raw if isinstance(student_ids_raw, list) else []
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'Attendance marked successfully', attendance_count=len(student_ids), latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='SUCCESS')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for ATTENDANCE_MARKED: {str(e)}")
+
                 return Response(
                     {
                         "status": True,
@@ -3857,6 +3995,8 @@ class StudentSaveManualAttendanceView(APIView):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     
     def post(self, request):
+        # Log activity at the start - log everything coming from frontend
+        log_activity_before(request, 'StudentAttendance', 'MARK_MANUAL_ATTENDANCE', data=dict(request.data))
         try:
             logger.info("UserView : SaveManualStudentAttendance : Started")
             
@@ -3916,6 +4056,13 @@ class StudentSaveManualAttendanceView(APIView):
                 
                         
             if center.location_status != 'VERIFIED':
+                # Log to ClassActivityLog for center not verified
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'Center location not verified', attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for center not verified: {str(e)}")
                 return Response({
                     "status": False,
                     "error": "Center location not verified. Cannot mark manual attendance.",
@@ -3927,6 +4074,13 @@ class StudentSaveManualAttendanceView(APIView):
             latitude = attendance_data.get('Latitude')
             longitude = attendance_data.get('Longitude')
             if not (latitude and longitude):
+                # Log to ClassActivityLog for missing GPS
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'GPS location required', attendance_count=0, status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for missing GPS: {str(e)}")
                 return Response({
                     "status": False,
                     "error": "GPS location required for manual attendance",
@@ -3938,6 +4092,14 @@ class StudentSaveManualAttendanceView(APIView):
             )
             
             if not is_valid_loc:
+                # Log to ClassActivityLog for location error
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, f"Location verification failed. Distance from center: {distance:.1f}m. Center status: {center_status}", attendance_count=0, latitude=latitude, longitude=longitude, status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for location error: {str(e)}")
+                
                 return Response({
                     "status": False,
                     "error": f"Oops — you're outside the centre. You can only mark attendance from the register centre location.",
@@ -3948,9 +4110,17 @@ class StudentSaveManualAttendanceView(APIView):
             # Check manual attendance limit (configurable via env, default 30)
             allowed, current, remaining, limit = check_manual_attendance_limit(student_id)
             if not allowed:
+                error_msg = f"Monthly manual attendance limit reached ({current}/{limit}). Next reset: 1st of next month."
+                # Log to ClassActivityLog for manual limit reached
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, error_msg, attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for manual limit reached: {str(e)}")
                 return Response({
                     "status": False,
-                    "error": f"Monthly manual attendance limit reached ({current}/{limit}). Next reset: 1st of next month.",
+                    "error": error_msg,
                     "code": status.HTTP_400_BAD_REQUEST,
                     "ErrorCode": -15,
                     "CurrentCount": current,
@@ -3965,6 +4135,13 @@ class StudentSaveManualAttendanceView(APIView):
             if is_blocked:
                 error_msg = 'Cannot mark attendance on Sunday' if reason == 'sunday' else 'Cannot mark attendance on holiday'
                 error_code = -16 if reason == 'sunday' else -17
+                # Log to ClassActivityLog for holiday/Sunday block
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, error_msg, attendance_count=0, latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='FAILED')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for holiday/Sunday block: {str(e)}")
                 return Response({
                     "status": False,
                     "error": error_msg,
@@ -4041,6 +4218,21 @@ class StudentSaveManualAttendanceView(APIView):
                         data=attendance_data,
                         request=request
                     )
+                
+                # Log to ClassActivityLog for successful ATTENDANCE_MARKED
+                try:
+                    class_id = attendance_data.get('ClassId')
+                    class_obj = ClassModel.objects.filter(id=class_id).first()
+                    center = Center.objects.filter(id=attendance_data.get('CenterId')).first()
+                    student_ids_raw = attendance_data.get('StudentIds', '')
+                    if isinstance(student_ids_raw, str):
+                        student_ids = [int(s.strip()) for s in student_ids_raw.split(',') if s.strip()]
+                    else:
+                        student_ids = student_ids_raw if isinstance(student_ids_raw, list) else []
+                    log_class_activity(request, 'ATTENDANCE_MARKED', class_obj, center, 'Attendance marked successfully', attendance_count=len(student_ids), latitude=attendance_data.get('Latitude'), longitude=attendance_data.get('Longitude'), status='SUCCESS')
+                except Exception as e:
+                    logger.error(f"Failed to log ClassActivityLog for ATTENDANCE_MARKED: {str(e)}")
+
                 return Response(
                     {
                         "status": True,

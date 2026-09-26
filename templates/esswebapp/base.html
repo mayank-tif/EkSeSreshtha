@@ -1,4 +1,5 @@
 {% load static %}
+{% load json_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,7 +29,6 @@
 </head>
 <body
 {% block body-attributes %}
-{% load json_filters %}
 
     data-url-logo="{% static 'esswebapp/assets/logo.png' %}"
     data-page-size="{{ PAGE_SIZE|default:50 }}"
@@ -44,6 +44,7 @@
     data-url-student-daily-attendance="{% url 'esswebapp:student-daily-attendance' %}"
     data-url-center-monthly-attendance="{% url 'esswebapp:center-monthly-attendance' %}"
     data-url-class-attendance-logs="{% url 'esswebapp:class-attendance-logs' %}"
+    data-url-class-activity-report="{% url 'esswebapp:class-activity-report' %}"
     data-url-users="{% url 'esswebapp:users' %}"
     data-url-logout="{% url 'esswebapp:logout' %}"
     data-url-district="{% url 'esswebapp:district' %}"

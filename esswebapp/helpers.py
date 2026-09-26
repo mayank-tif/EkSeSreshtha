@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from django.db import transaction
-from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User, ActivityLog, ClassModel, Holidays, RegionalAdminPanchayat, RegionalAdminVidhanSabha
+from APIS.models import Center, Teacher, RegionalAdmin, CenterAssignUser, Student, StudentAttendance, User, ActivityLog, ClassActivityLog, ClassModel, Holidays, RegionalAdminPanchayat, RegionalAdminVidhanSabha
 from django.db.models import Count
 
 logger = logging.getLogger(__name__)
@@ -1316,3 +1316,164 @@ def get_student_daily_attendance(student_id, year, month):
         })
     
     return result
+
+
+# ============================================================
+# Class Activity Report Helpers
+# ============================================================
+
+def get_class_activity_logs_queryset(request, filters=None):
+    """
+    Build queryset for ClassActivityLog with filters and access control.
+    Used by both list API and export API.
+    
+    Args:
+        request: HTTP request object
+        filters: dict with optional keys:
+            - start_date (str): YYYY-MM-DD
+            - end_date (str): YYYY-MM-DD
+            - center_id (str/int): center ID
+            - teacher_id (str/int): teacher/user ID
+            - action_type (str): CLASS_STARTED, ATTENDANCE_MARKED, CLASS_ENDED
+            - status (str): SUCCESS, FAILED
+            - search (str): search text
+    
+    Returns:
+        queryset: Filtered ClassActivityLog queryset
+    """
+    
+    if filters is None:
+        filters = {}
+    
+    # Get user accessible centers
+    accessible_center_ids = get_user_accessible_center_ids(request)
+    
+    # Build queryset
+    queryset = ClassActivityLog.objects.all()
+    
+    # Filter by accessible centers
+    if accessible_center_ids is not None:
+        queryset = queryset.filter(center_id__in=accessible_center_ids)
+    
+    
+    # Date range filter
+    start_date = filters.get('start_date')
+    end_date = filters.get('end_date')
+    
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+            queryset = queryset.filter(created_on__gte=start_dt)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+            queryset = queryset.filter(created_on__lt=end_dt)
+        except ValueError:
+            pass
+    
+    # Center filter
+    center_id = filters.get('center_id')
+    if center_id:
+        queryset = queryset.filter(center_id=center_id)
+    
+    # Teacher/User filter
+    teacher_id = filters.get('teacher_id')
+    if teacher_id:
+        queryset = queryset.filter(user_id=teacher_id)
+    
+    # Action type filter
+    action_type = filters.get('action_type')
+    if action_type:
+        queryset = queryset.filter(action=action_type)
+    
+    # Status filter
+    status_filter = filters.get('status')
+    if status_filter:
+        queryset = queryset.filter(status=status_filter)
+    
+    # Search filter
+    search = filters.get('search', '').strip()
+    if search:
+        queryset = queryset.filter(
+            Q(center_name__icontains=search) |
+            Q(user_name__icontains=search) |
+            Q(class_name__icontains=search) |
+            Q(user_mobile__icontains=search) |
+            Q(reason__icontains=search)
+        )
+    
+    # Order by newest first
+    queryset = queryset.order_by('-created_on')
+    
+    return queryset
+
+
+def get_class_activity_logs_data(request, filters=None, page=None, page_size=None):
+    """
+    Get paginated class activity logs data.
+    Used by list API.
+    
+    Args:
+        request: HTTP request object
+        filters: dict of filter parameters
+        page: page number (1-indexed)
+        page_size: items per page
+    
+    Returns:
+        dict: {results: [], pagination: {}}
+    """
+    from APIS.models import ClassActivityLog
+    
+    queryset = get_class_activity_logs_queryset(request, filters)
+    
+    if page is not None and page_size is not None:
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
+        logs = queryset[start_idx:end_idx]
+    else:
+        logs = queryset
+        total_count = queryset.count()
+        total_pages = 1
+    
+    results = []
+    for log in logs:
+        results.append({
+            'id': log.id,
+            'created_on': log.created_on.isoformat() if log.created_on else None,
+            'action': log.action,
+            'action_display': dict(ClassActivityLog.ACTION_CHOICES).get(log.action, log.action),
+            'user_id': log.user_id,
+            'user_name': log.user_name,
+            'user_mobile': log.user_mobile,
+            'user_role': log.user_role,
+            'user_latitude': str(log.user_latitude) if log.user_latitude else None,
+            'user_longitude': str(log.user_longitude) if log.user_longitude else None,
+            'center_id': log.center_id,
+            'center_name': log.center_name,
+            'center_latitude': str(log.center_latitude) if log.center_latitude else None,
+            'center_longitude': str(log.center_longitude) if log.center_longitude else None,
+            'class_id': log.class_id,
+            'class_name': log.class_name,
+            'status': log.status,
+            'reason': log.reason,
+            'attendance_count': log.attendance_count,
+            'ip_address': log.ip_address,
+        })
+    
+    return {
+        'results': results,
+        'pagination': {
+            'page': page or 1,
+            'page_size': page_size or total_count,
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'has_next': (page or 1) < total_pages,
+            'has_prev': (page or 1) > 1
+        }
+    }

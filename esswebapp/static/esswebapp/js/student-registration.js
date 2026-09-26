@@ -292,7 +292,7 @@ async function handleStudentSubmit(event) {
     };
 
     // Validation
-    if (!payload.rollNo || !payload.name || !payload.age ||
+    if (!payload.name || !payload.age ||
         !payload.activeClass || !payload.contactNumber ||
         !payload.category || !payload.centreId) {
         showToast('Please fill in all required fields.', 'danger');

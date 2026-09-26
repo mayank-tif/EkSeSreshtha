@@ -6447,3 +6447,56 @@ def get_external_center_data(center_id=None):
     except Exception as e:
         logger.error(f"ExternalCenterHelper : GetExternalCenterData : {str(e)}")
         raise e
+
+
+# ============================================================
+# ClassActivityLog Helper Functions
+# ============================================================
+
+def log_class_activity(request, action, class_obj, center, reason, attendance_count=0, latitude=None, longitude=None, status='FAILED'):
+    """
+    Log class lifecycle events to ClassActivityLog table.
+    
+    Args:
+        request: HTTP request object
+        action: 'CLASS_STARTED', 'ATTENDANCE_MARKED', 'CLASS_ENDED'
+        class_obj: ClassModel instance
+        center: Center instance
+        reason: Reason for the log (success or error message)
+        attendance_count: Number of students present (for CLASS_ENDED)
+        latitude: User's latitude (for location-based events)
+        longitude: User's longitude (for location-based events)
+        status: 'SUCCESS' or 'FAILED' (default: 'FAILED')
+    """
+    try:
+        user_id = get_user_id_from_token(request)
+        if not user_id:
+            logger.warning("ClassActivityLog: No user_id from token")
+            return
+        
+        user_obj = User.objects.filter(id=user_id).first()
+        teacher = Teacher.objects.filter(user_id=user_id).first()
+        
+        ClassActivityLog.objects.create(
+            user_id=user_id,
+            user_name=user_obj.name if user_obj else (teacher.user.name if teacher and teacher.user else ''),
+            user_mobile=teacher.user.phone_number if teacher and teacher.user else (user_obj.phone_number if user_obj else ''),
+            user_role=teacher.user.role.role_code if teacher and teacher.user and teacher.user.role else (user_obj.role.role_code if user_obj and user_obj.role else ''),
+            user_latitude=latitude,
+            user_longitude=longitude,
+            center_id=center.id if center else None,
+            center_name=center.center_name if center else '',
+            center_latitude=center.latitude if center else None,
+            center_longitude=center.longitude if center else None,
+            class_id=class_obj.id if class_obj else None,
+            class_name=class_obj.name if class_obj else '',
+            action=action,
+            status=status,
+            reason=reason,
+            attendance_count=attendance_count,
+            ip_address=get_ip_address(request),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')
+        )
+        logger.info(f"ClassActivityLog: Logged {action} ({status}) for class {class_obj.id if class_obj else 'N/A'}")
+    except Exception as e:
+        logger.error(f"Failed to log ClassActivityLog for {action}: {str(e)}")

@@ -4,7 +4,7 @@ from django.views import View
 from django.urls import re_path
 from django.http import JsonResponse
 from django.db import models, transaction
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Sum, Q
 import json
 import uuid
 import logging
@@ -12,7 +12,8 @@ from datetime import datetime, timedelta
 
 from APIS.models import *
 from APIS.utils import (hash_password, generate_ra_enrolment_roll_id,
-                        generate_student_roll_number)
+                        generate_student_roll_number, generate_student_enrollment_id)
+from APIS.helper import log_class_activity
 from .helpers import *
 from .forms import LoginForm
 import base64
@@ -59,6 +60,7 @@ class LoginRequiredMixin:
 class PermissionRequiredMixin:
     """Mixin to check module-level permissions for Regional Admin"""
     required_module = None  # Override in subclass: 'centres', 'students', etc.
+    required_role = None    # Override in subclass: 'SUPER_ADMIN' to restrict to super admin only
     
     def dispatch(self, request, *args, **kwargs):
         # First check login
@@ -74,6 +76,12 @@ class PermissionRequiredMixin:
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({'detail': 'Unauthorized'}, status=401)
             return redirect('esswebapp:login')
+        
+        # Check role restriction (SUPER_ADMIN only)
+        if self.required_role == 'SUPER_ADMIN' and role_code != 'SUPER_ADMIN':
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'detail': 'Permission denied - Super Admin only'}, status=403)
+            return render(request, 'esswebapp/403.html', status=403)
         
         # Check module permission
         if self.required_module:
@@ -213,6 +221,7 @@ class DashboardView(PermissionRequiredMixin, View):
     
     def _dashboard_stats_api(self, request):
         """Return dashboard statistics."""
+        log_web_activity(request, 'VIEW', 'Dashboard', data=dict(request.GET))
         now = datetime.now()
         start_of_month = datetime(now.year, now.month, 1)
         
@@ -235,6 +244,7 @@ class DashboardView(PermissionRequiredMixin, View):
     
     def _dashboard_activity_api(self, request):
         """Return recent activity feed from ActivityLog."""
+        log_web_activity(request, 'VIEW', 'Dashboard', data=dict(request.GET))
         
         limit = int(request.GET.get('limit', 4))
         
@@ -266,6 +276,7 @@ class DashboardView(PermissionRequiredMixin, View):
     
     def _dashboard_attendance_api(self, request):
         """Return attendance data for chart based on selected range."""
+        log_web_activity(request, 'VIEW', 'Dashboard', data=dict(request.GET))
         # Get range parameter (7, 30, or 'year')
         range_param = request.GET.get('range', '7')
         
@@ -466,6 +477,7 @@ class CenterMonthlyAttendanceView(PermissionRequiredMixin, View):
     
     def _center_monthly_attendance_api(self, request):
         """Get monthly attendance summary for a center using single query."""
+        log_web_activity(request, 'VIEW', 'Attendance', data=dict(request.GET))
         try:
             center_id = request.GET.get('center_id')
             year = request.GET.get('year')
@@ -515,6 +527,7 @@ class CenterAttendanceView(PermissionRequiredMixin, View):
         ).order_by('-created_on')
     
     def _list_centers_attendance_api(self, request):
+        log_web_activity(request, 'VIEW', 'Attendance', data=dict(request.GET))
         try:
             # Get filter parameters
             page = int(request.GET.get('page', 1))
@@ -620,6 +633,14 @@ class CenterAttendanceView(PermissionRequiredMixin, View):
 
     def _get_center_students_attendance_api(self, request):
         """Get all students for a center with their attendance status on a specific date."""
+        logger.info(f'_get_center_students_attendance_api: center_id={request.GET.get("center_id")}, date={request.GET.get("date")}')
+        # Log activity at the start - log everything coming from frontend
+        log_web_activity(
+            request=request,
+            action='VIEW',
+            module='StudentAttendance',
+            data=dict(request.GET)
+        )
         try:
             center_id = request.GET.get('center_id')
             attendance_date = request.GET.get('date')
@@ -676,6 +697,13 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         return ClassModel.objects.filter(active_status=True, status__in=[1, 2, 3])
     
     def _get_class_logs_api(self, request):
+        # Log activity at the start - log everything coming from frontend
+        log_web_activity(
+            request=request,
+            action='VIEW',
+            module='ClassAttendanceLogs',
+            data=dict(request.GET)
+        )
         try:
             page = int(request.GET.get('page', 1))
             page_size = int(request.GET.get('page_size', PAGE_SIZE))
@@ -890,6 +918,14 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
     
     def _get_class_log_detail_api(self, request):
+        logger.info(f'_get_class_log_detail_api: class_id={request.GET.get("class_id")}')
+        # Log activity at the start - log everything coming from frontend
+        log_web_activity(
+            request=request,
+            action='VIEW',
+            module='ClassAttendanceLogs',
+            data=dict(request.GET)
+        )
         try:
             class_id = request.GET.get('class_id')
             if not class_id:
@@ -911,6 +947,14 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
     def _get_class_log_summary_api(self, request):
         """Returns summary counts for each status type (for dashboard counters)
         Works with the date-centric view - shows counts per center for the selected date."""
+        logger.info(f'_get_class_log_summary_api: date={request.GET.get("date")}, center_id={request.GET.get("center_id")}, teacher_id={request.GET.get("teacher_id")}')
+        # Log activity at the start - log everything coming from frontend
+        log_web_activity(
+            request=request,
+            action='VIEW',
+            module='ClassAttendanceLogs',
+            data=dict(request.GET)
+        )
         try:
             # Get accessible centers for the user
             accessible_center_ids = get_user_accessible_center_ids(request)
@@ -1978,6 +2022,7 @@ class SchoolListView(LoginRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
     
     def _create_school(self, request):
+        log_web_activity(request, 'CREATE', 'School', data=json.loads(request.body) if request.body else {})
         try:
             data = json.loads(request.body)
             name = (data.get('name') or '').strip()
@@ -2156,9 +2201,10 @@ class StudentsView(PermissionRequiredMixin, View):
             data = json.loads(request.body)
             
             # Transform web app field names to model field names
+            center_id = data.get('centreId')
             student_data = {
                 'roll_number': int(data.get('rollNo')) if data.get('rollNo') else None,
-                'enrollment_id': str(uuid.uuid4()),
+                'enrollment_id': generate_student_enrollment_id(center_id) if center_id else str(uuid.uuid4()),
                 'full_name': data.get('name') or data.get('full_name'),
                 'age': data.get('age'),
                 'gender': data.get('gender'),
@@ -5841,3 +5887,62 @@ class CenterView(PermissionRequiredMixin, View):
             return JsonResponse({'detail': 'Center deactivated successfully'})
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
+
+
+# ============================================================
+# Class Activity Report View
+# ============================================================
+
+class ClassActivityReportView(PermissionRequiredMixin, View):
+    """Class Activity Log Report - shows all class lifecycle events"""
+    template_name = 'esswebapp/pages/attendance/class-activity-report.html'
+    required_module = 'attendance'
+    
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            action = request.GET.get('action')
+            if action == 'list':
+                return self._get_activity_logs_api(request)
+        
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+    
+    def _get_activity_logs_api(self, request):
+        """Get paginated class activity logs with filters"""
+        log_web_activity(request, 'VIEW', 'ClassActivityReport', data=dict(request.GET))
+        
+        # Pagination
+        page = int(request.GET.get('page', 1))
+        page_size = int(request.GET.get('page_size', 25))
+        
+        # Filters
+        filters = {
+            'start_date': request.GET.get('start_date'),
+            'end_date': request.GET.get('end_date'),
+            'center_id': request.GET.get('center_id'),
+            'teacher_id': request.GET.get('teacher_id'),
+            'action_type': request.GET.get('action_type'),
+            'status': request.GET.get('status'),
+            'search': request.GET.get('search', '').strip(),
+        }
+        
+        data = get_class_activity_logs_data(request, filters, page, page_size)
+        return JsonResponse(data)
+    
+
+    
+        """Get teachers for filter dropdown"""
+        log_web_activity(request, 'VIEW', 'ClassActivityReport', data=dict(request.GET))
+        
+        accessible_center_ids = get_user_accessible_center_ids(request)
+        
+        teachers_qs = Teacher.objects.filter(status=True).select_related('user', 'center')
+        if accessible_center_ids is not None:
+            teachers_qs = teachers_qs.filter(center_id__in=accessible_center_ids)
+        
+        teachers = teachers_qs.values(
+            'id', 'user__name', 'user__phone_number', 'center_id', 'center__center_name', 'teacher_guid_id'
+        ).order_by('user__name')
+        
+        return JsonResponse({'results': list(teachers)})
+

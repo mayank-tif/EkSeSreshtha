@@ -73,7 +73,7 @@ class Village(models.Model):
     name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     district = models.ForeignKey(District, db_column="DistrictId", on_delete=models.SET_NULL, null=True, blank=True, related_name='villages')
-    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='villages')
+    panchayat = models.ForeignKey(Panchayat, db_column="PanchayatId", on_delete=models.SET_NULL, null=True, blank=True, related_name='panchayats')
     vidhan_sabha = models.ForeignKey(VidhanSabha, db_column="VidhanSabhaId", on_delete=models.SET_NULL, null=True, blank=True, related_name='villages')
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
@@ -677,6 +677,63 @@ class ActivityLog(models.Model):
             models.Index(fields=['action'], name='idx_activitylog_action'),
             models.Index(fields=['created_on'], name='idx_activitylog_created_on'),
         ]
+
+
+class ClassActivityLog(models.Model):
+    """Log table for class lifecycle events: CLASS_STARTED, ATTENDANCE_MARKED, CLASS_ENDED"""
+    ACTION_CHOICES = [
+        ('CLASS_STARTED', 'Class Started'),
+        ('ATTENDANCE_MARKED', 'Attendance Marked'),
+        ('CLASS_ENDED', 'Class Ended'),
+    ]
+    STATUS_CHOICES = [
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+    ]
+    
+    id = models.AutoField(db_column="Id", primary_key=True)
+    # User/Teacher info
+    user_id = models.IntegerField(db_column="UserId", null=True, blank=True)
+    user_name = models.CharField(db_column="UserName", max_length=100, null=True, blank=True)
+    user_mobile = models.CharField(db_column="UserMobile", max_length=20, null=True, blank=True)
+    user_role = models.CharField(db_column="UserRole", max_length=50, null=True, blank=True)
+    user_latitude = models.DecimalField(db_column="UserLatitude", max_digits=10, decimal_places=7, null=True, blank=True)
+    user_longitude = models.DecimalField(db_column="UserLongitude", max_digits=10, decimal_places=7, null=True, blank=True)
+    
+    # Center info
+    center_id = models.IntegerField(db_column="CenterId", null=True, blank=True)
+    center_name = models.CharField(db_column="CenterName", max_length=200, null=True, blank=True)
+    center_latitude = models.DecimalField(db_column="CenterLatitude", max_digits=10, decimal_places=7, null=True, blank=True)
+    center_longitude = models.DecimalField(db_column="CenterLongitude", max_digits=10, decimal_places=7, null=True, blank=True)
+    
+    # Class info
+    class_id = models.IntegerField(db_column="ClassId", null=True, blank=True)
+    class_name = models.CharField(db_column="ClassName", max_length=200, null=True, blank=True)
+    
+    # Action info
+    action = models.CharField(db_column="Action", max_length=50, choices=ACTION_CHOICES)
+    status = models.CharField(db_column="Status", max_length=10, choices=STATUS_CHOICES, default='FAILED')
+    reason = models.TextField(db_column="Reason", null=True, blank=True)
+    attendance_count = models.IntegerField(db_column="AttendanceCount", null=True, blank=True)
+    
+    # Metadata
+    ip_address = models.CharField(db_column="IpAddress", max_length=50, null=True, blank=True)
+    user_agent = models.TextField(db_column="UserAgent", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", auto_now_add=True, null=True, blank=True)
+
+    class Meta:
+        db_table = "ClassActivityLog"
+        indexes = [
+            models.Index(fields=['user_id'], name='idx_cal_user'),
+            models.Index(fields=['center_id'], name='idx_cal_center'),
+            models.Index(fields=['class_id'], name='idx_cal_class'),
+            models.Index(fields=['action'], name='idx_cal_action'),
+            models.Index(fields=['created_on'], name='idx_cal_created'),
+            models.Index(fields=['center_id', 'created_on'], name='idx_cal_ctr_date'),
+        ]
+
+    def __str__(self):
+        return f"{self.action} - {self.class_name} by {self.user_name} at {self.created_on}"
 
 
 class StudentManualAttendanceLimit(models.Model):

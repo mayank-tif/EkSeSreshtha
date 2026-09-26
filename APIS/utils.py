@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+import uuid
 import pandas as pd
 from datetime import datetime
 from .models import *
@@ -322,7 +323,15 @@ def log_activity(request, module, action, record_id=None, data=None):
         # Convert data to JSON if it's a dict
         if data and isinstance(data, dict):
             import json
-            data = json.dumps(data)
+            from datetime import datetime, date
+            
+            def json_serializer(obj):
+                """Custom JSON serializer for non-serializable objects"""
+                if isinstance(obj, (datetime, date)):
+                    return obj.isoformat()
+                raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+            
+            data = json.dumps(data, default=json_serializer)
         
         # Own savepoint on purpose: when the caller is inside transaction.atomic(),
         # a failed audit INSERT would otherwise mark the connection for rollback and
@@ -439,3 +448,35 @@ def parse_id_list(value):
         if text.isdigit() and int(text) > 0:
             ids.append(int(text))
     return ids
+
+def generate_student_enrollment_id(center_id):
+    """
+    Generate a structured enrollment ID for a student in the format:
+    CL-ENR-{center_id}-{sequence:03d}
+    
+    This matches the format used by seed_class_logs.py and provides a consistent,
+    human-readable enrollment ID that includes the center ID and a sequence number.
+    The sequence is per-center, so each center starts at 001.
+    """
+    if not center_id:
+        # Fallback to a UUID-based format if no center_id provided
+        return str(uuid.uuid4())
+    
+    prefix = f'CL-ENR-{center_id}-'
+    pattern = re.compile(rf'^CL-ENR-{re.escape(str(center_id))}-(\d+)$')
+    
+    # Find the highest sequence number for this center
+    highest = 0
+    for existing in Student.objects.filter(
+            enrollment_id__startswith=prefix).values_list('enrollment_id', flat=True):
+        match = pattern.match(existing or '')
+        if match:
+            highest = max(highest, int(match.group(1)))
+    
+    candidate = f'{prefix}{highest + 1:03d}'
+    # Ensure uniqueness (should be unique by design, but double-check)
+    while Student.objects.filter(enrollment_id=candidate).exists():
+        highest += 1
+        candidate = f'{prefix}{highest + 1:03d}'
+    
+    return candidate
