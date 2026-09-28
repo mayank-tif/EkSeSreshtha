@@ -245,7 +245,7 @@
         if (elements.tbody) {
             elements.tbody.innerHTML = `
                 <tr>
-                    <td colspan="12" class="empty-state">
+                    <td colspan="7" class="empty-state">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="spin">
                             <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
                             <path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="1" stroke-linecap="round"/>
@@ -264,7 +264,7 @@
         if (elements.tbody) {
             elements.tbody.innerHTML = `
                 <tr>
-                    <td colspan="12" class="empty-state">
+                    <td colspan="7" class="empty-state">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <circle cx="12" cy="12" r="10"/>
                             <line x1="12" y1="8" x2="12" y2="12"/>
@@ -286,7 +286,7 @@
         if (!logs || logs.length === 0) {
             elements.tbody.innerHTML = `
                 <tr>
-                    <td colspan="12" class="empty-state">
+                    <td colspan="7" class="empty-state">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                             <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
@@ -312,13 +312,7 @@
             const statusBadge = log.status ? `<span class="status-badge ${statusClass}">${log.status}</span>` : '<span class="text-muted">—</span>';
             const timeStr = createdOn ? createdOn.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '-';
 
-            // Teacher coordinates
-            const teacherLat = log.user_latitude ? `<span class="coord-display">${log.user_latitude}</span>` : '<span class="text-muted">—</span>';
-            const teacherLng = log.user_longitude ? `<span class="coord-display">${log.user_longitude}</span>` : '<span class="text-muted">—</span>';
-            
-            // Center coordinates
-            const centerLat = log.center_latitude ? `<span class="coord-display">${log.center_latitude}</span>` : '<span class="text-muted">—</span>';
-            const centerLng = log.center_longitude ? `<span class="coord-display">${log.center_longitude}</span>` : '<span class="text-muted">—</span>';
+
 
             html += `
                 <tr data-log='${JSON.stringify(log).replace(/'/g, '&apos;')}'>
@@ -344,10 +338,6 @@
                             <span class="action-text">${actionInfo.label}</span>
                         </span>
                     </td>
-                    <td class="text-center">${teacherLat}</td>
-                    <td class="text-center">${teacherLng}</td>
-                    <td class="text-center">${centerLat}</td>
-                    <td class="text-center">${centerLng}</td>
                     <td class="reason-cell" title="${escapeHtml(log.reason || '')}">${escapeHtml(log.reason || '—')}</td>
                 </tr>
             `;
