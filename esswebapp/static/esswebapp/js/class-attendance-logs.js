@@ -479,8 +479,8 @@ function renderTable(logs) {
             </div>`;
         }
         
-        // Teacher name
-        const teacherName = classObj.teacher_name || '—';
+        // Teacher name (from center object)
+        const teacherName = center.teacher_name || '—';
         
         // Center info with village/district
         const centerName = center.center_name || '—';

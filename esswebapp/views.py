@@ -1612,9 +1612,18 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         filter_date = center_data.get('filter_date')
         
         teacher_name = None
+        teacher_id = None
+        
+        # First try to get teacher from class object (for started classes)
         if class_obj and class_obj.users_id:
+            teacher_id = class_obj.users_id
+        # If no class or no teacher on class, fall back to center's assigned_teachers
+        elif center.assigned_teachers:
+            teacher_id = center.assigned_teachers
+        
+        if teacher_id:
             try:
-                teacher = User.objects.filter(id=class_obj.users_id).first()
+                teacher = User.objects.filter(id=teacher_id).first()
                 teacher_name = teacher.name if teacher else None
             except:
                 pass
@@ -1627,11 +1636,12 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'longitude': float(center.longitude) if center.longitude else None,
                 'village_name': center.village.name if center.village else None,
                 'district_name': center.district.name if center.district else None,
+                'teacher_name': teacher_name,
+                'teacher_id': teacher_id,
             },
             'class_obj': {
                 'id': class_obj.id if class_obj else None,
                 'name': class_obj.name if class_obj else None,
-                'teacher_name': teacher_name,
                 'started_date': class_obj.started_date.isoformat() if class_obj and class_obj.started_date else None,
                 'end_date': class_obj.end_date.isoformat() if class_obj and class_obj.end_date else None,
                 'status': class_obj.status if class_obj else None,
@@ -2318,7 +2328,7 @@ class StudentsView(PermissionRequiredMixin, View):
         """Batch-fetch school names for student ids."""
         if not student_ids:
             return {}
-        schools = School.objects.filter(id__in=student_ids).values_list('id', 'school_name')
+        schools = School.objects.filter(id__in=student_ids, status=True).values_list('id', 'school_name')
         return dict(schools)
     
 
@@ -2390,7 +2400,7 @@ class StudentsView(PermissionRequiredMixin, View):
                     center_map = {}
                     school_map = {}
                     if student.center_id:
-                        center = Center.objects.filter(id=student.center_id).values('id', 'center_name', 'assigned_teachers', 'assigned_regional_admin').first()
+                        center = Center.objects.filter(id=student.center_id, status=True).values('id', 'center_name', 'assigned_teachers', 'assigned_regional_admin').first()
                         if center:
                             center_map[center['id']] = center['center_name']
                             # Get teacher and regional admin names
@@ -2403,7 +2413,7 @@ class StudentsView(PermissionRequiredMixin, View):
                             student.center.assigned_teacher_name = name_map.get(center['assigned_teachers'])
                             student.center.assigned_regional_admin_name = name_map.get(center['assigned_regional_admin'])
                     if student.school_id:
-                        school = School.objects.filter(id=student.school_id).values('id', 'school_name').first()
+                        school = School.objects.filter(id=student.school_id, status=True).values('id', 'school_name').first()
                         if school:
                             school_map[school['id']] = school['school_name']
                     return JsonResponse(self._serialize_student(student, center_map, school_map))
@@ -2456,10 +2466,10 @@ class StudentsView(PermissionRequiredMixin, View):
             center_ids = [s.center_id for s in students_page if s.center_id]
             school_ids = [s.school_id for s in students_page if s.school_id]
             
-            centers = Center.objects.filter(id__in=center_ids).values('id', 'center_name')
+            centers = Center.objects.filter(id__in=center_ids, status=True).values('id', 'center_name')
             center_map = {c['id']: c['center_name'] for c in centers}
             
-            schools = School.objects.filter(id__in=school_ids).values('id', 'school_name')
+            schools = School.objects.filter(id__in=school_ids, status=True).values('id', 'school_name')
             school_map = {s['id']: s['school_name'] for s in schools}
             
             items = [
