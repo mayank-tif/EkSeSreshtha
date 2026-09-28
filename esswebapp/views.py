@@ -1282,7 +1282,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             - If class_date < today (past date):
                 - Has end_date: Completed (with or without attendance)
                 - No end_date:
-                    - Has attendance: Not Ended (Not Closed) - active_ended
+                    - Has attendance: Not Ended - active_ended
                     - No attendance: Not Ended (No Attendance) - active_ended_no_att
             - If class_date > today (future): Not Started
         - For status=0 or no start_date or no class for that center:
@@ -1398,37 +1398,31 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                             'gross_hours': 0
                         }
                     else:
-                        # Past date (same day class but filter_date is in past) - treat as completed
-                        duration = 0
-                        gross_hours = 0
-                        if cls.end_date and cls.started_date:
-                            duration = cls.end_date - cls.started_date
-                            hours = duration.total_seconds() / 3600
-                            gross_hours = round(hours, 2)
+                        # Past date (same day class but filter_date is in past) - no end_date means Not Ended
                         attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
                         if attendances:
                             present = sum(1 for a in attendances if a.type is True)
                             absent = sum(1 for a in attendances if a.type is False)
                             return {
-                                'key': 'completed',
-                                'label': 'Completed',
-                                'color': '#16a34a',
-                                'icon': '✓',
-                                'tooltip': f'Class completed · {gross_hours}h · {present} present, {absent} absent',
-                                'gross_hours': gross_hours,
+                                'key': 'active_ended',
+                                'label': 'Not Ended',
+                                'color': '#3b82f6',
+                                'icon': '⏱',
+                                'tooltip': f'Class not closed · {present} present, {absent} absent',
                                 'present': present,
-                                'absent': absent
+                                'absent': absent,
+                                'gross_hours': 0
                             }
                         else:
                             return {
-                                'key': 'completed_no_attendance',
-                                'label': 'Completed (No Attendance)',
-                                'color': '#f59e0b',
-                                'icon': '⚠',
-                                'tooltip': f'Class completed · {gross_hours}h · No attendance marked',
-                                'gross_hours': gross_hours,
+                                'key': 'active_ended_no_att',
+                                'label': 'Not Ended (No Attendance)',
+                                'color': '#3b82f6',
+                                'icon': '⏱',
+                                'tooltip': 'Class not ended · No attendance marked',
                                 'present': 0,
-                                'absent': 0
+                                'absent': 0,
+                                'gross_hours': 0
                             }
                 else:
                     # Has end_date on same day
@@ -1501,7 +1495,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                         absent = sum(1 for a in attendances if a.type is False)
                         return {
                             'key': 'active_ended',
-                            'label': 'Not Ended (Not Closed)',
+                            'label': 'Not Ended',
                             'color': '#3b82f6',
                             'icon': '⏱',
                             'tooltip': f'Class not closed · {present} present, {absent} absent',
