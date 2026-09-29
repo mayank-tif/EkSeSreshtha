@@ -5,6 +5,8 @@ from django.urls import re_path
 from django.http import JsonResponse
 from django.db import models, transaction
 from django.db.models import Count, Prefetch, Sum, Q
+from django.core.files.base import ContentFile
+
 import json
 import uuid
 import logging
@@ -13,11 +15,12 @@ from datetime import datetime, timedelta
 from APIS.models import *
 from APIS.utils import (hash_password, generate_ra_enrolment_roll_id,
                         generate_student_roll_number, generate_student_enrollment_id)
-from APIS.helper import log_class_activity
 from .helpers import *
 from .forms import LoginForm
 import base64
-from django.core.files.base import ContentFile
+from EkSeSreshtha.env_details import GOOGLE_MAPS_API_KEY
+from calendar import monthrange
+
 
 logger = logging.getLogger(__name__)
 
@@ -377,7 +380,6 @@ class DashboardView(PermissionRequiredMixin, View):
         )
         
         # Get working days per month (Mon-Sat)
-        from calendar import monthrange
         month_data = {}
         current = datetime(start_date.year, 1, 1).date()
         while current <= end_date:
@@ -657,9 +659,7 @@ class CenterAttendanceView(PermissionRequiredMixin, View):
                 center = Center.objects.get(id=center_id, status=True)
             except Center.DoesNotExist:
                 return JsonResponse({'detail': 'Center not found'}, status=404)
-            
-            from esswebapp.helpers import get_center_students_attendance
-            
+                        
             result = get_center_students_attendance(int(center_id), attendance_date)
             
             return JsonResponse(result)
@@ -683,7 +683,6 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 return self._get_class_log_summary_api(request)
             return JsonResponse({'detail': 'Invalid action'}, status=400)
         
-        from EkSeSreshtha.env_details import GOOGLE_MAPS_API_KEY
         return render(request, self.template_name, {
             'user': get_user_json(request.web_user),
             'GOOGLE_MAPS_API_KEY': GOOGLE_MAPS_API_KEY
@@ -715,6 +714,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             status_filter = request.GET.get('status')
             center_id = request.GET.get('center_id')
             teacher_id = request.GET.get('teacher_id')
+            regional_admin_id = request.GET.get('regional_admin_id')
             
             # Get accessible centers for the user
             accessible_center_ids = get_user_accessible_center_ids(request)
@@ -723,6 +723,13 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 center_queryset = Center.objects.filter(status=True)
             else:
                 center_queryset = Center.objects.filter(id__in=accessible_center_ids, status=True)
+            
+            # Apply regional_admin filter
+            if regional_admin_id:
+                try:
+                    center_queryset = center_queryset.filter(assigned_regional_admin=int(regional_admin_id))
+                except (ValueError, TypeError):
+                    pass
             
             # Apply center filter
             if center_id:
@@ -969,9 +976,15 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             filter_date = request.GET.get('date')
             center_id = request.GET.get('center_id')
             teacher_id = request.GET.get('teacher_id')
+            regional_admin_id = request.GET.get('regional_admin_id')
             
             if center_id:
                 center_queryset = center_queryset.filter(id=center_id)
+            if regional_admin_id:
+                try:
+                    center_queryset = center_queryset.filter(assigned_regional_admin=int(regional_admin_id))
+                except (ValueError, TypeError):
+                    pass
             if search:
                 center_queryset = center_queryset.filter(center_name__icontains=search)
             
@@ -1683,6 +1696,14 @@ class CenterDropDownView(LoginRequiredMixin, View):
             if center_ids is not None:
                 queryset = queryset.filter(id__in=center_ids)
             
+            # Filter by regional_admin_id if provided
+            regional_admin_id = request.GET.get('regional_admin_id')
+            if regional_admin_id:
+                try:
+                    queryset = queryset.filter(assigned_regional_admin=int(regional_admin_id))
+                except (ValueError, TypeError):
+                    pass
+            
             centers = list(queryset.values(
                 'id', 'center_name',
                 'district__name', 'vidhan_sabha__name',
@@ -1891,7 +1912,6 @@ class RegionalAdminDropDownView(LoginRequiredMixin, View):
             queryset = queryset.order_by('name')
             
             regional_admins = list(queryset.values('id', 'name'))
-            print("regional_admins", regional_admins)
             
             items = [
                 {'id': ra['id'], 'name': ra['name']}
@@ -1915,7 +1935,17 @@ class TeacherDropDownView(LoginRequiredMixin, View):
             
             queryset = User.objects.filter(role__role_code='TEACHER', status=True)
             
-            if center_ids is not None:
+            # Filter by center_id if provided (for dependent dropdown)
+            center_id = request.GET.get('center_id')
+            if center_id:
+                try:
+                    assigned_user_ids = CenterAssignUser.objects.filter(
+                        center_id=int(center_id), status=True
+                    ).values_list('users_id', flat=True)
+                    queryset = queryset.filter(id__in=assigned_user_ids)
+                except (ValueError, TypeError):
+                    pass
+            elif center_ids is not None:
                 # Regional Admin - filter by assigned centers
                 assigned_user_ids = CenterAssignUser.objects.filter(
                     center_id__in=center_ids, status=True
@@ -3070,8 +3100,6 @@ class SuperAdminView(PermissionRequiredMixin, View):
             picture_data = (data.get('picture') or '').strip()
             picture_file = None
             if picture_data and picture_data.startswith('data:'):
-                import base64
-                from django.core.files.base import ContentFile
                 format, imgstr = picture_data.split(';base64,')
                 ext = format.split('/')[-1]
                 picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
@@ -3172,8 +3200,6 @@ class SuperAdminView(PermissionRequiredMixin, View):
             # Handle picture (base64 data URL)
             picture_data = (data.get('picture') or '').strip()
             if picture_data and picture_data.startswith('data:'):
-                import base64
-                from django.core.files.base import ContentFile
                 format, imgstr = picture_data.split(';base64,')
                 ext = format.split('/')[-1]
                 picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
@@ -3764,9 +3790,6 @@ class RegionalAdminView(PermissionRequiredMixin, View):
             # Handle picture (base64 data URL)
             picture_data = (data.get('picture') or '').strip()
             if picture_data and picture_data.startswith('data:'):
-                import base64
-                from django.core.files.base import ContentFile
-                import uuid
                 format, imgstr = picture_data.split(';base64,')
                 ext = format.split('/')[-1]
                 picture_file = ContentFile(base64.b64decode(imgstr), name=f'profile_{uuid.uuid4().hex[:8]}.{ext}')
@@ -5448,7 +5471,6 @@ class CenterView(PermissionRequiredMixin, View):
     def get(self, request):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return self._list_centers_api(request)
-        from EkSeSreshtha.env_details import GOOGLE_MAPS_API_KEY
         return render(request, self.template_name, {
             'user': get_user_json(request.web_user),
             'GOOGLE_MAPS_API_KEY': GOOGLE_MAPS_API_KEY

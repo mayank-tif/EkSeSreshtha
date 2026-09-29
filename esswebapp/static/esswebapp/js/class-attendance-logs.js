@@ -17,6 +17,7 @@ const state = {
     date: '',
     centerId: '',
     teacherId: '',
+    regionalAdminId: '',
     statusFilter: '',
     totalLogs: 0,
     totalPages: 0,
@@ -44,6 +45,7 @@ function waitForMaps(callback) {
 // ── DOM References ────────────────────────────────────────────────
 const els = {
     get date() { return document.getElementById('logs-date'); },
+    get regionalAdminFilter() { return document.getElementById('logs-regional-admin-filter'); },
     get centerFilter() { return document.getElementById('logs-center-filter'); },
     get teacherFilter() { return document.getElementById('logs-teacher-filter'); },
     get statusFilter() { return document.getElementById('logs-status-filter'); },
@@ -223,7 +225,8 @@ function getUrl(name) {
     const urls = {
         'class-attendance-logs': '/attendance/class-logs/',
         'center-dropdown-list': '/centres/dropdown-list/',
-        'teacher-dropdown-list': '/teacher/dropdown-list/'
+        'teacher-dropdown-list': '/teacher/dropdown-list/',
+        'regional-admin-dropdown-list': '/regional-admin/dropdown-list/'
     };
     return urls[name] || '#';
 }
@@ -255,6 +258,7 @@ async function init() {
     
     state.date = els.date?.value || '';
     
+    await loadRegionalAdminDropdown();
     await loadCenterDropdown();
     await loadTeacherDropdown();
     await fetchAndRender();
@@ -279,11 +283,32 @@ function bindEvents() {
         });
     }
     
+    // Regional Admin filter
+    if (els.regionalAdminFilter) {
+        els.regionalAdminFilter.addEventListener('change', () => {
+            state.page = 1;
+            state.regionalAdminId = els.regionalAdminFilter.value;
+            state.centerId = '';
+            state.teacherId = '';
+            // Reset center and teacher dropdowns
+            if (els.centerFilter) els.centerFilter.value = '';
+            if (els.teacherFilter) els.teacherFilter.value = '';
+            // Load centers for selected regional admin
+            loadCenterDropdown(state.regionalAdminId);
+            fetchAndRender();
+        });
+    }
+    
     // Center filter
     if (els.centerFilter) {
         els.centerFilter.addEventListener('change', () => {
             state.page = 1;
             state.centerId = els.centerFilter.value;
+            state.teacherId = '';
+            // Reset teacher dropdown
+            if (els.teacherFilter) els.teacherFilter.value = '';
+            // Load teachers for selected center
+            loadTeacherDropdown(state.centerId);
             fetchAndRender();
         });
     }
@@ -364,6 +389,7 @@ async function fetchSummary() {
         
         if (state.search) params.append('search', state.search);
         if (state.date) params.append('date', state.date);
+        if (state.regionalAdminId) params.append('regional_admin_id', state.regionalAdminId);
         if (state.centerId) params.append('center_id', state.centerId);
         if (state.teacherId) params.append('teacher_id', state.teacherId);
         if (state.statusFilter) params.append('status', state.statusFilter);
@@ -411,6 +437,7 @@ async function fetchAndRender() {
         
         if (state.search) params.append('search', state.search);
         if (state.date) params.append('date', state.date);
+        if (state.regionalAdminId) params.append('regional_admin_id', state.regionalAdminId);
         if (state.centerId) params.append('center_id', state.centerId);
         if (state.teacherId) params.append('teacher_id', state.teacherId);
         if (state.statusFilter) params.append('status', state.statusFilter);
@@ -605,9 +632,30 @@ function renderError() {
 }
 
 // ── Dropdown Loading ──────────────────────────────────────────────
-async function loadCenterDropdown() {
+async function loadRegionalAdminDropdown() {
     try {
-        const res = await fetch(getUrl('center-dropdown-list'), {
+        const res = await fetch(getUrl('regional-admin-dropdown-list'), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        });
+        const data = await res.json();
+        
+        if (els.regionalAdminFilter && data.results) {
+            els.regionalAdminFilter.innerHTML = '<option value="">All Regional Admins</option>' +
+                data.results.map(ra => `<option value="${ra.id}">${escapeHtml(ra.name)}</option>`).join('');
+        }
+    } catch (e) {
+        console.error('Failed to load regional admins:', e);
+    }
+}
+
+async function loadCenterDropdown(regionalAdminId = '') {
+    try {
+        let url = getUrl('center-dropdown-list');
+        if (regionalAdminId) {
+            url += '?regional_admin_id=' + encodeURIComponent(regionalAdminId);
+        }
+        const res = await fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         });
@@ -622,9 +670,13 @@ async function loadCenterDropdown() {
     }
 }
 
-async function loadTeacherDropdown() {
+async function loadTeacherDropdown(centerId = '') {
     try {
-        const res = await fetch(getUrl('teacher-dropdown-list'), {
+        let url = getUrl('teacher-dropdown-list');
+        if (centerId) {
+            url += '?center_id=' + encodeURIComponent(centerId);
+        }
+        const res = await fetch(url, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
             credentials: 'same-origin'
         });

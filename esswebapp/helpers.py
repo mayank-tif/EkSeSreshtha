@@ -806,7 +806,7 @@ def get_center_attendance_data(center_ids, attendance_date=None):
     
     # 1. Get total enrolled students per center (all students assigned to center, regardless of status)
     student_counts = dict(
-        Student.objects.filter(center_id__in=center_ids)
+        Student.objects.filter(center_id__in=center_ids, status=True)
         .values('center_id').annotate(cnt=Count('id'))
         .values_list('center_id', 'cnt')
     )
@@ -817,12 +817,11 @@ def get_center_attendance_data(center_ids, attendance_date=None):
         center_id__in=center_ids,
         scan_date__date=attendance_date,
         status=True,
-        type=True  # present
     ).values('center_id', 'student_id').distinct()
     
     # Filter to only count students actually enrolled in each center
     enrolled_ids_by_center = {}
-    students = Student.objects.filter(center_id__in=center_ids).values('id', 'center_id')
+    students = Student.objects.filter(center_id__in=center_ids, status=True).values('id', 'center_id')
     for s in students:
         enrolled_ids_by_center.setdefault(s['center_id'], set()).add(s['id'])
     
@@ -835,7 +834,7 @@ def get_center_attendance_data(center_ids, attendance_date=None):
         
     # 3. Get teacher and regional admin names in bulk
     user_ids = []
-    centers = Center.objects.filter(id__in=center_ids).select_related()
+    centers = Center.objects.filter(id__in=center_ids, status=True).select_related()
     for c in centers:
         if c.assigned_teachers:
             user_ids.append(c.assigned_teachers)
@@ -844,7 +843,7 @@ def get_center_attendance_data(center_ids, attendance_date=None):
     
     name_map = {}
     if user_ids:
-        name_map = dict(User.objects.filter(id__in=set(user_ids)).values_list('id', 'name'))
+        name_map = dict(User.objects.filter(id__in=set(user_ids), status=True).values_list('id', 'name'))
     
     # 4. Build result
     result = {}
@@ -853,7 +852,7 @@ def get_center_attendance_data(center_ids, attendance_date=None):
         present = present_counts.get(center_id, 0)
         pct = int((present / total * 100)) if total > 0 else 0
         
-        center = Center.objects.filter(id=center_id).first()
+        center = Center.objects.filter(id=center_id, status=True).first()
         teacher_name = None
         regional_admin_name = None
         if center:
@@ -934,7 +933,8 @@ def get_center_students_attendance(center_id, attendance_date=None):
     # Check class status for this center on this date
     # Find the active class for this center
     active_class = ClassModel.objects.filter(
-        center_id=center_id
+        center_id=center_id,
+        active_status=True
     ).exclude(status=3).first()  # exclude cancelled classes
     
     class_cancelled = False
@@ -952,7 +952,8 @@ def get_center_students_attendance(center_id, attendance_date=None):
             cancelled_class = ClassModel.objects.filter(
                 center_id=center_id,
                 status=3,  # cancelled
-                cancel_date__date=attendance_date
+                cancel_date__date=attendance_date,
+                active_status=True
             ).exists()
             if cancelled_class:
                 class_cancelled = True
@@ -982,7 +983,6 @@ def get_center_students_attendance(center_id, attendance_date=None):
         center_id=center_id,
         scan_date__date=attendance_date,
         status=True,
-        type=True  # present
     ).values('student_id', 'scan_date').distinct()
     
     # Build attendance map
@@ -991,7 +991,7 @@ def get_center_students_attendance(center_id, attendance_date=None):
         attendance_map[r['student_id']] = r['scan_date'].time() if hasattr(r['scan_date'], 'time') else None
     
     # Get center name
-    center = Center.objects.filter(id=center_id).first()
+    center = Center.objects.filter(id=center_id, status=True).first()
     center_name = center.center_name if center else ''
     
     # Build result
@@ -1084,7 +1084,6 @@ def get_center_monthly_attendance(center_ids, year, month):
         scan_date__date__gte=start_date,
         scan_date__date__lte=end_date,
         status=True,
-        type=True
     ).values('center_id', 'scan_date__date').annotate(
         daily_present=Count('student_id', distinct=True)
     )
@@ -1227,13 +1226,14 @@ def get_student_monthly_attendance(student_id, year, month):
         end_date = today
     
     # Only days on which a class was actually conducted count (no-class days are NOT absent)
-    center_id = Student.objects.filter(id=student_id).values_list('center_id', flat=True).first()
+    center_id = Student.objects.filter(id=student_id, status=True).values_list('center_id', flat=True).first()
     class_dates = set()
     if center_id:
         session_rows = ClassModel.objects.filter(
             center_id=center_id,
             started_date__date__gte=start_date,
             started_date__date__lte=end_date,
+            active_status=True
         ).exclude(status=3).values_list('started_date', flat=True)  # status 3 = cancelled
         class_dates = {d.date() if hasattr(d, 'date') else d for d in session_rows}
     working_days = sum(1 for d in class_dates if start_date <= d <= end_date)
@@ -1284,13 +1284,14 @@ def get_student_daily_attendance(student_id, year, month):
     # Dates on which a class was actually conducted at this student's center.
     # Days without a class session are shown as 'No Class' (NOT Absent).
     # Absent applies ONLY when a class was conducted and the student has no Present record.
-    center_id = Student.objects.filter(id=student_id).values_list('center_id', flat=True).first()
+    center_id = Student.objects.filter(id=student_id, status=True).values_list('center_id', flat=True).first()
     class_dates = set()
     if center_id:
         session_rows = ClassModel.objects.filter(
             center_id=center_id,
             started_date__date__gte=datetime(year, month, 1).date(),
             started_date__date__lte=datetime(year, month, days_in_month).date(),
+            active_status=True
         ).exclude(status=3).values_list('started_date', flat=True)  # status 3 = cancelled
         class_dates = {d.date() if hasattr(d, 'date') else d for d in session_rows}
     
