@@ -10,7 +10,22 @@ from django.core.files.base import ContentFile
 import json
 import uuid
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+# IST timezone offset (+05:30)
+IST = timezone(timedelta(hours=5, minutes=30))
+
+def to_ist_isoformat(dt):
+    """Convert naive datetime (assumed to be IST) to ISO format with IST timezone offset"""
+    if dt is None:
+        return None
+    # If already timezone-aware, convert to IST
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(IST)
+    else:
+        # Assume naive datetime is in IST
+        dt = dt.replace(tzinfo=IST)
+    return dt.isoformat()
 
 from APIS.models import *
 from APIS.utils import (hash_password, generate_ra_enrolment_roll_id,
@@ -630,7 +645,7 @@ class CenterAttendanceView(PermissionRequiredMixin, View):
             'village_id': center.village_id,
             'village_name': center.village.name if center.village else None,
             'created_on': center.created_on.isoformat() if center.created_on else None,
-            'started_date': center.started_date.isoformat() if center.started_date else None,
+            'started_date': to_ist_isoformat(center.started_date) if center.started_date else None,
         }
 
     def _get_center_students_attendance_api(self, request):
@@ -1029,7 +1044,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'cancelled': 0,
                 'holiday': 0,
                 'not_started': 0,
-                'no_class': 0
+                'no_class': 0,
+                'total_students': 0,
+                'total_present': 0,
+                'total_absent': 0
             }
             
             centers = list(center_queryset)
@@ -1055,6 +1073,12 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     cancelled_for_date = False
                     if class_on_date.cancel_date and class_on_date.cancel_date.date() == filter_date_obj:
                         cancelled_for_date = True
+                    
+                    # Count present/absent for this class
+                    present_count = class_on_date.attendances.filter(status=True, type=True).count()
+                    absent_count = class_on_date.attendances.filter(status=True, type=False).count()
+                    summary['total_present'] += present_count
+                    summary['total_absent'] += absent_count
                     
                     if holiday:
                         summary['holiday'] += 1
@@ -1083,6 +1107,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                             summary['not_started'] += 1
                         else:
                             summary['no_class'] += 1
+                
+                # Get total students from Student table (active students for this center) - ALWAYS
+                total_students = Student.objects.filter(center_id=center.id, status=True).count()
+                summary['total_students'] += total_students
                 
                 summary['total'] += 1
             
@@ -1565,13 +1593,13 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             'district_name': cls.center.district.name if cls.center and cls.center.district else None,
             'latitude': float(cls.center.latitude) if cls.center and cls.center.latitude else None,
             'longitude': float(cls.center.longitude) if cls.center and cls.center.longitude else None,
-            'started_date': cls.started_date.isoformat() if cls.started_date else None,
-            'end_date': cls.end_date.isoformat() if cls.end_date else None,
+            'started_date': to_ist_isoformat(cls.started_date) if cls.started_date else None,
+            'end_date': to_ist_isoformat(cls.end_date) if cls.end_date else None,
             'status': cls.status,
             'status_display': cls.get_status_display() if cls.status else None,
             'session_closed': cls.session_closed,
             'closed_by': closed_by_name,
-            'cancel_date': cls.cancel_date.isoformat() if cls.cancel_date else None,
+            'cancel_date': to_ist_isoformat(cls.cancel_date) if cls.cancel_date else None,
             'cancel_reason': cls.reason,
             'status_info': status_info,
             'total_students': cls.total_students or 0,
@@ -1590,7 +1618,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'student_id': student.id if student else None,
                 'student_name': student.full_name if student else None,
                 'enrollment_number': student.enrollment_id if student else None,
-                'scan_date': att.scan_date.isoformat() if att.scan_date else None,
+                'scan_date': to_ist_isoformat(att.scan_date) if att.scan_date else None,
                 'attendance_type': att.attendance_type,
                 'location_verified': att.location_verified,
                 'captured_latitude': float(att.captured_latitude) if att.captured_latitude else None,
@@ -1649,10 +1677,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             'class_obj': {
                 'id': class_obj.id if class_obj else None,
                 'name': class_obj.name if class_obj else None,
-                'started_date': class_obj.started_date.isoformat() if class_obj and class_obj.started_date else None,
-                'end_date': class_obj.end_date.isoformat() if class_obj and class_obj.end_date else None,
+                'started_date': to_ist_isoformat(class_obj.started_date) if class_obj and class_obj.started_date else None,
+                'end_date': to_ist_isoformat(class_obj.end_date) if class_obj and class_obj.end_date else None,
                 'status': class_obj.status if class_obj else None,
-                'cancel_date': class_obj.cancel_date.isoformat() if class_obj and class_obj.cancel_date else None,
+                'cancel_date': to_ist_isoformat(class_obj.cancel_date) if class_obj and class_obj.cancel_date else None,
             } if class_obj else None,
             'status_info': status_info,
             'filter_date': filter_date.isoformat() if filter_date else None,

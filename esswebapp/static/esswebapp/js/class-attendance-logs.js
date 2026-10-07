@@ -12,7 +12,7 @@
 // ── State ─────────────────────────────────────────────────────────
 const state = {
     page: 1,
-    pageSize: parseInt(document.body.getAttribute('data-page-size')) || 50,
+    pageSize: 100,
     search: '',
     date: '',
     centerId: '',
@@ -76,7 +76,10 @@ const SUMMARY_IDS = {
     holiday: 'count-holiday',
     sunday: 'count-sunday',
     not_started: 'count-not_started',
-    no_class: 'count-no_class'
+    no_class: 'count-no_class',
+    total_students: 'count-total-students',
+    total_present: 'count-total-present',
+    total_absent: 'count-total-absent'
 };
 
 // ── Status Config (Keka-style) ────────────────────────────────────
@@ -341,6 +344,16 @@ function bindEvents() {
                 state.search = els.search.value.trim().toLowerCase();
                 fetchAndRender();
             }, 300);
+        });
+    }
+    
+    // Page Size
+    const pageSizeEl = document.getElementById('logs-page-size');
+    if (pageSizeEl) {
+        pageSizeEl.addEventListener('change', () => {
+            state.page = 1;
+            state.pageSize = parseInt(pageSizeEl.value) || 100;
+            fetchAndRender();
         });
     }
     
