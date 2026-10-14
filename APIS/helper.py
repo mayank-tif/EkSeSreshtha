@@ -6265,14 +6265,16 @@ def get_center_attendance_data(center_id, attendance_date):
     Returns data in the format specified for external API consumption.
     If center_id is provided, returns single center data.
     If center_id is None, returns list of all centers with attendance data.
+    Includes ALL students enrolled in the center (active), marking those
+    without attendance record as Absent.
     """
     logger.info(f"CenterAttendanceHelper : GetCenterAttendanceData : Started for center_id={center_id}, date={attendance_date}")
     
     try:
-        # Build the query for attendance
+        # Build the query for attendance records (status=True is soft-delete flag)
         attendance_query = StudentAttendance.objects.filter(
             scan_date__date=attendance_date,
-            status=True
+            status=True  # Only non-deleted attendance records
         ).select_related(
             'center',
             'class_obj'
@@ -6288,20 +6290,59 @@ def get_center_attendance_data(center_id, attendance_date):
         
         attendance_records = list(attendance_query)
         
-        if not attendance_records:
-            logger.info(f"No attendance records found for center_id={center_id}, date={attendance_date}")
+        # Get all active students for the center(s)
+        students_query = Student.objects.filter(status=True).defer('roll_number')
+        if center_id:
+            students_query = students_query.filter(center_id=center_id)
+        else:
+            # If no center_id, get students for centers that have attendance records
+            center_ids = set()
+            for record in attendance_records:
+                if record.center:
+                    center_ids.add(record.center.id)
+            if center_ids:
+                students_query = students_query.filter(center_id__in=center_ids)
+        
+        all_students = list(students_query.select_related('center', 'district', 'vidhan_sabha', 'panchayat', 'village'))
+        
+        if not all_students and not attendance_records:
+            logger.info(f"No students or attendance records found for center_id={center_id}, date={attendance_date}")
             return None
         
-        # Group records by center
-        center_records = defaultdict(list)
+        # Create a lookup for attendance records by student_id
+        attendance_by_student = {}
         for record in attendance_records:
-            if record.center:
-                center_records[record.center.id].append(record)
+            if record.student_id:
+                attendance_by_student[record.student_id] = record
+        
+        # Group students by center
+        students_by_center = defaultdict(list)
+        for student in all_students:
+            if student.center_id:
+                students_by_center[student.center_id].append(student)
+        
+        # Also include centers from attendance records that might not have students
+        # (in case all students are absent)
+        for record in attendance_records:
+            if record.center_id and record.center_id not in students_by_center:
+                students_by_center[record.center_id] = []
         
         # Build response for each center
         centers_data = []
-        for c_id, records in center_records.items():
-            center = records[0].center
+        for c_id, students in students_by_center.items():
+            # Get center object
+            center = None
+            if students:
+                center = students[0].center
+            else:
+                # Find center from attendance records
+                for record in attendance_records:
+                    if record.center_id == c_id:
+                        center = record.center
+                        break
+            
+            if not center:
+                continue
             
             # Get teacher assigned to the center
             teacher_name = None
@@ -6331,21 +6372,31 @@ def get_center_attendance_data(center_id, attendance_date):
                 'teacher_name': teacher_name
             }
             
-            # Build students data
+            # Build students data - include ALL enrolled students
             students_data = []
-            for record in records:
-                student = record.student
-                if student:
-                    # Determine capture type
-                    capture_type = 'QR' if record.attendance_type == 'AUTO' else 'Manual'
-                    
-                    students_data.append({
-                        'student_id': student.id,
-                        'student_name': student.full_name,
-                        'student_status': 'Active' if student.status else 'Inactive',
-                        'attendance_status': 'Present' if record.type else 'Absent',
-                        'capture_type': capture_type
-                    })
+            
+            for student in students:
+                attendance_record = attendance_by_student.get(student.id)
+                
+                if attendance_record:
+                    # Student has attendance record
+                    is_present = attendance_record.type
+                    # attendance_type is deferred (column may not exist in DB), use fallback
+                    att_type = getattr(attendance_record, 'attendance_type', None)
+                    capture_type = 'QR' if att_type == 'AUTO' else 'Manual'
+                    attendance_status = 'Present' if is_present else 'Absent'
+                else:
+                    # No attendance record = Absent
+                    capture_type = None
+                    attendance_status = 'Absent'
+                
+                students_data.append({
+                    'student_id': student.id,
+                    'student_name': student.full_name,
+                    'student_status': 'Active' if student.status else 'Inactive',
+                    'attendance_status': attendance_status,
+                    'capture_type': capture_type
+                })
             
             centers_data.append({
                 'center': center_data,

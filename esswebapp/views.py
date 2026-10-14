@@ -709,6 +709,63 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         if accessible_center_ids is not None:
             return ClassModel.objects.filter(center_id__in=accessible_center_ids, active_status=True, status__in=[1, 2, 3])
         return ClassModel.objects.filter(active_status=True, status__in=[1, 2, 3])
+
+    def _get_attendance_counts_for_class_date(self, cls, filter_date):
+        """
+        Calculate present/absent counts for a class on a specific date.
+        Includes ALL active students enrolled in the center.
+        
+        Returns: (present, absent, has_records)
+        - has_records = True if ANY attendance record exists for this class/date
+        - has_records = False if NO attendance records exist (teacher didn't take attendance)
+        
+        Logic:
+        - If has_records=True: students with record type=True -> Present, type=False -> Absent, no record -> Absent
+        - If has_records=False: No attendance was taken, return (0, 0, False) to indicate 'No Attendance'
+        """
+        if not cls.center_id:
+            return 0, 0, False
+        
+        # Get all active students enrolled in this center
+        enrolled_students = Student.objects.filter(
+            center_id=cls.center_id,
+            status=True
+        ).values_list('id', flat=True)
+        
+        if not enrolled_students:
+            return 0, 0, False
+        
+        # Get attendance records for these students on this date for this class
+        attendance_records = cls.attendances.filter(
+            status=True,
+            scan_date__date=filter_date,
+            student_id__in=enrolled_students
+        ).values_list('student_id', 'type')
+        
+        # Check if ANY attendance records exist at all
+        has_records = len(attendance_records) > 0
+        
+        if not has_records:
+            # No attendance marked at all by teacher
+            return 0, 0, False
+        
+        # Build lookup: student_id -> type (True=Present, False=Absent)
+        attendance_by_student = {sid: t for sid, t in attendance_records}
+        
+        present = 0
+        absent = 0
+        
+        for student_id in enrolled_students:
+            if student_id in attendance_by_student:
+                if attendance_by_student[student_id] is True:
+                    present += 1
+                else:
+                    absent += 1
+            else:
+                # No attendance record for this student = Absent
+                absent += 1
+        
+        return present, absent, True
     
     def _get_class_logs_api(self, request):
         # Log activity at the start - log everything coming from frontend
@@ -1074,9 +1131,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     if class_on_date.cancel_date and class_on_date.cancel_date.date() == filter_date_obj:
                         cancelled_for_date = True
                     
-                    # Count present/absent for this class
-                    present_count = class_on_date.attendances.filter(status=True, type=True).count()
-                    absent_count = class_on_date.attendances.filter(status=True, type=False).count()
+                    # Count present/absent for this class using correct logic (includes enrolled students without attendance as absent)
+                    present_count, absent_count, has_records = self._get_attendance_counts_for_class_date(class_on_date, filter_date_obj)
                     summary['total_present'] += present_count
                     summary['total_absent'] += absent_count
                     
@@ -1200,10 +1256,9 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 hours = duration.total_seconds() / 3600
                 gross_hours = round(hours, 2)
             
-            attendances = list(cls.attendances.filter(status=True).select_related('student'))
-            if attendances:
-                present = sum(1 for a in attendances if a.type is True)
-                absent = sum(1 for a in attendances if a.type is False)
+            present, absent, has_records = self._get_attendance_counts_for_class_date(cls, cls.started_date.date())
+            
+            if has_records:
                 return {
                     'key': 'completed',
                     'label': 'Completed',
@@ -1245,11 +1300,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 hours = duration.total_seconds() / 3600
                 gross_hours = round(hours, 2)
                 
-                attendances = list(cls.attendances.filter(status=True).select_related('student'))
-                if attendances:
+                present, absent, has_records = self._get_attendance_counts_for_class_date(cls, cls.started_date.date())
+                
+                if has_records:
                     # 4a. Has start & end time + attendance marked → Completed
-                    present = sum(1 for a in attendances if a.type is True)
-                    absent = sum(1 for a in attendances if a.type is False)
                     return {
                         'key': 'completed',
                         'label': 'Completed',
@@ -1274,11 +1328,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     }
             else:
                 # No end_date
-                attendances = list(cls.attendances.filter(status=True).select_related('student'))
-                if attendances:
+                present, absent, has_records = self._get_attendance_counts_for_class_date(cls, cls.started_date.date())
+                
+                if has_records:
                     # 4d. Has start, no end time + attendance marked → Ended (Not Closed)
-                    present = sum(1 for a in attendances if a.type is True)
-                    absent = sum(1 for a in attendances if a.type is False)
                     return {
                         'key': 'active_ended',
                         'label': 'Ended (Not Closed)',
@@ -1382,10 +1435,9 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 hours = duration.total_seconds() / 3600
                 gross_hours = round(hours, 2)
             
-            attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
-            if attendances:
-                present = sum(1 for a in attendances if a.type is True)
-                absent = sum(1 for a in attendances if a.type is False)
+            present, absent, has_records = self._get_attendance_counts_for_class_date(cls, filter_date)
+            
+            if has_records:
                 return {
                     'key': 'completed',
                     'label': 'Completed',
@@ -1428,22 +1480,21 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 if not cls.end_date:
                     # Today's class with no end_date = In Progress
                     if filter_date == today:
+                        present, absent, has_records = self._get_attendance_counts_for_class_date(cls, filter_date)
                         return {
                             'key': 'in_progress',
                             'label': 'In Progress',
                             'color': '#8b5cf6',
                             'icon': '▶',
                             'tooltip': 'Class is currently in progress',
-                            'present': 0,
-                            'absent': 0,
+                            'present': present,
+                            'absent': absent,
                             'gross_hours': 0
                         }
                     else:
                         # Past date (same day class but filter_date is in past) - no end_date means Not Ended
-                        attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
-                        if attendances:
-                            present = sum(1 for a in attendances if a.type is True)
-                            absent = sum(1 for a in attendances if a.type is False)
+                        present, absent, has_records = self._get_attendance_counts_for_class_date(cls, filter_date)
+                        if has_records:
                             return {
                                 'key': 'active_ended',
                                 'label': 'Not Ended',
@@ -1470,10 +1521,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     duration = cls.end_date - cls.started_date
                     hours = duration.total_seconds() / 3600
                     gross_hours = round(hours, 2)
-                    attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
-                    if attendances:
-                        present = sum(1 for a in attendances if a.type is True)
-                        absent = sum(1 for a in attendances if a.type is False)
+                    present, absent, has_records = self._get_attendance_counts_for_class_date(cls, filter_date)
+                    if has_records:
                         return {
                             'key': 'completed',
                             'label': 'Completed',
@@ -1503,10 +1552,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     duration = cls.end_date - cls.started_date
                     hours = duration.total_seconds() / 3600
                     gross_hours = round(hours, 2)
-                    attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
-                    if attendances:
-                        present = sum(1 for a in attendances if a.type is True)
-                        absent = sum(1 for a in attendances if a.type is False)
+                    present, absent, has_records = self._get_attendance_counts_for_class_date(cls, filter_date)
+                    if has_records:
                         return {
                             'key': 'completed',
                             'label': 'Completed',
@@ -1530,10 +1577,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                         }
                 else:
                     # No end_date
-                    attendances = list(cls.attendances.filter(status=True, scan_date__date=filter_date).select_related('student'))
-                    if attendances:
-                        present = sum(1 for a in attendances if a.type is True)
-                        absent = sum(1 for a in attendances if a.type is False)
+                    present, absent, has_records = self._get_attendance_counts_for_class_date(cls, filter_date)
+                    if has_records:
                         return {
                             'key': 'active_ended',
                             'label': 'Not Ended',
