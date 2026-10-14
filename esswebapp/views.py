@@ -5980,6 +5980,14 @@ class CenterView(PermissionRequiredMixin, View):
             center.updated_on = datetime.now()
             center.save(update_fields=['status', 'updated_by', 'updated_on'])
             
+            # Deactivate all students in this center
+            user_id = request.web_user.get('user_id')
+            Student.objects.filter(center_id=center_id, status=True).update(
+                status=False,
+                updated_on=datetime.now(),
+                updated_by=user_id
+            )
+            
             # Log activity
             log_web_activity(request, 'DELETE', 'Centre', record_id=center.id, record_name=center_name)
             

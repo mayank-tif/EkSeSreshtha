@@ -896,6 +896,15 @@ def update_center_active_or_deactive(center_log_data):
         center.updated_by = user_id
         center.save()
         
+        # If center is being deactivated (status=False), deactivate all students in this center
+        if status is False:
+            Student.objects.filter(center_id=center_id, status=True).update(
+                status=False,
+                updated_on=datetime.now(),
+                updated_by=user_id
+            )
+            logger.info(f"CenterHelper : UpdateCenterActiveOrDeactive : Deactivated all students for center_id={center_id}")
+        
         # Insert center log
         CenterLog.objects.create(
             center_id=center_id,
@@ -1635,6 +1644,12 @@ def login_user(mobile_number, password):
                 
                 teacher = Teacher.objects.filter(user=user).first()
                 if teacher:
+                    # Check if teacher's center is active
+                    if teacher.center_id:
+                        center = Center.objects.filter(id=teacher.center_id, status=True).first()
+                        if not center:
+                            logger.warning(f"UserRepository : LoginUser : Teacher's center is deactivated or not found for teacher_id={user.id}")
+                            return None
                     # Get center data - build full center details array
                     
                     teacher_center = Center.objects.filter(assigned_teachers=user.id, status=True).first()
@@ -5327,6 +5342,13 @@ def login_teacher(name, password):
         
         if user and hasattr(user, 'teacher') and user.teacher:
             teacher = user.teacher
+            
+            # Check if teacher's center is active
+            if teacher.center_id:
+                center = Center.objects.filter(id=teacher.center_id, status=True).first()
+                if not center:
+                    logger.warning(f"TeacherHelper : LoginTeacher : Teacher's center is deactivated or not found for teacher_id={teacher.id}")
+                    return None
             
             # Generate token
             token = AccessToken()
