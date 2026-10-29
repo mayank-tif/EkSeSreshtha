@@ -5,6 +5,28 @@
    the searchable dropdown component used to pick a centre.
    ================================================================ */
 
+/* Status badge for student active/inactive */
+.status-badge {
+    display: inline-block;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-full);
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.status-active {
+    background-color: var(--success-light);
+    color: var(--success);
+}
+
+.status-inactive {
+    background-color: var(--danger-light);
+    color: var(--danger);
+}
+
 /* ================================================================
    SHARED STYLES (also used by other modules)
    ================================================================ */

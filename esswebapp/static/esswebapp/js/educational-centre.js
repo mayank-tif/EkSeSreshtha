@@ -615,6 +615,7 @@ function renderTable(items) {
                 <td>${escapeHtml(c.assigned_teacher_name || 'Unassigned')}</td>
                 <td><span class="count-pill">${c.student_count || 0}</span></td>
                 <td>${c.started_date ? formatDate(c.started_date) : '—'}</td>
+                <td><span class="status-badge ${c.status === 'Active' ? 'status-active' : 'status-inactive'}">${c.status || '—'}</span></td>
                 <td>${locationBadge(c.location_status)}</td>
                 <td>${c.location_verified_at ? formatDate(c.location_verified_at) : '—'}</td>
                 <td>${escapeHtml(c.location_verified_by_name || '—')}</td>

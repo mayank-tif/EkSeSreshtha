@@ -2409,8 +2409,8 @@ class StudentsView(PermissionRequiredMixin, View):
         return self._delete_student(request)
     
     def _get_students_queryset(self):
-        """Get students with related data"""
-        return get_user_accessible_students_queryset(self.request).select_related(
+        """Get students with related data (including inactive)"""
+        return get_user_accessible_students_queryset(self.request, include_inactive=True).select_related(
             'center', 'school', 'district', 'vidhan_sabha', 'panchayat', 'village'
         ).order_by('-created_on')
     
@@ -2695,7 +2695,8 @@ class StudentsView(PermissionRequiredMixin, View):
             'school_id': get_val(student, 'school_id') or get_val(student, 'SchoolId'),
             'school_name': school_map.get(get_val(student, 'school_id') or get_val(student, 'SchoolId')) if (get_val(student, 'school_id') or get_val(student, 'SchoolId')) else None,
             'active_class': get_val(student, 'grade') or get_val(student, 'Grade'),
-            'active': get_val(student, 'status') or get_val(student, 'Status')
+            'active': get_val(student, 'status') or get_val(student, 'Status'),
+            'status_display': 'Active' if (get_val(student, 'status') or get_val(student, 'Status')) else 'Inactive'
         }
     
     
@@ -5559,8 +5560,8 @@ class CenterView(PermissionRequiredMixin, View):
         return self._delete_center(request)
     
     def _get_centers_queryset(self):
-        """Get centers ordered by created_on desc"""
-        return get_user_accessible_centers_queryset(self.request).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by('-created_on')
+        """Get ALL centers (including inactive) ordered by created_on desc"""
+        return get_user_accessible_centers_queryset(self.request, include_inactive=True).select_related('district', 'vidhan_sabha', 'panchayat', 'village').order_by('-created_on')
     
     def _get_user_names_map(self, user_ids):
         """Batch-fetch user names for the given ids (RA / teacher display)."""
@@ -5784,6 +5785,7 @@ class CenterView(PermissionRequiredMixin, View):
             'assigned_regional_admin': regional_admin_obj,
             'student_count': student_counts.get(center.id, 0),
             'class_status': center.class_status,
+            'status': 'Active' if center.status else 'Inactive',
             'district_id': center.district_id,
             'district_name': center.district.name if center.district else None,
             'vidhan_sabha_id': center.vidhan_sabha_id,

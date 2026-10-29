@@ -686,29 +686,35 @@ def filter_queryset_by_user_centers(queryset, request, center_field='center_id')
     return queryset.filter(**filter_kwargs)
 
 
-def get_user_accessible_centers_queryset(request):
+def get_user_accessible_centers_queryset(request, include_inactive=False):
     """
     Get Center queryset filtered by user's accessible centers.
     
     Args:
         request: Django request object
+        include_inactive: If True, include centers with status=False (inactive)
     
     Returns:
         Filtered Center queryset
     """
+    if include_inactive:
+        return filter_queryset_by_user_centers(Center.objects.all(), request, 'id')
     return filter_queryset_by_user_centers(Center.objects.filter(status=True), request, 'id')
 
 
-def get_user_accessible_students_queryset(request):
+def get_user_accessible_students_queryset(request, include_inactive=False):
     """
     Get Student queryset filtered by user's accessible centers.
     
     Args:
         request: Django request object
+        include_inactive: If True, include students with status=False (inactive)
     
     Returns:
         Filtered Student queryset
     """
+    if include_inactive:
+        return filter_queryset_by_user_centers(Student.objects.all(), request, 'center_id')
     return filter_queryset_by_user_centers(Student.objects.filter(status=True), request, 'center_id')
 
 

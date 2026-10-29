@@ -284,7 +284,7 @@ async function renderStudentListTable() {
         // Empty state
         if (students.length === 0) {
             tbody.innerHTML = `
-                <tr><td colspan="7" class="table-empty">
+                <tr><td colspan="6" class="table-empty">
                     ${state.search || state.districtId || state.vsId || state.panchayatId || state.villageId
                         ? 'No students match your filters.'
                         : 'No students registered yet. Use "Add Student" to add one.'}
@@ -314,7 +314,7 @@ async function renderStudentListTable() {
 
     } catch (error) {
         console.error('Failed to load students:', error);
-        tbody.innerHTML = `<tr><td colspan="7" class="table-empty">Failed to load students: ${escapeHtml(error.message)}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Failed to load students: ${escapeHtml(error.message)}</td></tr>`;
         showToast('Failed to load students', 'danger');
     } finally {
         hideGlobalLoader();
@@ -596,13 +596,6 @@ function updateStudentInTable(student) {
     const toggle = row.querySelector('input[type="checkbox"]');
     if (toggle) {
         toggle.checked = isActive;
-    }
-    
-    // Update status badge if present
-    const statusBadge = row.querySelector('.status-badge');
-    if (statusBadge) {
-        statusBadge.textContent = isActive ? 'Active' : 'Inactive';
-        statusBadge.className = 'status-badge ' + (isActive ? 'status-active' : 'status-inactive');
     }
 }
 
