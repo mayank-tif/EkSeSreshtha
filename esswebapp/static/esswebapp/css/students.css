@@ -200,15 +200,12 @@
 
 /* Dropdown panel */
 .searchable-select-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    right: 0;
+    position: fixed;
     background-color: var(--white);
     border: 1px solid var(--gray-200);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
-    z-index: var(--z-dropdown);
+    z-index: 9999;
     max-height: 320px;
     display: flex;
     flex-direction: column;

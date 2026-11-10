@@ -210,9 +210,11 @@ def _update_center(center_id, center_data, current_user_id):
         center.center_name = center_data['CenterName']
     if center_data.get('Address') is not None:
         center.address = center_data['Address']
-    if center_data.get('AssignedTeachers') is not None:
+    # Key presence means "apply" (explicit None unassigns);
+    # absent key preserves the current assignee.
+    if 'AssignedTeachers' in center_data:
         center.assigned_teachers = center_data['AssignedTeachers']
-    if center_data.get('AssignedRegionalAdmin') is not None:
+    if 'AssignedRegionalAdmin' in center_data:
         center.assigned_regional_admin = center_data['AssignedRegionalAdmin']
     if center_data.get('StartedDate') is not None:
         center.started_date = center_data['StartedDate']

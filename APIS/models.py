@@ -472,6 +472,9 @@ class Holidays(models.Model):
     start_date = models.DateTimeField(db_column="StartDate", null=True, blank=True)
     end_date = models.DateTimeField(db_column="EndDate", null=True, blank=True)
     center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='holidays')
+    # 1 = academic holiday (global, for ALL centers, center_id NULL),
+    # 0 = center-specific holiday (center_id set)
+    academic_holiday = models.BooleanField(db_column="AcademicHoliday", null=True, blank=True, default=False)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
     updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
@@ -483,6 +486,50 @@ class Holidays(models.Model):
             models.Index(fields=['center'], name='idx_holidays_center'),
             models.Index(fields=['status'], name='idx_holidays_status'),
             models.Index(fields=['start_date', 'end_date'], name='idx_holidays_dates'),
+            models.Index(fields=['academic_holiday'], name='idx_holidays_academic'),
+        ]
+
+    def __str__(self):
+        return self.name or str(self.id)
+
+
+class TeacherLeaves(models.Model):
+    """Teacher-applied leave requests.
+
+    Copy of the Holidays table structure plus the approval workflow:
+    continuous working leave beyond TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS
+    stays 'pending' until a SuperAdmin/RegionalAdmin approves/rejects
+    it; within the limit it is auto-approved. The applying teacher's
+    user id is stored in created_by (no separate teacher column).
+    """
+    id = models.AutoField(db_column="Id", primary_key=True)
+    name = models.CharField(db_column="Name", max_length=50, null=True, blank=True)
+    description = models.CharField(db_column="Description", max_length=50, null=True, blank=True)
+    status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
+    start_date = models.DateTimeField(db_column="StartDate", null=True, blank=True)
+    end_date = models.DateTimeField(db_column="EndDate", null=True, blank=True)
+    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='teacher_leaves')
+    APPROVAL_STATUS_CHOICES = [
+        ('approved', 'Approved'),
+        ('pending', 'Pending'),
+        ('rejected', 'Rejected'),
+    ]
+    approval_status = models.CharField(db_column="ApprovalStatus", max_length=20, choices=APPROVAL_STATUS_CHOICES, null=True, blank=True, default='approved')
+    continuous_days = models.IntegerField(db_column="ContinuousDays", null=True, blank=True)
+    approved_by = models.IntegerField(db_column="ApprovedBy", null=True, blank=True)
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+
+    class Meta:
+        db_table = "TeacherLeaves"
+        indexes = [
+            models.Index(fields=['center'], name='idx_teacherleaves_center'),
+            models.Index(fields=['status'], name='idx_teacherleaves_status'),
+            models.Index(fields=['start_date', 'end_date'], name='idx_teacherleaves_dates'),
+            models.Index(fields=['approval_status'], name='idx_teacherleaves_approval'),
+            models.Index(fields=['created_by'], name='idx_teacherleaves_created_by'),
         ]
 
     def __str__(self):

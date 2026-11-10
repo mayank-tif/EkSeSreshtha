@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 import uuid
-from django.db.models import OuterRef, Prefetch, Subquery, Count
+from django.db.models import OuterRef, Prefetch, Subquery, Count, Q
 from .models import *
 from django.db import IntegrityError, connection, transaction
 from .utils import *
@@ -19,6 +19,7 @@ from EkSeSreshtha.env_details import (
     MANUAL_ATTENDANCE_MONTHLY_LIMIT,
     ATTENDANCE_GPS_RADIUS_METERS,
     ATTENDANCE_SKIP_SUNDAY_CHECK,
+    TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS,
 )
 
 logger = logging.getLogger(__name__)
@@ -4011,6 +4012,70 @@ def get_student_attendance_by_percentage():
 # Holidays APIs Helper Functions
 #---------------------------------------------------------
 
+def get_max_allowed_teacher_holidays():
+    """Maximum continuous working leave days a teacher may take
+    without approval (from TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS env)."""
+    try:
+        return int(os.getenv('TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS', TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS))
+    except (TypeError, ValueError):
+        return TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS
+
+
+def count_continuous_working_days(start_date, end_date):
+    """Count working days in [start_date, end_date] excluding
+    Saturday, Sunday and active AcademicHoliday days.
+
+    Accepts datetime or date; end defaults to start when missing.
+    Returns the number of continuous working days (0 if range empty).
+    """
+    if not start_date:
+        return 0
+    start = start_date.date() if hasattr(start_date, 'date') else start_date
+    end = end_date.date() if (end_date and hasattr(end_date, 'date')) else (end_date or start)
+    if end < start:
+        start, end = end, start
+
+    academic_days = set()
+    for h in Holidays.objects.filter(status=True, start_date__date__lte=end, end_date__date__gte=start):
+        s = h.start_date.date() if h.start_date else start
+        e = h.end_date.date() if h.end_date else s
+        day = max(s, start)
+        while day <= min(e, end):
+            academic_days.add(day)
+            day += timedelta(days=1)
+
+    count = 0
+    day = start
+    while day <= end:
+        if day.weekday() < 5 and day not in academic_days:  # Mon-Fri
+            count += 1
+        day += timedelta(days=1)
+    return count
+
+
+def resolve_teacher(created_by):
+    """Resolve the applying Teacher via CreatedBy, which already
+    stores the teacher's user id (no separate teacher column on
+    Holidays is needed). Returns Teacher or None."""
+    if created_by:
+        return Teacher.objects.filter(user_id=created_by, status=True).first()
+    return None
+
+
+def teacher_info_map():
+    """Map user_id -> {'teacher_id', 'teacher_name'} for all active
+    teachers (used to annotate leave rows whose CreatedBy is the
+    teacher's user id)."""
+    info = {}
+    for t in Teacher.objects.filter(status=True).select_related('user'):
+        if t.user_id:
+            info[t.user_id] = {
+                'teacher_id': t.id,
+                'teacher_name': t.user.name if t.user else None,
+            }
+    return info
+
+
 def save_holidays(holidays_data):
     """Save or update holidays"""
     logger.info(f"HolidaysHelper : SaveHolidays : Started")
@@ -4028,7 +4093,12 @@ def save_holidays(holidays_data):
         elif list_center_ids:
             center_ids = [int(list_center_ids)]
         
-        if not center_ids:
+        # Academic holidays are global (for all centers) - a single
+        # row with center_id NULL. Center holidays need center ids.
+        academic_holiday = bool(holidays_data.get('AcademicHoliday', False))
+        if academic_holiday:
+            center_ids = [None]
+        elif not center_ids:
             logger.error("No valid center IDs provided")
             return None
         
@@ -4040,7 +4110,7 @@ def save_holidays(holidays_data):
         status = holidays_data.get('Status')
         created_by = holidays_data.get('CreatedBy')
         created_on = holidays_data.get('CreatedOn') or datetime.now()
-        
+
         if holiday_id > 0:
             # Get existing holidays with same name
             existing_holidays = Holidays.objects.filter(name=name, status=True)
@@ -4065,10 +4135,11 @@ def save_holidays(holidays_data):
                     description=description,
                     status=status,
                     center_id=center_id,
+                    academic_holiday=academic_holiday,
                     created_on=created_on,
                     created_by=created_by
                 )
-            
+
             # Update existing holidays
             for center_id in existing_center_ids:
                 if center_id in center_ids:
@@ -4078,6 +4149,7 @@ def save_holidays(holidays_data):
                         name=name,
                         description=description,
                         status=status,
+                        academic_holiday=academic_holiday,
                         updated_on=datetime.now()
                     )
         else:
@@ -4090,12 +4162,16 @@ def save_holidays(holidays_data):
                     description=description,
                     status=status,
                     center_id=center_id,
+                    academic_holiday=academic_holiday,
                     created_on=created_on,
                     created_by=created_by
                 )
-        
+
         logger.info(f"HolidaysHelper : SaveHolidays : End")
-        return {'status': True, 'message': 'Holidays saved successfully'}
+        return {
+            'status': True,
+            'message': 'Holidays saved successfully',
+        }
         
     except Exception as e:
         logger.error(f"HolidaysHelper : SaveHolidays : {str(e)}")
@@ -4145,7 +4221,10 @@ def get_all_holidays_by_year(year):
                 'EndDate': h.end_date,
                 'CenterId': h.center_id,
                 'CreatedOn': h.created_on,
-                'CreatedBy': h.created_by
+                'CreatedBy': h.created_by,
+                'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
+                'TeacherName': teacher_info_map().get(h.created_by, {}).get('teacher_name'),
+                'AcademicHoliday': bool(h.academic_holiday),
             })
         return result
             
@@ -4170,7 +4249,10 @@ def get_all_holidays_by_center_id(center_id):
                 'EndDate': h.end_date,
                 'CenterId': h.center_id,
                 'CreatedOn': h.created_on,
-                'CreatedBy': h.created_by
+                'CreatedBy': h.created_by,
+                'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
+                'TeacherName': teacher_info_map().get(h.created_by, {}).get('teacher_name'),
+                'AcademicHoliday': bool(h.academic_holiday),
             })
         return result
             
@@ -4208,7 +4290,10 @@ def get_all_holidays(status, user_id=0):
                 'CreatedBy': h.created_by,
                 'CreatedOn': h.created_on,
                 'CenterId': h.center_id,
-                'CenterName': h.center.center_name if h.center else None
+                'CenterName': h.center.center_name if h.center else None,
+                'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
+                'TeacherName': teacher_info_map().get(h.created_by, {}).get('teacher_name'),
+                'AcademicHoliday': bool(h.academic_holiday),
             })
         
         return result
@@ -4216,6 +4301,188 @@ def get_all_holidays(status, user_id=0):
     except Exception as e:
         logger.error(f"HolidaysHelper : GetAllHolidays : {str(e)}")
         raise e
+
+def save_teacher_leave(leave_data):
+    """Save or update a teacher leave (TeacherLeaves table).
+
+    Approval rule: continuous working days excluding Sat/Sun and
+    Holidays (academic + center) days. Beyond
+    TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS -> 'pending' approval,
+    otherwise auto-approved. The applying teacher's user id is
+    stored in CreatedBy.
+    """
+    logger.info("TeacherLeavesHelper : SaveTeacherLeave : Started")
+    try:
+        leave_id = leave_data.get('Id', 0)
+        list_center_ids = leave_data.get('ListCenterIds', '')
+
+        center_ids = []
+        if list_center_ids and isinstance(list_center_ids, str):
+            center_ids = [int(x.strip()) for x in list_center_ids.split(',') if x.strip()]
+        elif isinstance(list_center_ids, list):
+            center_ids = [int(x) for x in list_center_ids if x]
+        elif list_center_ids:
+            center_ids = [int(list_center_ids)]
+
+        if not center_ids:
+            logger.error("No valid center IDs provided")
+            return None
+
+        start_date = leave_data.get('StartDate')
+        end_date = leave_data.get('EndDate')
+        name = leave_data.get('Name')
+        description = leave_data.get('Description')
+        status = leave_data.get('Status')
+        # created_by is injected by the view from the token user id;
+        # created_on is always server time.
+        created_by = leave_data.get('CreatedBy')
+        created_on = datetime.now()
+
+        continuous_days = count_continuous_working_days(start_date, end_date)
+        max_allowed = get_max_allowed_teacher_holidays()
+        approval_status = 'pending' if continuous_days > max_allowed else 'approved'
+
+        if leave_id > 0:
+            existing = TeacherLeaves.objects.filter(name=name, status=True)
+            existing_center_ids = list(existing.values_list('center_id', flat=True))
+            center_ids_to_remove = [cid for cid in existing_center_ids if cid not in center_ids]
+            if center_ids_to_remove:
+                TeacherLeaves.objects.filter(name=name, center_id__in=center_ids_to_remove, status=True).update(
+                    status=False, updated_on=datetime.now(), updated_by=created_by
+                )
+            for center_id in [cid for cid in center_ids if cid not in existing_center_ids]:
+                TeacherLeaves.objects.create(
+                    start_date=start_date, end_date=end_date, name=name,
+                    description=description, status=status, center_id=center_id,
+                    approval_status=approval_status, continuous_days=continuous_days,
+                    created_on=created_on, created_by=created_by,
+                )
+            for center_id in existing_center_ids:
+                if center_id in center_ids:
+                    TeacherLeaves.objects.filter(name=name, center_id=center_id, status=True).update(
+                        start_date=start_date, end_date=end_date, name=name,
+                        description=description, status=status,
+                        approval_status=approval_status, continuous_days=continuous_days,
+                        updated_on=datetime.now(),
+                    )
+        else:
+            for center_id in center_ids:
+                TeacherLeaves.objects.create(
+                    start_date=start_date, end_date=end_date, name=name,
+                    description=description, status=status, center_id=center_id,
+                    approval_status=approval_status, continuous_days=continuous_days,
+                    created_on=created_on, created_by=created_by,
+                )
+
+        logger.info("TeacherLeavesHelper : SaveTeacherLeave : End")
+        if approval_status == 'pending':
+            return {
+                'status': True,
+                'message': 'Holiday Leave Pending: continuous leave exceeds the allowed maximum, awaiting approval',
+                'approval_status': 'pending',
+                'continuous_days': continuous_days,
+                'max_allowed': max_allowed,
+            }
+        return {
+            'status': True,
+            'message': 'Teacher leave saved successfully',
+            'approval_status': approval_status,
+            'continuous_days': continuous_days,
+            'max_allowed': max_allowed,
+        }
+    except Exception as e:
+        logger.error(f"TeacherLeavesHelper : SaveTeacherLeave : {str(e)}")
+        raise e
+
+
+def approve_reject_teacher_leave(leave_id, action, updated_by=None):
+    """Approve/reject a pending teacher leave.
+    action: 'approve' -> approval_status='approved', status=True
+            'reject'  -> approval_status='rejected', status=True
+    Returns dict or None if not found / not pending."""
+    logger.info(f"TeacherLeavesHelper : ApproveRejectLeave : Started action={action} id={leave_id}")
+    leave = TeacherLeaves.objects.filter(id=leave_id, status=True).first()
+    if not leave:
+        return None
+    if (leave.approval_status or 'approved') != 'pending':
+        return {'error': 'Leave is not pending approval'}
+    if action == 'approve':
+        leave.approval_status = 'approved'
+        leave.status = True
+    elif action == 'reject':
+        # Keep status=True so the row stays visible (every
+        # TeacherLeaves query filters status=True); 'rejected'
+        # lives in approval_status.
+        leave.approval_status = 'rejected'
+        leave.status = True
+    else:
+        return {'error': "action must be 'approve' or 'reject'"}
+    leave.updated_on = datetime.now()
+    leave.updated_by = updated_by
+    # Record who approved/rejected this leave
+    leave.approved_by = updated_by
+    leave.save(update_fields=['approval_status', 'status', 'updated_on', 'updated_by', 'approved_by'])
+    return {'id': leave.id, 'approval_status': leave.approval_status, 'status': leave.status, 'approved_by': leave.approved_by}
+
+
+def get_teacher_leaves(center_id=None, teacher_id=None, approval_status=None, search='', allowed_center_ids=None, start_date=None, end_date=None):
+    """Teacher leave applications: Holidays rows whose CreatedBy is a
+    teacher's user id (CreatedBy already stores the applying
+    teacher's user id - no separate teacher column on Holidays).
+
+    teacher_id here is the User table id (created_by stores the
+    User id from the token - not the Teacher table id), so it is
+    matched against CreatedBy directly.
+    allowed_center_ids: when given (RegionalAdmin scoping), only
+    leaves of those centers are returned."""
+    print("get_teacher_leaves: started with center_id={}, teacher_id={}, approval_status={}, search={}, allowed_center_ids={}, start_date={}, end_date={}".format(
+        center_id, teacher_id, approval_status, search, allowed_center_ids, start_date, end_date))
+    info = teacher_info_map()
+    teacher_user_ids = list(info.keys())
+    print(f"get_teacher_leaves: teacher_user_ids={teacher_user_ids}")
+    queryset = TeacherLeaves.objects.filter(
+        created_by__in=teacher_user_ids,
+        status=True
+    ).select_related('center').order_by('-start_date')
+    print(f"get_teacher_leaves: initial queryset count={queryset.count()}")
+    if allowed_center_ids is not None:
+        queryset = queryset.filter(center_id__in=allowed_center_ids)
+    if center_id:
+        queryset = queryset.filter(center_id=center_id)
+    if teacher_id:
+        # User table id (same id stored in CreatedBy)
+        queryset = queryset.filter(created_by=teacher_id)
+    if approval_status:
+        queryset = queryset.filter(approval_status=approval_status)
+    # Calendar filter: on the leave StartDate
+    if start_date:
+        queryset = queryset.filter(start_date__date__gte=start_date)
+    if end_date:
+        queryset = queryset.filter(start_date__date__lte=end_date)
+    if search:
+        queryset = queryset.filter(Q(name__icontains=search) | Q(description__icontains=search))
+    result = []
+    for h in queryset:
+        tinfo = info.get(h.created_by, {})
+        result.append({
+            'Id': h.id,
+            'Name': h.name,
+            'Description': h.description,
+            'Status': h.status,
+            'StartDate': h.start_date,
+            'EndDate': h.end_date,
+            'CenterId': h.center_id,
+            'CenterName': h.center.center_name if h.center else None,
+            'TeacherId': tinfo.get('teacher_id'),
+            'TeacherName': tinfo.get('teacher_name'),
+            'ApprovalStatus': h.approval_status or 'approved',
+            'ContinuousDays': h.continuous_days,
+            'ApprovedBy': h.approved_by,
+            'CreatedOn': h.created_on,
+            'CreatedBy': h.created_by,
+        })
+    return result
+
 
 def delete_holiday_by_id(holiday_id):
     """Soft delete holiday by ID - set status to False"""
@@ -6573,3 +6840,4 @@ def log_class_activity(request, action, class_obj, center, reason, attendance_co
         logger.info(f"ClassActivityLog: Logged {action} ({status}) for class {class_obj.id if class_obj else 'N/A'}")
     except Exception as e:
         logger.error(f"Failed to log ClassActivityLog for {action}: {str(e)}")
+

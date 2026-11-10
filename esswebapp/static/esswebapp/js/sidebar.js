@@ -62,7 +62,20 @@ const BASE_NAV_ITEMS = [
         id: 'centres',
         label: 'Educational Centre',
         icon: 'building',
-        urlName: 'centres',
+        children: [
+            { id: 'educational-centre', label: 'Educational Centre', urlName: 'centres', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] },
+            { id: 'attendance', label: 'Center Attendance', urlName: 'attendance', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] }
+        ],
+        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
+    },
+    {
+        id: 'holidays',
+        label: 'Holidays',
+        icon: 'calendar',
+        children: [
+            { id: 'academic-holidays', label: 'Academic Holidays', urlName: 'academic-holidays', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] },
+            { id: 'teacher-leaves', label: 'Teacher Leaves', urlName: 'teacher-leaves', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] }
+        ],
         roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     },
     {
@@ -77,24 +90,13 @@ const BASE_NAV_ITEMS = [
         roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     },
     {
-        id: 'attendance',
-        label: 'Center Attendance',
-        icon: 'clipboard',
-        urlName: 'attendance',
-        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
-    },
-    {
-        id: 'class-attendance-logs',
-        label: 'Class Attendance Logs',
-        icon: 'clipboard',
-        urlName: 'class-attendance-logs',
-        roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
-    },
-    {
-        id: 'class-activity-report',
-        label: 'Class Activity Report',
+        id: 'reports',
+        label: 'Reports',
         icon: 'activity',
-        urlName: 'class-activity-report',
+        children: [
+            { id: 'class-attendance-logs', label: 'Class Attendance Logs', urlName: 'class-attendance-logs', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] },
+            { id: 'class-activity-report', label: 'Class Activity Report', urlName: 'class-activity-report', roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN'] }
+        ],
         roles: ['SUPER_ADMIN', 'REGIONAL_ADMIN']
     }
 ];
@@ -150,6 +152,7 @@ const ICONS = {
     map: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>',
     users: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     building: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h1"/><path d="M9 13h1"/><path d="M9 17h1"/><path d="M14 9h1"/><path d="M14 13h1"/><path d="M14 17h1"/></svg>',
+    calendar: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
     'user-graduate': '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>',
     clipboard: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6"/><path d="M9 16h6"/></svg>',
     activity: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',

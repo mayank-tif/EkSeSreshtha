@@ -45,6 +45,12 @@ urlpatterns = [
     path('constituency/panchayat/', PanchayatView.as_view(), name='panchayat'),
     path('constituency/village/', VillageView.as_view(), name='village'),
     
+    # Academic Holidays
+    path('academic-holidays/', AcademicHolidaysView.as_view(), name='academic-holidays'),
+
+    # Teacher Leaves (approval)
+    path('teacher-leaves/', TeacherLeavesView.as_view(), name='teacher-leaves'),
+
     # Attendance center detail page
     path('attendance/center-detail/', AttendanceView.as_view(), name='center-detail'),
     path('attendance/center-monthly-attendance/', CenterMonthlyAttendanceView.as_view(), name='center-monthly-attendance'),

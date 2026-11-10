@@ -1,0 +1,110 @@
+/* ================================================================
+   ACADEMIC HOLIDAYS PAGE
+   Page-specific styles. Shared components (buttons, cards, tables,
+   modals, forms) come from components.css / layout.css.
+   ================================================================ */
+
+/* ---------- Filters bar: compact, auto-width (NOT full width) ---------- */
+.filters-bar {
+    background-color: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-5);
+}
+
+.filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-4);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+}
+
+.filter-group .form-label {
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* Keep each filter at a sensible fixed width */
+.filters-row .filter-group:nth-child(1) { width: 150px; }  /* Type */
+.filters-row .filter-group:nth-child(2) { width: 220px; }  /* Center */
+.filters-row .filter-group:nth-child(4) { width: 150px; }  /* Status */
+.filters-row .filter-group:nth-child(5) { width: 240px; }  /* Search */
+
+/* Year filter: single calendar year dropdown (2025, 2026, ...) */
+.filter-calendar { width: auto; }
+.calendar-filter {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+.calendar-filter .form-select { width: 170px; flex: 0 0 auto; }
+
+/* Row action buttons (same style as centres page) */
+.row-action-btn {
+    padding: var(--space-3);
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--gray-700);
+    background: transparent;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.row-action-btn:hover { background-color: var(--gray-100); color: var(--brand-blue); }
+.row-action-btn.danger { color: var(--danger); }
+.row-action-btn.danger:hover { background-color: var(--danger-light); color: var(--danger); }
+.row-action-btn svg { display: block; }
+
+/* Stack full-width only on small screens */
+@media (max-width: 768px) {
+    .filters-row .filter-group {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}
+
+/* ---------- Modal form helpers ---------- */
+.form-hint {
+    font-size: var(--text-xs);
+    color: var(--gray-500);
+}
+
+.form-check {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.form-check-input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--brand-blue);
+    cursor: pointer;
+}
+
+.form-check-label {
+    font-size: var(--text-sm);
+    color: var(--gray-700);
+    cursor: pointer;
+}
+
+/* ---------- Small utilities used by the page JS ---------- */
+.text-center { text-align: center; }
+.text-muted { color: var(--gray-500); }
+.text-danger { color: var(--brand-red); }
+.small { font-size: var(--text-xs); }
+.fw-medium { font-weight: 500; }
+.fw-bold { font-weight: 700; }
+.py-5 { padding-top: var(--space-8); padding-bottom: var(--space-8); }

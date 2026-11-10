@@ -692,11 +692,16 @@ class HolidaysSaveHolidaysRequestSerializer(RequestSerializer):
     EndDate = optional_datetime()
     CreatedBy = required_int()
     CreatedOn = optional_datetime()
-    ListCenterIds = serializers.CharField(required=True, allow_blank=False)
+    # 1 = academic holiday (global, all centers, no center needed),
+    # 0/absent = center-specific holiday (ListCenterIds required)
+    AcademicHoliday = optional_bool()
+    ListCenterIds = serializers.CharField(required=False, allow_blank=True)
 
     def validate_ListCenterIds(self, value):
         """Validate that ListCenterIds contains valid integers and centers exist"""
         if not value or not value.strip():
+            if self.initial_data.get('AcademicHoliday'):
+                return value  # academic holiday: global, no center needed
             raise serializers.ValidationError("ListCenterIds cannot be empty")
         
         # Split and get IDs
@@ -744,6 +749,44 @@ class HolidaysDtoSerializer(serializers.Serializer):
     createdOn = serializers.DateTimeField(source='CreatedOn', allow_null=True, required=False)
     centerId = serializers.IntegerField(source='CenterId', allow_null=True, required=False)
     centerName = serializers.CharField(source='CenterName', allow_null=True, required=False)
+    academicHoliday = serializers.BooleanField(source='AcademicHoliday', allow_null=True, required=False)
+
+
+class TeacherLeavesSaveRequestSerializer(RequestSerializer):
+    """Teacher leave application (TeacherLeaves table).
+
+    This API is only used by teachers: the teacher (and their single
+    assigned center) is resolved from the logged-in user id in the
+    token on the server - the client does not send a center list.
+    The applying teacher's user id is stored in CreatedBy - no
+    separate teacher column.
+    """
+    Id = serializers.IntegerField(required=False, allow_null=True)
+    Name = serializers.CharField(required=True, allow_blank=False, max_length=50)
+    Description = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=50)
+    Status = serializers.BooleanField(required=False, allow_null=True, default=True)
+    StartDate = serializers.DateTimeField(required=True)
+    EndDate = serializers.DateTimeField(required=False, allow_null=True)
+    # No CreatedBy/CreatedOn from the client: created_by comes from
+    # the token user id and created_on is set to now() on the server.
+
+
+class TeacherLeavesDtoSerializer(serializers.Serializer):
+    id = serializers.IntegerField(source='Id')
+    name = serializers.CharField(source='Name', allow_null=True, required=False)
+    description = serializers.CharField(source='Description', allow_null=True, required=False)
+    status = serializers.BooleanField(source='Status', allow_null=True, required=False)
+    startDate = serializers.DateTimeField(source='StartDate', allow_null=True, required=False)
+    endDate = serializers.DateTimeField(source='EndDate', allow_null=True, required=False)
+    createdBy = serializers.IntegerField(source='CreatedBy', allow_null=True, required=False)
+    createdOn = serializers.DateTimeField(source='CreatedOn', allow_null=True, required=False)
+    centerId = serializers.IntegerField(source='CenterId', allow_null=True, required=False)
+    centerName = serializers.CharField(source='CenterName', allow_null=True, required=False)
+    teacherId = serializers.IntegerField(source='TeacherId', allow_null=True, required=False)
+    teacherName = serializers.CharField(source='TeacherName', allow_null=True, required=False)
+    approvalStatus = serializers.CharField(source='ApprovalStatus', allow_null=True, required=False)
+    continuousDays = serializers.IntegerField(source='ContinuousDays', allow_null=True, required=False)
+    approvedBy = serializers.IntegerField(source='ApprovedBy', allow_null=True, required=False)
 
 # Panchayat Serializers -----------------------------------------------------------------------------------------------
 class PanchayatSavePanchayatRequestSerializer(RequestSerializer):

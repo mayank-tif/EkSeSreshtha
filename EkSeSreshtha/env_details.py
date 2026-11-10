@@ -18,3 +18,8 @@ ATTENDANCE_SKIP_SUNDAY_CHECK = os.getenv('ATTENDANCE_SKIP_SUNDAY_CHECK', 'false'
 
 # Google Maps API
 GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
+
+# Teacher leave: maximum allowed continuous working days
+# (Sat/Sun and AcademicHoliday days are not counted). Leave beyond
+# this limit is saved as 'pending' for SuperAdmin/RegionalAdmin approval.
+TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS = int(os.getenv('TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS', '4'))

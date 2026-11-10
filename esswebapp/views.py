@@ -5,12 +5,15 @@ from django.urls import re_path
 from django.http import JsonResponse
 from django.db import models, transaction
 from django.db.models import Count, Prefetch, Sum, Q
+from django.db.models.functions import ExtractYear
 from django.core.files.base import ContentFile
 
 import json
 import uuid
 import logging
 from datetime import datetime, timedelta, timezone
+from APIS.helper import *
+
 
 # IST timezone offset (+05:30)
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -5913,9 +5916,11 @@ class CenterView(PermissionRequiredMixin, View):
                 center_data['Latitude'] = data['latitude']
             if 'longitude' in data and data['longitude'] is not None:
                 center_data['Longitude'] = data['longitude']
-            if 'assigned_teachers' in data and data['assigned_teachers'] is not None:
+            # Assignable fields: key presence means "apply" - an
+            # explicit null unassigns the current assignee.
+            if 'assigned_teachers' in data:
                 center_data['AssignedTeachers'] = data['assigned_teachers']
-            if 'assigned_regional_admin' in data and data['assigned_regional_admin'] is not None:
+            if 'assigned_regional_admin' in data:
                 center_data['AssignedRegionalAdmin'] = data['assigned_regional_admin']
             if 'started_date' in data and data['started_date'] is not None:
                 started_date = data['started_date']
@@ -6055,3 +6060,478 @@ class ClassActivityReportView(PermissionRequiredMixin, View):
         
         return JsonResponse({'results': list(teachers)})
 
+# ============================================================
+# Holidays View (Academic + Center holidays)
+# ============================================================
+
+class AcademicHolidaysView(PermissionRequiredMixin, View):
+    """Holidays management page + API.
+
+    The Holidays table holds BOTH kinds of holidays:
+    - academic holidays (academic_holiday=1): global, for ALL
+      centers (center_id NULL)
+    - center holidays (academic_holiday=0): for a specific center
+      (center_id set)
+    Listing shows both; filters: type (academic/center), center,
+    year, status, search.
+    """
+    template_name = 'esswebapp/pages/academic-holidays.html'
+    required_module = 'centres'  # Reuse centres permission for now
+
+    def get(self, request):
+        # Check if it's an AJAX request for JSON data
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            action = request.GET.get('action')
+            if action == 'list':
+                return self._list_holidays_api(request)
+            elif action == 'get':
+                return self._get_holiday_api(request)
+            elif action == 'centers':
+                return self._centers_api(request)
+            elif action == 'years':
+                return self._get_years_api(request)
+
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+
+    def post(self, request):
+        """Create or update holiday"""
+        if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+            return JsonResponse({'detail': 'Invalid request'}, status=400)
+
+        # Action may arrive in the POST body (create/update forms) or
+        # in the query string (delete - apiCall always appends it there)
+        action = request.POST.get('action') or request.GET.get('action')
+        if action == 'create':
+            return self._create_holiday_api(request)
+        elif action == 'update':
+            return self._update_holiday_api(request)
+        elif action == 'delete':
+            return self._delete_holiday_api(request)
+
+        return JsonResponse({'detail': 'Invalid action'}, status=400)
+
+    def _list_holidays_api(self, request):
+        """Get paginated list of holidays (academic + center) with filters"""
+        log_web_activity(request, 'VIEW', 'Holidays', data=dict(request.GET))
+
+        try:
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', PAGE_SIZE))
+            search = request.GET.get('search', '').strip().lower()
+            holiday_type = request.GET.get('holiday_type', '').strip().lower()  # '', 'academic', 'center'
+            center_id = request.GET.get('center_id', '').strip()
+            status_param = request.GET.get('status', '').strip().lower()
+            filter_year = request.GET.get('filter_year', '').strip()
+
+            # NOTE: do NOT hard-filter status=True here - 'All' must show
+            # both active and inactive holidays.
+            queryset = Holidays.objects.select_related('center').all().order_by('-start_date')
+
+            # Type filter: academic (global, all centers) vs center-specific
+            if holiday_type == 'academic':
+                queryset = queryset.filter(academic_holiday=True)
+            elif holiday_type == 'center':
+                queryset = queryset.filter(academic_holiday=False)
+
+            # Center filter
+            if center_id:
+                queryset = queryset.filter(center_id=int(center_id))
+
+            # Status filter: '' = all, 'true' = active only, 'false' = inactive only
+            if status_param in ('true', '1'):
+                queryset = queryset.filter(status=True)
+            elif status_param in ('false', '0'):
+                queryset = queryset.filter(status=False)
+
+            # Year filter (calendar year of start_date); default to the
+            # current year's holidays when nothing is chosen.
+            try:
+                if filter_year:
+                    queryset = queryset.filter(start_date__year=int(filter_year))
+                else:
+                    queryset = queryset.filter(start_date__year=datetime.now().year)
+            except (ValueError, TypeError):
+                return JsonResponse({'detail': 'Invalid year filter'}, status=400)
+
+            # Apply search
+            if search:
+                queryset = queryset.filter(
+                    Q(name__icontains=search) |
+                    Q(description__icontains=search) |
+                    Q(center__center_name__icontains=search)
+                )
+
+            total = queryset.count()
+            total_pages = (total + page_size - 1) // page_size
+
+            start = (page - 1) * page_size
+            end = start + page_size
+
+            holidays_page = list(queryset[start:end])
+
+            items = []
+            for h in holidays_page:
+                items.append({
+                    'id': h.id,
+                    'name': h.name,
+                    'description': h.description,
+                    'academic_holiday': bool(h.academic_holiday),
+                    'center_id': h.center_id,
+                    'center_name': h.center.center_name if h.center else None,
+                    'start_date': h.start_date.isoformat() if h.start_date else None,
+                    'end_date': h.end_date.isoformat() if h.end_date else None,
+                    'created_on': h.created_on.isoformat() if h.created_on else None,
+                    'created_by': h.created_by,
+                    'status': bool(h.status),
+                })
+
+            return JsonResponse({
+                'results': items,
+                'count': total,
+                'page': page,
+                'page_size': page_size,
+                'total_pages': total_pages,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _get_holiday_api(self, request):
+        """Get a single holiday by ID"""
+        try:
+            holiday_id = request.GET.get('id')
+            if not holiday_id:
+                return JsonResponse({'detail': 'Holiday ID required'}, status=400)
+
+            holiday = Holidays.objects.select_related('center').get(id=holiday_id)
+
+            return JsonResponse({
+                'id': holiday.id,
+                'name': holiday.name,
+                'description': holiday.description,
+                'academic_holiday': bool(holiday.academic_holiday),
+                'center_id': holiday.center_id,
+                'start_date': holiday.start_date.isoformat() if holiday.start_date else None,
+                'end_date': holiday.end_date.isoformat() if holiday.end_date else None,
+                'status': holiday.status,
+                'created_on': holiday.created_on.isoformat() if holiday.created_on else None,
+                'created_by': holiday.created_by,
+            })
+        except Holidays.DoesNotExist:
+            return JsonResponse({'detail': 'Holiday not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _parse_holiday_form(self, request):
+        """Parse + validate the add/edit form. Returns dict or raises ValueError."""
+        name = request.POST.get('name', '').strip()
+        start_date_str = request.POST.get('start_date', '').strip()
+        if not name:
+            raise ValueError('Holiday name is required')
+        if not start_date_str:
+            raise ValueError('Start date is required')
+
+        academic_holiday = request.POST.get('academic_holiday', '').strip().lower() == 'true'
+        # Multi-select: comma-separated center ids (one Holidays row
+        # is created per selected center, like APIS SaveHolidays)
+        center_ids = []
+        raw_center = request.POST.get('center_id', '').strip()
+        if raw_center:
+            center_ids = [int(x.strip()) for x in raw_center.split(',') if x.strip()]
+        if academic_holiday:
+            # Academic holiday: global for all centers
+            center_ids = []
+        elif not center_ids:
+            raise ValueError('Center is required for center holidays')
+        elif Center.objects.filter(id__in=center_ids, status=True).count() != len(center_ids):
+            raise ValueError('One or more centers not found')
+
+        start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        end_date = None
+        end_date_str = request.POST.get('end_date', '').strip()
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+
+        return {
+            'name': name,
+            'description': request.POST.get('description', '').strip(),
+            'academic_holiday': academic_holiday,
+            'center_ids': center_ids,
+            'start_date': start_date,
+            'end_date': end_date,
+        }
+
+    def _create_holiday_api(self, request):
+        """Create a new holiday (academic = global, or center-specific)"""
+        log_web_activity(request, 'CREATE', 'Holidays', data=dict(request.POST))
+        try:
+            data = self._parse_holiday_form(request)
+            user_id = request.web_user.get('user_id')
+            center_ids = data.pop('center_ids')
+            # Academic: one global row (center NULL). Center holiday:
+            # one row per selected center.
+            targets = center_ids if center_ids else [None]
+            first_id = None
+            for cid in targets:
+                row = Holidays.objects.create(
+                    center_id=cid,
+                    **data,
+                    status=True,
+                    created_by=user_id,
+                    created_on=datetime.now(),
+                )
+                first_id = first_id or row.id
+            return JsonResponse({
+                'status': True,
+                'message': f'Holiday created successfully for {len(targets)} center(s)' if len(targets) > 1 else 'Holiday created successfully',
+                'holiday_id': first_id,
+            })
+        except ValueError as e:
+            return JsonResponse({'detail': str(e)}, status=400)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _update_holiday_api(self, request):
+        """Update an existing holiday"""
+        log_web_activity(request, 'UPDATE', 'Holidays', data=dict(request.POST))
+        try:
+            holiday_id = request.POST.get('id')
+            if not holiday_id:
+                return JsonResponse({'detail': 'Holiday ID required'}, status=400)
+            holiday = Holidays.objects.get(id=holiday_id)
+            data = self._parse_holiday_form(request)
+            center_ids = data.pop('center_ids')
+            user_id = request.web_user.get('user_id')
+            status_val = request.POST.get('status')
+            keep_status = holiday.status if status_val is None else (status_val.lower() == 'true')
+
+            # Sync rows by name across centers (same pattern as APIS
+            # save_holidays): remove deselected, add newly selected,
+            # update the rest.
+            existing = Holidays.objects.filter(name=data['name'], status=True)
+            existing_ids = list(existing.values_list('center_id', flat=True))
+            if data['academic_holiday']:
+                # Single global row
+                Holidays.objects.filter(name=data['name'], status=True).exclude(id=holiday.id).update(status=False, updated_by=user_id, updated_on=datetime.now())
+                for field, value in data.items():
+                    setattr(holiday, field, value)
+                holiday.center_id = None
+                holiday.status = keep_status
+                holiday.updated_by = user_id
+                holiday.updated_on = datetime.now()
+                holiday.save()
+            else:
+                for cid in [c for c in existing_ids if c not in center_ids]:
+                    Holidays.objects.filter(name=data['name'], center_id=cid, status=True).update(status=False, updated_by=user_id, updated_on=datetime.now())
+                for cid in center_ids:
+                    if cid in existing_ids:
+                        Holidays.objects.filter(name=data['name'], center_id=cid, status=True).update(**data, status=keep_status, updated_by=user_id, updated_on=datetime.now())
+                    else:
+                        Holidays.objects.create(center_id=cid, **data, status=keep_status, created_by=user_id, created_on=datetime.now())
+                # Ensure the edited row itself reflects the form
+                # (it may have been soft-deleted above if its center
+                # was deselected - in that case it is re-created).
+            return JsonResponse({'status': True, 'message': 'Holiday updated successfully'})
+        except Holidays.DoesNotExist:
+            return JsonResponse({'detail': 'Holiday not found'}, status=404)
+        except ValueError as e:
+            return JsonResponse({'detail': str(e)}, status=400)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _delete_holiday_api(self, request):
+        """Soft delete a holiday"""
+        log_web_activity(request, 'DELETE', 'Holidays', data=dict(request.POST))
+        try:
+            holiday_id = request.POST.get('id')
+            if not holiday_id:
+                return JsonResponse({'detail': 'Holiday ID required'}, status=400)
+            holiday = Holidays.objects.get(id=holiday_id)
+            holiday.status = False
+            holiday.updated_by = request.web_user.get('user_id')
+            holiday.updated_on = datetime.now()
+            holiday.save()
+            return JsonResponse({'status': True, 'message': 'Holiday deleted successfully'})
+        except Holidays.DoesNotExist:
+            return JsonResponse({'detail': 'Holiday not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _centers_api(self, request):
+        """Centers for the center filter dropdown (RBAC-scoped)."""
+        try:
+            qs = get_user_accessible_centers_queryset(request).order_by('center_name')
+            return JsonResponse({'results': [
+                {'id': c.id, 'center_name': c.center_name} for c in qs
+            ]})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _get_years_api(self, request):
+        """Get distinct calendar years (from start_date) for the year filter
+        dropdown. Years are single years like 2025, 2026."""
+        try:
+            years = list(
+                Holidays.objects.annotate(year=ExtractYear('start_date'))
+                .values_list('year', flat=True).distinct().order_by('-year')
+            )
+            years = [y for y in years if y]
+            current_year = datetime.now().year
+            if current_year not in years:
+                years.append(current_year)
+                years.sort(reverse=True)
+            return JsonResponse({'results': years})
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+
+# ============================================================
+# Teacher Leaves (Leave Approval) View
+# ============================================================
+
+class TeacherLeavesView(PermissionRequiredMixin, View):
+    """Teacher leave applications list + approve/reject for
+    SuperAdmin / RegionalAdmin. Approve/Reject buttons are shown
+    only for leaves whose approval_status is 'pending' (continuous
+    working days > TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS)."""
+    template_name = 'esswebapp/pages/teacher-leaves.html'
+    required_module = 'centres'
+
+    def get(self, request):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            action = request.GET.get('action')
+            if action == 'list':
+                return self._list_leaves_api(request)
+            elif action == 'centers':
+                return self._centers_api(request)
+            elif action == 'teachers':
+                return self._teachers_api(request)
+        return render(request, self.template_name, {'user': get_user_json(request.web_user)})
+
+    def post(self, request):
+        if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+            return JsonResponse({'detail': 'Invalid request'}, status=400)
+        action = request.POST.get('action') or request.GET.get('action')
+        if action in ('approve', 'reject'):
+            return self._approve_reject_api(request, action)
+        return JsonResponse({'detail': 'Invalid action'}, status=400)
+
+    def _list_leaves_api(self, request):
+        try:
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 50))
+            center_id = request.GET.get('center', '').strip()
+            teacher_id = request.GET.get('teacher', '').strip()
+            approval_status = request.GET.get('approval_status', '').strip().lower()
+            search = request.GET.get('search', '').strip()
+            # Calendar filter on StartDate; defaults to the current
+            # month so one month of leaves shows by default.
+            start_date = request.GET.get('start_date', '').strip()
+            end_date = request.GET.get('end_date', '').strip()
+            if request.GET.get('start_date') is None and request.GET.get('end_date') is None:
+                today = datetime.now().date()
+                first = today.replace(day=1)
+                if today.month == 12:
+                    nxt = today.replace(year=today.year + 1, month=1, day=1)
+                else:
+                    nxt = today.replace(month=today.month + 1, day=1)
+                start_date = first.isoformat()
+                end_date = (nxt - timedelta(days=1)).isoformat()
+            try:
+                start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else None
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else None
+            except ValueError:
+                return JsonResponse({'detail': 'Invalid date filter'}, status=400)
+            if start_date_obj and end_date_obj and start_date_obj > end_date_obj:
+                return JsonResponse({'detail': 'Start date must be before end date'}, status=400)
+
+            leaves = get_teacher_leaves(
+                center_id=int(center_id) if center_id else None,
+                teacher_id=int(teacher_id) if teacher_id else None,
+                approval_status=approval_status or None,
+                search=search,
+                allowed_center_ids=get_user_accessible_center_ids(request),  # existing helper: None=all (SuperAdmin), assigned ids (RegionalAdmin)
+                start_date=start_date_obj,
+                end_date=end_date_obj,
+            )
+            print(f"Leaves fetched: {len(leaves)}")
+            # Recount continuous working days live so the UI always
+            # reflects Sat/Sun + AcademicHoliday exclusions.
+            for leaf in leaves:
+                leaf['ContinuousDays'] = count_continuous_working_days(leaf.get('StartDate'), leaf.get('EndDate'))
+
+            total = len(leaves)
+            total_pages = (total + page_size - 1) // page_size if total else 0
+            start = (page - 1) * page_size
+            page_leaves = leaves[start:start + page_size]
+
+            items = []
+            for leaf in page_leaves:
+                items.append({
+                    'id': leaf['Id'],
+                    'name': leaf['Name'],
+                    'description': leaf['Description'],
+                    'teacher_name': leaf['TeacherName'],
+                    'teacher_id': leaf['TeacherId'],
+                    'center_name': leaf['CenterName'],
+                    'center_id': leaf['CenterId'],
+                    'start_date': leaf['StartDate'].isoformat() if leaf['StartDate'] else None,
+                    'end_date': leaf['EndDate'].isoformat() if leaf['EndDate'] else None,
+                    'approval_status': leaf['ApprovalStatus'],
+                    'continuous_days': leaf['ContinuousDays'],
+                    'approved_by_name': (User.objects.filter(id=leaf['ApprovedBy']).first().name if leaf.get('ApprovedBy') else None),
+                    'status': leaf['Status'],
+                    'created_on': leaf['CreatedOn'].isoformat() if leaf['CreatedOn'] else None,
+                })
+            return JsonResponse({
+                'results': items, 'count': total, 'page': page,
+                'page_size': page_size, 'total_pages': total_pages,
+                # Echo the date range the server actually filtered on
+                # (including the current-month default) so the UI can
+                # populate the calendar inputs to match the data shown.
+                'applied_start_date': start_date,
+                'applied_end_date': end_date,
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)
+
+    def _centers_api(self, request):
+        centers = Center.objects.filter(status=True).order_by('center_name')
+        allowed = get_user_accessible_center_ids(request)
+        if allowed is not None:
+            centers = centers.filter(id__in=allowed)
+        return JsonResponse({'results': [{'id': c.id, 'name': c.center_name} for c in centers]})
+
+    def _teachers_api(self, request):
+        teachers = Teacher.objects.filter(status=True).select_related('user').order_by('user__name')
+        allowed = get_user_accessible_center_ids(request)
+        if allowed is not None:
+            teachers = teachers.filter(center_id__in=allowed)
+        # Value is the User table id (same id stored in CreatedBy
+        # on TeacherLeaves and carried in the token) - not the
+        # Teacher table id.
+        return JsonResponse({'results': [
+            {'id': t.user_id, 'name': t.user.name if t.user else str(t.user_id)}
+            for t in teachers if t.user_id
+        ]})
+
+    def _approve_reject_api(self, request, action):
+        try:
+            holiday_id = request.POST.get('id') or request.GET.get('id')
+            if not holiday_id:
+                return JsonResponse({'detail': 'Holiday ID required'}, status=400)
+            allowed = get_user_accessible_center_ids(request)
+            if allowed is not None:
+                leave = TeacherLeaves.objects.filter(id=holiday_id, center_id__in=allowed, status=True).first()
+                if not leave:
+                    return JsonResponse({'detail': 'Holiday not found in your assigned centers'}, status=404)
+            from APIS.helper import approve_reject_teacher_leave
+            result = approve_reject_teacher_leave(int(holiday_id), action, updated_by=request.web_user.get('user_id'))
+            if result is None or 'error' in (result or {}):
+                return JsonResponse({'detail': (result or {}).get('error', 'Holiday not found')}, status=400)
+            return JsonResponse({
+                'status': True,
+                'message': ('Leave approved successfully' if action == 'approve' else 'Leave rejected successfully'),
+                'approval_status': result['approval_status'],
+            })
+        except Exception as e:
+            return JsonResponse({'detail': str(e)}, status=500)

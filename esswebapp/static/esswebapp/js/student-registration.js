@@ -150,12 +150,43 @@ async function loadCentres() {
 function toggleCentreDropdown() {
     const dropdown = document.getElementById('centre-dropdown');
     const filterInput = document.getElementById('centre-filter');
+    const searchInput = document.getElementById('centre-search-input');
+    
     dropdown.hidden = !dropdown.hidden;
-    if (!dropdown.hidden && filterInput) {
-        filterInput.value = '';
-        filterInput.focus();
-        populateCentreOptions();
+    if (!dropdown.hidden) {
+        positionDropdown(dropdown, searchInput);
+        
+        if (filterInput) {
+            filterInput.value = '';
+            filterInput.focus();
+            populateCentreOptions();
+        }
     }
+}
+
+function positionDropdown(dropdown, trigger) {
+    if (!dropdown || !trigger || dropdown.hidden) return;
+    
+    const rect = trigger.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const dropdownHeight = 320; // max-height from CSS
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    
+    // Decide direction: open up if not enough space below and more space above
+    const openUpward = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+    
+    if (openUpward) {
+        dropdown.style.top = (rect.top - dropdownHeight - 4) + 'px';
+        dropdown.style.bottom = 'auto';
+    } else {
+        dropdown.style.top = (rect.bottom + 4) + 'px';
+        dropdown.style.bottom = 'auto';
+    }
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.width = rect.width + 'px';
+    dropdown.style.position = 'fixed';
+    dropdown.style.zIndex = '9999';
 }
 
 /**

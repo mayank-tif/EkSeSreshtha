@@ -1,0 +1,64 @@
+/* ================================================================
+   TEACHER LEAVES PAGE
+   Page-specific styles. Shared components (buttons, cards, tables,
+   modals, forms) come from components.css / layout.css.
+   Filters bar styling mirrors academic-holidays.css.
+   ================================================================ */
+
+/* ---------- Filters bar: compact, auto-width (NOT full width) ---------- */
+.filters-bar {
+    background-color: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-5);
+}
+
+.filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--space-4);
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0;
+}
+
+.filter-group .form-label {
+    margin: 0;
+    white-space: nowrap;
+}
+
+/* Keep each filter at a sensible fixed width */
+.filters-row .filter-group:nth-child(1) { width: 220px; }  /* Center */
+.filters-row .filter-group:nth-child(2) { width: 220px; }  /* Teacher */
+.filters-row .filter-group:nth-child(3) { width: 190px; }  /* Approval Status */
+.filters-row .filter-group:nth-child(4) { width: 160px; }  /* Start Date */
+.filters-row .filter-group:nth-child(5) { width: 160px; }  /* End Date */
+.filters-row .filter-group:nth-child(6) { width: auto; }   /* Clear */
+.filters-row .filter-group:nth-child(7) { width: 240px; }  /* Search */
+
+/* Stack full-width only on small screens */
+@media (max-width: 768px) {
+    .filters-row .filter-group {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+}
+
+/* Approve/Reject action buttons */
+.table-actions { display: flex; align-items: center; justify-content: center; gap: var(--space-2); }
+.table-actions .btn { flex: 0 0 auto; }
+
+/* ---------- Small utilities used by the page JS ---------- */
+.text-center { text-align: center; }
+.text-muted { color: var(--gray-500); }
+.small { font-size: var(--text-xs); }
+.fw-medium { font-weight: 500; }
+.py-5 { padding-top: var(--space-8); padding-bottom: var(--space-8); }
