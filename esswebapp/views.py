@@ -4,7 +4,7 @@ from django.views import View
 from django.urls import re_path
 from django.http import JsonResponse
 from django.db import models, transaction
-from django.db.models import Count, Prefetch, Sum, Q
+from django.db.models import Prefetch, Count, Prefetch, Sum, Q
 from django.db.models.functions import ExtractYear
 from django.core.files.base import ContentFile
 
@@ -699,6 +699,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 return self._get_class_log_detail_api(request)
             if action == 'class_log_summary':
                 return self._get_class_log_summary_api(request)
+            if action == 'holidays_on_date':
+                return self._get_holidays_on_date_api(request)
+            if action == 'teacher_leaves_on_date':
+                return self._get_teacher_leaves_on_date_api(request)
             return JsonResponse({'detail': 'Invalid action'}, status=400)
         
         return render(request, self.template_name, {
@@ -874,7 +878,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     # There IS a class that started on this exact date
                     # Check for holiday on filter_date for this center
                     holiday = Holidays.objects.filter(
-                        center_id=center.id,
+                        holiday_centers__center_id=center.id,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -922,7 +926,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     # NO class started on this exact date for this center
                     # Check holiday
                     holiday = Holidays.objects.filter(
-                        center_id=center.id,
+                        holiday_centers__center_id=center.id,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -1124,7 +1128,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 
                 if class_on_date:
                     holiday = Holidays.objects.filter(
-                        center_id=center.id,
+                        holiday_centers__center_id=center.id,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -1153,7 +1157,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 else:
                     # NO class started on this exact date for this center
                     holiday = Holidays.objects.filter(
-                        center_id=center.id,
+                        holiday_centers__center_id=center.id,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -1225,7 +1229,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         holiday = None
         if cls.center_id:
             holiday = Holidays.objects.filter(
-                center_id=cls.center_id,
+                holiday_centers__center_id=cls.center_id,
                 status=True,
                 start_date__date__lte=class_date,
                 end_date__date__gte=class_date
@@ -1733,6 +1737,185 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             'status_info': status_info,
             'filter_date': filter_date.isoformat() if filter_date else None,
         }
+
+    def _get_holidays_on_date_api(self, request):
+        """Returns holidays (academic + center-specific) for a given date.
+        Used for the Holiday card count and detail modal."""
+        filter_date = request.GET.get('date')
+        detail = request.GET.get('detail') == '1'
+        
+        if not filter_date:
+            return JsonResponse({'count': 0, 'holidays': []})
+        
+        try:
+            filter_date_obj = datetime.strptime(filter_date, '%Y-%m-%d').date()
+        except:
+            return JsonResponse({'count': 0, 'holidays': []})
+        
+        # Get accessible centers for the user
+        accessible_center_ids = get_user_accessible_center_ids(request)
+        if accessible_center_ids is None:
+            # Super admin - all active centers
+            center_queryset = Center.objects.filter(status=True)
+        else:
+            center_queryset = Center.objects.filter(id__in=accessible_center_ids, status=True)
+        
+        centers = list(center_queryset)
+        total_active_centers = len(centers)
+        
+        # Get academic holidays (global) for this date
+        academic_holidays = Holidays.objects.filter(
+            academic_holiday=True,
+            status=True,
+            start_date__date__lte=filter_date_obj,
+            end_date__date__gte=filter_date_obj
+        )
+        
+        # Get center-specific holidays for accessible centers
+        center_holidays = Holidays.objects.filter(
+            holiday_centers__center__in=centers,
+            academic_holiday=False,
+            status=True,
+            start_date__date__lte=filter_date_obj,
+            end_date__date__gte=filter_date_obj
+        ).prefetch_related('holiday_centers__center').distinct()
+        
+        holidays_data = []
+        
+        # Process academic holidays (apply to all accessible centers)
+        for h in academic_holidays:
+            center_names = [c.center_name for c in centers]
+            regional_admins = []
+            for c in centers:
+                if c.assigned_regional_admin:
+                    regional_admins.append(c.assigned_regional_admin.name)
+            regional_admins = list(set(regional_admins))  # deduplicate
+            
+            creator_name = None
+            if h.created_by:
+                try:
+                    creator = User.objects.filter(id=h.created_by).first()
+                    creator_name = creator.name if creator else None
+                except:
+                    pass
+            
+            holidays_data.append({
+                'id': h.id,
+                'name': h.name,
+                'description': h.description,
+                'type': 'academic',
+                'center_names': center_names,
+                'start_date': h.start_date.date().isoformat() if h.start_date else None,
+                'end_date': h.end_date.date().isoformat() if h.end_date else None,
+                'regional_admins': regional_admins,
+                'teachers': [creator_name] if creator_name else [],
+            })
+        
+        # Process center-specific holidays
+        for h in center_holidays:
+            center_names = [hc.center.center_name for hc in h.holiday_centers.all()]
+            regional_admins = []
+            for hc in h.holiday_centers.all():
+                if hc.center.assigned_regional_admin:
+                    ra_user = User.objects.filter(id=hc.center.assigned_regional_admin).first()
+                    if ra_user:
+                        regional_admins.append(ra_user.name)
+            regional_admins = list(set(regional_admins))
+            
+            creator_name = None
+            if h.created_by:
+                try:
+                    creator = User.objects.filter(id=h.created_by).first()
+                    creator_name = creator.name if creator else None
+                except:
+                    pass
+            
+            holidays_data.append({
+                'id': h.id,
+                'name': h.name,
+                'description': h.description,
+                'type': 'center',
+                'center_names': center_names,
+                'start_date': h.start_date.date().isoformat() if h.start_date else None,
+                'end_date': h.end_date.date().isoformat() if h.end_date else None,
+                'regional_admins': regional_admins,
+                'teachers': [creator_name] if creator_name else [],
+            })
+        
+        # Count logic:
+        # - Academic holiday = 1 per accessible center (but we show as 1 holiday entry)
+        # - Center holiday = 1 per holiday-center combination
+        # For the card count, we count unique holiday entries
+        count = len(holidays_data)
+        
+        if detail:
+            return JsonResponse({'count': count, 'holidays': holidays_data})
+        return JsonResponse({'count': count})
+
+    def _get_teacher_leaves_on_date_api(self, request):
+        """Returns teacher leaves for a given date.
+        Used for the Teacher Leave card count and detail modal."""
+        filter_date = request.GET.get('date')
+        detail = request.GET.get('detail') == '1'
+        
+        if not filter_date:
+            return JsonResponse({'count': 0, 'leaves': []})
+        
+        try:
+            filter_date_obj = datetime.strptime(filter_date, '%Y-%m-%d').date()
+        except:
+            return JsonResponse({'count': 0, 'leaves': []})
+        
+        # Get accessible centers for the user
+        accessible_center_ids = get_user_accessible_center_ids(request)
+        if accessible_center_ids is None:
+            center_queryset = Center.objects.filter(status=True)
+        else:
+            center_queryset = Center.objects.filter(id__in=accessible_center_ids, status=True)
+        
+        # Get teacher leaves for accessible centers where the leave spans the filter date
+        from APIS.models import TeacherLeaves
+        
+        leaves_qs = TeacherLeaves.objects.filter(
+            center__in=center_queryset,
+            status=True,
+            start_date__date__lte=filter_date_obj,
+            end_date__date__gte=filter_date_obj
+        ).select_related('center').order_by('-created_on')
+        
+        leaves_data = []
+        for leave in leaves_qs:
+            teacher_name = None
+            if leave.created_by:
+                try:
+                    teacher = User.objects.filter(id=leave.created_by).first()
+                    teacher_name = teacher.name if teacher else None
+                except:
+                    pass
+            
+            approved_by_name = None
+            if leave.approved_by:
+                approver = User.objects.filter(id=leave.approved_by).first()
+                approved_by_name = approver.name if approver else None
+            
+            leaves_data.append({
+                'id': leave.id,
+                'teacher_name': teacher_name or 'Unknown',
+                'center_name': leave.center.center_name if leave.center else 'Unknown',
+                'name': leave.name,
+                'description': leave.description,
+                'start_date': leave.start_date.date().isoformat() if leave.start_date else None,
+                'end_date': leave.end_date.date().isoformat() if leave.end_date else None,
+                'approval_status': leave.approval_status,
+                'continuous_days': leave.continuous_days or 0,
+                'approved_by': approved_by_name,
+            })
+        
+        count = len(leaves_data)
+        
+        if detail:
+            return JsonResponse({'count': count, 'leaves': leaves_data})
+        return JsonResponse({'count': count})
 
 
 class SchoolDropDownView(LoginRequiredMixin, View):
@@ -6125,7 +6308,9 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
 
             # NOTE: do NOT hard-filter status=True here - 'All' must show
             # both active and inactive holidays.
-            queryset = Holidays.objects.select_related('center').all().order_by('-start_date')
+            queryset = Holidays.objects.all().prefetch_related(
+                Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center'))
+            ).order_by('-start_date')
 
             # Type filter: academic (global, all centers) vs center-specific
             if holiday_type == 'academic':
@@ -6133,9 +6318,9 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             elif holiday_type == 'center':
                 queryset = queryset.filter(academic_holiday=False)
 
-            # Center filter
+            # Center filter - join through HolidayCenter junction
             if center_id:
-                queryset = queryset.filter(center_id=int(center_id))
+                queryset = queryset.filter(holiday_centers__center_id=int(center_id)).distinct()
 
             # Status filter: '' = all, 'true' = active only, 'false' = inactive only
             if status_param in ('true', '1'):
@@ -6153,13 +6338,13 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             except (ValueError, TypeError):
                 return JsonResponse({'detail': 'Invalid year filter'}, status=400)
 
-            # Apply search
+            # Apply search - include center names via HolidayCenter
             if search:
                 queryset = queryset.filter(
                     Q(name__icontains=search) |
                     Q(description__icontains=search) |
-                    Q(center__center_name__icontains=search)
-                )
+                    Q(holiday_centers__center__center_name__icontains=search)
+                ).distinct()
 
             total = queryset.count()
             total_pages = (total + page_size - 1) // page_size
@@ -6171,13 +6356,27 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
 
             items = []
             for h in holidays_page:
+                # Build centers list
+                if h.academic_holiday:
+                    centers_list = []
+                    center_id = None
+                    center_name = 'All Centers'
+                else:
+                    centers_list = [
+                        {'id': hc.center_id, 'name': hc.center.center_name}
+                        for hc in h.holiday_centers.filter(status=True).select_related('center').all()
+                    ]
+                    # For backward compatibility: use first center
+                    center_id = centers_list[0]['id'] if centers_list else None
+                    center_name = centers_list[0]['name'] if centers_list else None
                 items.append({
                     'id': h.id,
                     'name': h.name,
                     'description': h.description,
                     'academic_holiday': bool(h.academic_holiday),
-                    'center_id': h.center_id,
-                    'center_name': h.center.center_name if h.center else None,
+                    'centers': centers_list,
+                    'center_id': center_id,
+                    'center_name': center_name,
                     'start_date': h.start_date.isoformat() if h.start_date else None,
                     'end_date': h.end_date.isoformat() if h.end_date else None,
                     'created_on': h.created_on.isoformat() if h.created_on else None,
@@ -6202,14 +6401,30 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             if not holiday_id:
                 return JsonResponse({'detail': 'Holiday ID required'}, status=400)
 
-            holiday = Holidays.objects.select_related('center').get(id=holiday_id)
+            holiday = Holidays.objects.get(id=holiday_id)
+
+            # Build centers list
+            if holiday.academic_holiday:
+                centers_list = []
+                center_id = None
+                center_name = 'All Centers'
+            else:
+                centers_list = [
+                    {'id': hc.center_id, 'name': hc.center.center_name}
+                    for hc in holiday.holiday_centers.filter(status=True).select_related('center').all()
+                ]
+                # For backward compatibility: use first center
+                center_id = centers_list[0]['id'] if centers_list else None
+                center_name = centers_list[0]['name'] if centers_list else None
 
             return JsonResponse({
                 'id': holiday.id,
                 'name': holiday.name,
                 'description': holiday.description,
                 'academic_holiday': bool(holiday.academic_holiday),
-                'center_id': holiday.center_id,
+                'centers': centers_list,
+                'center_id': center_id,
+                'center_name': center_name,
                 'start_date': holiday.start_date.isoformat() if holiday.start_date else None,
                 'end_date': holiday.end_date.isoformat() if holiday.end_date else None,
                 'status': holiday.status,
@@ -6245,6 +6460,13 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
         elif Center.objects.filter(id__in=center_ids, status=True).count() != len(center_ids):
             raise ValueError('One or more centers not found')
 
+        # RegionalAdmin scoping: only their assigned centers
+        allowed = get_user_accessible_center_ids(request)
+        if allowed is not None and not academic_holiday:
+            not_allowed = [cid for cid in center_ids if cid not in allowed]
+            if not_allowed:
+                raise ValueError('You are not authorized to create holidays for center(s): ' + ', '.join(map(str, not_allowed)))
+
         start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
         end_date = None
         end_date_str = request.POST.get('end_date', '').strip()
@@ -6267,23 +6489,29 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             data = self._parse_holiday_form(request)
             user_id = request.web_user.get('user_id')
             center_ids = data.pop('center_ids')
-            # Academic: one global row (center NULL). Center holiday:
-            # one row per selected center.
-            targets = center_ids if center_ids else [None]
-            first_id = None
-            for cid in targets:
-                row = Holidays.objects.create(
-                    center_id=cid,
-                    **data,
-                    status=True,
-                    created_by=user_id,
-                    created_on=datetime.now(),
-                )
-                first_id = first_id or row.id
+            
+            # Create the master holiday row (no center_id field on Holidays anymore)
+            holiday = Holidays.objects.create(
+                **data,
+                status=True,
+                created_by=user_id,
+                created_on=datetime.now(),
+            )
+            
+            # For center-specific holidays, create HolidayCenter entries
+            if not data['academic_holiday']:
+                for cid in center_ids:
+                    HolidayCenter.objects.create(
+                        holiday=holiday,
+                        center_id=cid,
+                        created_by=user_id,
+                        created_on=datetime.now(),
+                    )
+            
             return JsonResponse({
                 'status': True,
-                'message': f'Holiday created successfully for {len(targets)} center(s)' if len(targets) > 1 else 'Holiday created successfully',
-                'holiday_id': first_id,
+                'message': f'Holiday created successfully for {len(center_ids)} center(s)' if center_ids else 'Academic holiday created successfully',
+                'holiday_id': holiday.id,
             })
         except ValueError as e:
             return JsonResponse({'detail': str(e)}, status=400)
@@ -6304,32 +6532,38 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             status_val = request.POST.get('status')
             keep_status = holiday.status if status_val is None else (status_val.lower() == 'true')
 
-            # Sync rows by name across centers (same pattern as APIS
-            # save_holidays): remove deselected, add newly selected,
-            # update the rest.
-            existing = Holidays.objects.filter(name=data['name'], status=True)
-            existing_ids = list(existing.values_list('center_id', flat=True))
-            if data['academic_holiday']:
-                # Single global row
-                Holidays.objects.filter(name=data['name'], status=True).exclude(id=holiday.id).update(status=False, updated_by=user_id, updated_on=datetime.now())
-                for field, value in data.items():
-                    setattr(holiday, field, value)
-                holiday.center_id = None
-                holiday.status = keep_status
-                holiday.updated_by = user_id
-                holiday.updated_on = datetime.now()
-                holiday.save()
-            else:
-                for cid in [c for c in existing_ids if c not in center_ids]:
-                    Holidays.objects.filter(name=data['name'], center_id=cid, status=True).update(status=False, updated_by=user_id, updated_on=datetime.now())
-                for cid in center_ids:
-                    if cid in existing_ids:
-                        Holidays.objects.filter(name=data['name'], center_id=cid, status=True).update(**data, status=keep_status, updated_by=user_id, updated_on=datetime.now())
-                    else:
-                        Holidays.objects.create(center_id=cid, **data, status=keep_status, created_by=user_id, created_on=datetime.now())
-                # Ensure the edited row itself reflects the form
-                # (it may have been soft-deleted above if its center
-                # was deselected - in that case it is re-created).
+            # Update the master holiday row
+            for field, value in data.items():
+                setattr(holiday, field, value)
+            holiday.status = keep_status
+            holiday.updated_by = user_id
+            holiday.updated_on = datetime.now()
+            holiday.save()
+
+            if not data['academic_holiday']:
+                # Center-specific: sync HolidayCenter entries
+                existing_center_ids = set(holiday.holiday_centers.filter(status=True).values_list('center_id', flat=True))
+                new_center_ids = set(center_ids)
+
+                # Remove centers no longer in list (soft delete)
+                to_remove = existing_center_ids - new_center_ids
+                if to_remove:
+                    HolidayCenter.objects.filter(holiday=holiday, center_id__in=to_remove).update(
+                        status=False,
+                        updated_by=user_id,
+                        updated_on=datetime.now()
+                    )
+
+                # Add new centers
+                to_add = new_center_ids - existing_center_ids
+                for cid in to_add:
+                    HolidayCenter.objects.create(
+                        holiday=holiday,
+                        center_id=cid,
+                        created_by=user_id,
+                        created_on=datetime.now(),
+                    )
+
             return JsonResponse({'status': True, 'message': 'Holiday updated successfully'})
         except Holidays.DoesNotExist:
             return JsonResponse({'detail': 'Holiday not found'}, status=404)
@@ -6339,7 +6573,7 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             return JsonResponse({'detail': str(e)}, status=500)
 
     def _delete_holiday_api(self, request):
-        """Soft delete a holiday"""
+        """Soft delete a holiday (marks master row and all HolidayCenter entries inactive)"""
         log_web_activity(request, 'DELETE', 'Holidays', data=dict(request.POST))
         try:
             holiday_id = request.POST.get('id')
@@ -6350,6 +6584,12 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             holiday.updated_by = request.web_user.get('user_id')
             holiday.updated_on = datetime.now()
             holiday.save()
+            # Also soft-delete related HolidayCenter entries
+            HolidayCenter.objects.filter(holiday=holiday).update(
+                status=False,
+                updated_by=request.web_user.get('user_id'),
+                updated_on=datetime.now()
+            )
             return JsonResponse({'status': True, 'message': 'Holiday deleted successfully'})
         except Holidays.DoesNotExist:
             return JsonResponse({'detail': 'Holiday not found'}, status=404)
@@ -6371,7 +6611,7 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
         dropdown. Years are single years like 2025, 2026."""
         try:
             years = list(
-                Holidays.objects.annotate(year=ExtractYear('start_date'))
+                Holidays.objects.filter(status=True).annotate(year=ExtractYear('start_date'))
                 .values_list('year', flat=True).distinct().order_by('-year')
             )
             years = [y for y in years if y]

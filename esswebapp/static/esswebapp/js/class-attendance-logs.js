@@ -22,7 +22,8 @@ const state = {
     totalLogs: 0,
     totalPages: 0,
     currentMap: null,
-    currentMapMarker: null
+    currentMapMarker: null,
+    currentTab: 'holidays' // 'holidays' or 'teacher-leaves'
 };
 
 // ── Google Maps Async Loading ─────────────────────────────────────
@@ -61,7 +62,20 @@ const els = {
     get mapModal() { return document.getElementById('map-modal'); },
     get mapClassName() { return document.getElementById('map-modal-class-name'); },
     get mapCenterInfo() { return document.getElementById('map-modal-center-info'); },
-    get mapCoordinates() { return document.getElementById('map-modal-coordinates'); }
+    get mapCoordinates() { return document.getElementById('map-modal-coordinates'); },
+    get holidayCount() { return document.getElementById('count-holiday'); },
+    get teacherLeaveCount() { return document.getElementById('count-teacher-leave'); },
+    get holidayDetailModal() { return document.getElementById('holiday-detail-modal'); },
+    get holidayDetailDate() { return document.getElementById('holiday-detail-date'); },
+    get holidayDetailTbody() { return document.getElementById('holiday-detail-tbody'); },
+    get holidayDetailEmpty() { return document.getElementById('holiday-detail-empty'); },
+    get teacherLeaveDetailModal() { return document.getElementById('teacher-leave-detail-modal'); },
+    get teacherLeaveDetailDate() { return document.getElementById('teacher-leave-detail-date'); },
+    get teacherLeaveDetailTbody() { return document.getElementById('teacher-leave-detail-tbody'); },
+    get teacherLeaveDetailEmpty() { return document.getElementById('teacher-leave-detail-empty'); },
+    get studentDetailModal() { return document.getElementById('student-detail-modal'); },
+    get studentDetailTitle() { return document.getElementById('student-detail-title'); },
+    get studentDetailBody() { return document.getElementById('student-detail-body'); }
 };
 
 // Summary counter element IDs
@@ -241,12 +255,14 @@ function openModal(modal) {
 }
 
 function closeModal(modal) {
-    if (!modal) return;
-    modal.classList.remove('active');
+    // Accept either a DOM element or a modal ID string (for compatibility with common.js)
+    const modalEl = typeof modal === 'string' ? document.getElementById(modal) : modal;
+    if (!modalEl) return;
+    modalEl.classList.remove('active');
     document.body.style.overflow = '';
     
     // Clean up map if closing map modal
-    if (modal === els.mapModal && state.currentMap) {
+    if (modalEl === els.mapModal && state.currentMap) {
         state.currentMap = null;
         state.currentMapMarker = null;
     }
@@ -265,6 +281,12 @@ async function init() {
     await loadCenterDropdown();
     await loadTeacherDropdown();
     await fetchAndRender();
+    
+    // Fetch holiday and teacher leave counts for default date
+    if (state.date) {
+        fetchHolidayAndLeaveCounts(state.date);
+    }
+    
     bindEvents();
 }
 
@@ -283,6 +305,7 @@ function bindEvents() {
             state.page = 1;
             state.date = els.date.value;
             fetchAndRender();
+            fetchHolidayAndLeaveCounts(state.date);
         });
     }
     
@@ -796,6 +819,146 @@ window.closeStudentDetailModal = function() {
     const modal = document.getElementById('student-detail-modal');
     closeModal(modal);
 };
+
+// ── Holiday & Teacher Leave Detail Functions ──────────────────────
+async function fetchHolidayAndLeaveCounts(date) {
+    if (!date) {
+        if (els.holidayCount) els.holidayCount.textContent = '0';
+        if (els.teacherLeaveCount) els.teacherLeaveCount.textContent = '0';
+        return;
+    }
+    
+    try {
+        const holidaysRes = await fetch('/attendance/class-logs/?action=holidays_on_date&date=' + date, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const holidaysData = await holidaysRes.json();
+        if (els.holidayCount) els.holidayCount.textContent = holidaysData.count || 0;
+        
+        const leavesRes = await fetch('/attendance/class-logs/?action=teacher_leaves_on_date&date=' + date, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const leavesData = await leavesRes.json();
+        if (els.teacherLeaveCount) els.teacherLeaveCount.textContent = leavesData.count || 0;
+    } catch (e) {
+        console.error('Failed to fetch holiday/leave counts:', e);
+        if (els.holidayCount) els.holidayCount.textContent = '0';
+        if (els.teacherLeaveCount) els.teacherLeaveCount.textContent = '0';
+    }
+}
+
+window.openHolidayDetailModal = async function() {
+    const date = els.date ? els.date.value : '';
+    if (!date) {
+        showToast('Please select a date first', 'warning');
+        return;
+    }
+    
+    if (els.holidayDetailDate) els.holidayDetailDate.textContent = formatDateForDisplay(date);
+    if (els.holidayDetailTbody) els.holidayDetailTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">Loading...</td></tr>';
+    if (els.holidayDetailEmpty) els.holidayDetailEmpty.style.display = 'none';
+    
+    openModal(els.holidayDetailModal);
+    
+    try {
+        const res = await fetch('/attendance/class-logs/?action=holidays_on_date&date=' + date + '&detail=1', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        
+        if (data.holidays && data.holidays.length > 0) {
+            if (els.holidayDetailTbody) {
+                els.holidayDetailTbody.innerHTML = data.holidays.map(h => 
+                    '<tr>' +
+                    '<td>' + escapeHtml(h.name) + '</td>' +
+                    '<td>' + escapeHtml(h.description || '-') + '</td>' +
+                    '<td><span class="badge badge-' + (h.type === 'academic' ? 'info' : 'warning') + '">' + (h.type === 'academic' ? 'Academic' : 'Center') + '</span></td>' +
+                    '<td>' + escapeHtml(h.center_names ? h.center_names.join(', ') : (h.type === 'academic' ? 'All Centers' : '-')) + '</td>' +
+                    '<td>' + h.start_date + '</td>' +
+                    '<td>' + h.end_date + '</td>' +
+                    '<td>' + escapeHtml(h.regional_admins ? h.regional_admins.join(', ') : '-') + '</td>' +
+                    '<td>' + escapeHtml(h.teachers ? h.teachers.join(', ') : '-') + '</td>' +
+                    '</tr>'
+                ).join('');
+            }
+        } else {
+            if (els.holidayDetailTbody) els.holidayDetailTbody.innerHTML = '';
+            if (els.holidayDetailEmpty) els.holidayDetailEmpty.style.display = 'block';
+        }
+    } catch (e) {
+        console.error('Failed to load holiday details:', e);
+        if (els.holidayDetailTbody) els.holidayDetailTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:#dc2626;">Failed to load</td></tr>';
+    }
+};
+
+window.closeHolidayDetailModal = function() {
+    closeModal(els.holidayDetailModal);
+};
+
+window.openTeacherLeaveDetailModal = async function() {
+    const date = els.date ? els.date.value : '';
+    if (!date) {
+        showToast('Please select a date first', 'warning');
+        return;
+    }
+    
+    if (els.teacherLeaveDetailDate) els.teacherLeaveDetailDate.textContent = formatDateForDisplay(date);
+    if (els.teacherLeaveDetailTbody) els.teacherLeaveDetailTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px;">Loading...</td></tr>';
+    if (els.teacherLeaveDetailEmpty) els.teacherLeaveDetailEmpty.style.display = 'none';
+    
+    openModal(els.teacherLeaveDetailModal);
+    
+    try {
+        const res = await fetch('/attendance/class-logs/?action=teacher_leaves_on_date&date=' + date + '&detail=1', {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        
+        if (data.leaves && data.leaves.length > 0) {
+            if (els.teacherLeaveDetailTbody) {
+                els.teacherLeaveDetailTbody.innerHTML = data.leaves.map(l => 
+                    '<tr>' +
+                    '<td>' + escapeHtml(l.teacher_name) + '</td>' +
+                    '<td>' + escapeHtml(l.center_name) + '</td>' +
+                    '<td>' + escapeHtml(l.name) + '</td>' +
+                    '<td>' + escapeHtml(l.description || '-') + '</td>' +
+                    '<td>' + l.start_date + '</td>' +
+                    '<td>' + l.end_date + '</td>' +
+                    '<td><span class="badge badge-' + (l.approval_status === 'approved' ? 'success' : l.approval_status === 'pending' ? 'warning' : 'danger') + '">' + l.approval_status + '</span></td>' +
+                    '<td>' + (l.continuous_days || 0) + '</td>' +
+                    '</tr>'
+                ).join('');
+            }
+        } else {
+            if (els.teacherLeaveDetailTbody) els.teacherLeaveDetailTbody.innerHTML = '';
+            if (els.teacherLeaveDetailEmpty) els.teacherLeaveDetailEmpty.style.display = 'block';
+        }
+    } catch (e) {
+        console.error('Failed to load teacher leave details:', e);
+        if (els.teacherLeaveDetailTbody) els.teacherLeaveDetailTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:#dc2626;">Failed to load</td></tr>';
+    }
+};
+
+window.closeTeacherLeaveDetailModal = function() {
+    closeModal(els.teacherLeaveDetailModal);
+};
+
+function formatDateForDisplay(dateStr) {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function escapeHtml(text) {
+    if (!text) return '-';
+    return String(text)
+        .replace(/&/g, '&')
+        .replace(/</g, '<')
+        .replace(/>/g, '>')
+        .replace(/"/g, '"')
+        .replace(/'/g, '&#039;');
+}
 
 // ── Location Map Modal ────────────────────────────────────────────
 window.openLocationMap = function(centerId, centerName, latitude, longitude) {

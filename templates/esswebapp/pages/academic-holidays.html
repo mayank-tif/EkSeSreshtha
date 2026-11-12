@@ -129,9 +129,28 @@
 
                 <div class="form-group" id="holiday-center-group">
                     <label class="form-label" for="holiday-center">Center</label>
-                    <select id="holiday-center" class="form-select" name="center_id" multiple size="6">
-                    </select>
-                    <div class="form-hint">Hold Ctrl (or Cmd) to select multiple centers.</div>
+                    <!-- Custom Multi-Select Dropdown -->
+                    <div class="custom-multiselect" id="holiday-center-multiselect">
+                        <button type="button" class="custom-multiselect-trigger" id="holiday-center-trigger" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="custom-multiselect-placeholder">Select centers...</span>
+                            <svg class="custom-multiselect-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                        </button>
+                        <div class="custom-multiselect-panel" id="holiday-center-panel" role="listbox" aria-hidden="true">
+                            <div class="custom-multiselect-search">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                                <input type="text" class="custom-multiselect-search-input" id="holiday-center-search" placeholder="Search centers..." aria-label="Search centers">
+                            </div>
+                            <div class="custom-multiselect-options" id="holiday-center-options" role="listbox">
+                                <!-- Options populated via JS -->
+                            </div>
+                            <div class="custom-multiselect-footer">
+                                <button type="button" class="btn btn-sm btn-secondary" id="holiday-center-clear">Clear</button>
+                                <button type="button" class="btn btn-sm btn-primary" id="holiday-center-done">Done</button>
+                            </div>
+                        </div>
+                        <input type="hidden" name="center_id" id="holiday-center-values">
+                    </div>
+                    <div class="form-hint">Select one or more centers.</div>
                 </div>
 
                 <div class="form-group">

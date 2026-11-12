@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 import uuid
-from django.db.models import OuterRef, Prefetch, Subquery, Count, Q
+from django.db.models import Prefetch, OuterRef, Prefetch, Subquery, Count, Q
 from .models import *
 from django.db import IntegrityError, connection, transaction
 from .utils import *
@@ -762,6 +762,7 @@ def get_all_center_attendance(user_id, date, offset, limit):
             if center_type == 2:
                 holiday = Holidays.objects.filter(
                     center_id=center.id,
+                    status=True,
                     start_date__date__lte=date_obj,
                     end_date__date__gte=date_obj
                 ).first()
@@ -2526,16 +2527,21 @@ def save_class(class_data, request):
     try:
         class_enrolment_id = class_data.get("classEnrolmentId")
         center_id = class_data.get("centerId")
+        teacher_user_id = class_data.get("userId")  # Teacher's User ID
         today = datetime.now().date()
         print(center_id, today)
 
-        # Check holiday/Sunday for today
-        is_blocked, reason = check_holiday_and_sunday(center_id, today)
+        # Comprehensive check for class start conditions
+        is_blocked, reason, details = check_class_start_conditions(center_id, teacher_user_id, today)
         if is_blocked:
             if reason == 'sunday':
                 return {'status': False, 'error': 'Cannot start class on Sunday', 'code': -18}
-            elif reason == 'holiday':
-                return {'status': False, 'error': 'Cannot start class on holiday', 'code': -19}
+            elif reason == 'academic_holiday':
+                return {'status': False, 'error': details['message'], 'code': -19}
+            elif reason == 'center_holiday':
+                return {'status': False, 'error': details['message'], 'code': -20}
+            elif reason == 'teacher_leave':
+                return {'status': False, 'error': details['message'], 'code': -21}
         
         with transaction.atomic():
             # Check if class already exists for today
@@ -4023,7 +4029,7 @@ def get_max_allowed_teacher_holidays():
 
 def count_continuous_working_days(start_date, end_date):
     """Count working days in [start_date, end_date] excluding
-    Saturday, Sunday and active AcademicHoliday days.
+    Saturday, Sunday and active Holidays (academic + center) days.
 
     Accepts datetime or date; end defaults to start when missing.
     Returns the number of continuous working days (0 if range empty).
@@ -4035,19 +4041,20 @@ def count_continuous_working_days(start_date, end_date):
     if end < start:
         start, end = end, start
 
-    academic_days = set()
+    holiday_days = set()
+    # Query all active holidays (both academic and center-specific)
     for h in Holidays.objects.filter(status=True, start_date__date__lte=end, end_date__date__gte=start):
         s = h.start_date.date() if h.start_date else start
         e = h.end_date.date() if h.end_date else s
         day = max(s, start)
         while day <= min(e, end):
-            academic_days.add(day)
+            holiday_days.add(day)
             day += timedelta(days=1)
 
     count = 0
     day = start
     while day <= end:
-        if day.weekday() < 5 and day not in academic_days:  # Mon-Fri
+        if day.weekday() < 5 and day not in holiday_days:  # Mon-Fri
             count += 1
         day += timedelta(days=1)
     return count
@@ -4077,7 +4084,7 @@ def teacher_info_map():
 
 
 def save_holidays(holidays_data):
-    """Save or update holidays"""
+    """Save or update holidays (uses HolidayCenter junction table for center-specific)."""
     logger.info(f"HolidaysHelper : SaveHolidays : Started")
     
     try:
@@ -4093,13 +4100,13 @@ def save_holidays(holidays_data):
         elif list_center_ids:
             center_ids = [int(list_center_ids)]
         
-        # Academic holidays are global (for all centers) - a single
-        # row with center_id NULL. Center holidays need center ids.
+        # Academic holidays are global (for all centers) - single row,
+        # no HolidayCenter entries. Center holidays need center ids.
         academic_holiday = bool(holidays_data.get('AcademicHoliday', False))
         if academic_holiday:
-            center_ids = [None]
+            center_ids = []  # No centers for academic holidays
         elif not center_ids:
-            logger.error("No valid center IDs provided")
+            logger.error("No valid center IDs provided for center holiday")
             return None
         
         # Get values
@@ -4110,63 +4117,71 @@ def save_holidays(holidays_data):
         status = holidays_data.get('Status')
         created_by = holidays_data.get('CreatedBy')
         created_on = holidays_data.get('CreatedOn') or datetime.now()
-
+        
         if holiday_id > 0:
-            # Get existing holidays with same name
-            existing_holidays = Holidays.objects.filter(name=name, status=True)
-            existing_center_ids = list(existing_holidays.values_list('center_id', flat=True))
+            # Get existing holiday by name (single row per name for center holidays)
+            holiday = Holidays.objects.filter(id=holiday_id).first()
+            if not holiday:
+                logger.error(f"Holiday with name '{name}' not found for update")
+                return None
             
-            # Remove holidays that are not in the new list - soft delete
-            center_ids_to_remove = [cid for cid in existing_center_ids if cid not in center_ids]
-            if center_ids_to_remove:
-                Holidays.objects.filter(name=name, center_id__in=center_ids_to_remove).update(
-                    status=False,
-                    updated_on=datetime.now(),
-                    updated_by=created_by
-                )
+            # Update the master holiday row
+            holiday.name = name
+            holiday.start_date = start_date
+            holiday.end_date = end_date
+            holiday.description = description
+            holiday.status = status
+            holiday.academic_holiday = academic_holiday
+            holiday.updated_on = datetime.now()
+            holiday.updated_by = created_by
+            holiday.save()
             
-            # Add new holidays
-            center_ids_to_add = [cid for cid in center_ids if cid not in existing_center_ids]
-            for center_id in center_ids_to_add:
-                Holidays.objects.create(
-                    start_date=start_date,
-                    end_date=end_date,
-                    name=name,
-                    description=description,
-                    status=status,
-                    center_id=center_id,
-                    academic_holiday=academic_holiday,
-                    created_on=created_on,
-                    created_by=created_by
-                )
-
-            # Update existing holidays
-            for center_id in existing_center_ids:
-                if center_id in center_ids:
-                    Holidays.objects.filter(name=name, center_id=center_id).update(
-                        start_date=start_date,
-                        end_date=end_date,
-                        name=name,
-                        description=description,
-                        status=status,
-                        academic_holiday=academic_holiday,
+            if not academic_holiday:
+                # Sync HolidayCenter entries for center-specific holiday (only active)
+                existing_center_ids = set(holiday.holiday_centers.filter(status=True).values_list('center_id', flat=True))
+                new_center_ids = set(center_ids)
+                
+                # Remove centers no longer in list (soft delete)
+                to_remove = existing_center_ids - new_center_ids
+                if to_remove:
+                    HolidayCenter.objects.filter(holiday=holiday, center_id__in=to_remove).update(
+                        status=False,
+                        updated_by=created_by,
                         updated_on=datetime.now()
                     )
+                
+                # Add new centers
+                to_add = new_center_ids - existing_center_ids
+                for cid in to_add:
+                    HolidayCenter.objects.create(
+                        holiday=holiday,
+                        center_id=cid,
+                        created_by=created_by,
+                        created_on=datetime.now(),
+                    )
         else:
-            # Insert new holidays
-            for center_id in center_ids:
-                Holidays.objects.create(
-                    start_date=start_date,
-                    end_date=end_date,
-                    name=name,
-                    description=description,
-                    status=status,
-                    center_id=center_id,
-                    academic_holiday=academic_holiday,
-                    created_on=created_on,
-                    created_by=created_by
-                )
-
+            # Insert new holiday
+            holiday = Holidays.objects.create(
+                start_date=start_date,
+                end_date=end_date,
+                name=name,
+                description=description,
+                status=status,
+                academic_holiday=academic_holiday,
+                created_on=created_on,
+                created_by=created_by,
+            )
+            
+            if not academic_holiday:
+                # Create HolidayCenter entries for each center
+                for cid in center_ids:
+                    HolidayCenter.objects.create(
+                        holiday=holiday,
+                        center_id=cid,
+                        created_by=created_by,
+                        created_on=created_on,
+                    )
+        
         logger.info(f"HolidaysHelper : SaveHolidays : End")
         return {
             'status': True,
@@ -4176,42 +4191,23 @@ def save_holidays(holidays_data):
     except Exception as e:
         logger.error(f"HolidaysHelper : SaveHolidays : {str(e)}")
         raise e
-    
-def get_all_holidays_by_teacher_id(teacher_id):
-    """Get all holidays by teacher ID"""
-    logger.info(f"HolidaysHelper : GetAllHolidaysByTeacherId : Started")
-    
-    try:
-        today = datetime.now().date()
-        holidays = Holidays.objects.filter(
-            center__assigned_teachers=teacher_id,
-            start_date__date__gte=today,
-            end_date__date__lte=today,
-            status=True
-        ).select_related('center')
-        
-        result = []
-        for h in holidays:
-            result.append({
-                'Id': h.id,
-                'Name': h.name,
-                'CenterId': h.center_id,
-                'Description': h.description
-            })
-        return result
-            
-    except Exception as e:
-        logger.error(f"HolidaysHelper : GetAllHolidaysByTeacherId : {str(e)}")
-        raise e
 
 def get_all_holidays_by_year(year):
     """Get all holidays by year"""
     logger.info(f"HolidaysHelper : GetAllHolidaysByYear : Started")
     
     try:
-        holidays = Holidays.objects.filter(start_date__year=year).select_related('center')
+        holidays = Holidays.objects.filter(status=True, start_date__year=year).prefetch_related(Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center')))
         result = []
         for h in holidays:
+            # Build centers list
+            if h.academic_holiday:
+                centers_list = []
+            else:
+                centers_list = [
+                    {'id': hc.center_id, 'name': hc.center.center_name}
+                    for hc in h.holiday_centers.filter(status=True).select_related('center').all()
+                ]
             result.append({
                 'Id': h.id,
                 'Name': h.name,
@@ -4219,7 +4215,7 @@ def get_all_holidays_by_year(year):
                 'Status': h.status,
                 'StartDate': h.start_date,
                 'EndDate': h.end_date,
-                'CenterId': h.center_id,
+                'Centers': centers_list,
                 'CreatedOn': h.created_on,
                 'CreatedBy': h.created_by,
                 'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
@@ -4233,13 +4229,18 @@ def get_all_holidays_by_year(year):
         raise e
 
 def get_all_holidays_by_center_id(center_id):
-    """Get all holidays by center ID"""
+    """Get all holidays by center ID (via HolidayCenter junction)"""
     logger.info(f"HolidaysHelper : GetAllHolidaysByCenterId : Started")
     
     try:
-        holidays = Holidays.objects.filter(center_id=center_id).select_related('center')
+        # Query through HolidayCenter junction
+        holidays = Holidays.objects.filter(status=True, holiday_centers__center_id=center_id).prefetch_related(Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center'))).distinct()
         result = []
         for h in holidays:
+            centers_list = [
+                {'id': hc.center_id, 'name': hc.center.center_name}
+                for hc in h.holiday_centers.filter(status=True).select_related('center').all()
+            ]
             result.append({
                 'Id': h.id,
                 'Name': h.name,
@@ -4247,7 +4248,7 @@ def get_all_holidays_by_center_id(center_id):
                 'Status': h.status,
                 'StartDate': h.start_date,
                 'EndDate': h.end_date,
-                'CenterId': h.center_id,
+                'Centers': centers_list,
                 'CreatedOn': h.created_on,
                 'CreatedBy': h.created_by,
                 'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
@@ -4270,18 +4271,26 @@ def get_all_holidays(status, user_id=0):
         
         if user_id == 0:
             # SuperAdmin - get all holidays
-            queryset = Holidays.objects.filter(status=True).select_related('center').order_by('start_date')
+            queryset = Holidays.objects.filter(status=True).prefetch_related(Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center'))).order_by('start_date')
             if status != 1:
                 # Upcoming holidays
                 queryset = queryset.filter(start_date__date__gte=today)
         else:
             # Regional Admin - filter by created_by
-            queryset = Holidays.objects.filter(status=True).filter(created_by=user_id).select_related('center').order_by('start_date')
+            queryset = Holidays.objects.filter(status=True).filter(created_by=user_id).prefetch_related(Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center'))).order_by('start_date')
             if status != 1:
                 # Upcoming holidays
                 queryset = queryset.filter(start_date__date__gte=today)
         
         for h in queryset:
+            # Build centers list
+            if h.academic_holiday:
+                centers_list = []
+            else:
+                centers_list = [
+                    {'id': hc.center_id, 'name': hc.center.center_name}
+                    for hc in h.holiday_centers.filter(status=True).select_related('center').all()
+            ]
             result.append({
                 'Id': h.id,
                 'Name': h.name,
@@ -4289,8 +4298,7 @@ def get_all_holidays(status, user_id=0):
                 'EndDate': h.end_date,
                 'CreatedBy': h.created_by,
                 'CreatedOn': h.created_on,
-                'CenterId': h.center_id,
-                'CenterName': h.center.center_name if h.center else None,
+                'Centers': centers_list,
                 'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
                 'TeacherName': teacher_info_map().get(h.created_by, {}).get('teacher_name'),
                 'AcademicHoliday': bool(h.academic_holiday),
@@ -4301,6 +4309,29 @@ def get_all_holidays(status, user_id=0):
     except Exception as e:
         logger.error(f"HolidaysHelper : GetAllHolidays : {str(e)}")
         raise e
+
+
+def get_all_holidays_by_teacher_id(teacher_id):
+    """Get all holidays for a teacher's assigned center"""
+    logger.info(f"HolidaysHelper : GetAllHolidaysByTeacherId : Started")
+    
+    try:
+        # Get teacher's center
+        teacher = Teacher.objects.filter(id=teacher_id, status=True).first()
+        if not teacher:
+            return []
+        
+        center_id = get_center_by_user_id(teacher.user_id) if teacher.user_id else None
+        if not center_id:
+            return []
+        
+        # Use existing center-specific function
+        return get_all_holidays_by_center_id(center_id)
+            
+    except Exception as e:
+        logger.error(f"HolidaysHelper : GetAllHolidaysByTeacherId : {str(e)}")
+        raise e
+
 
 def save_teacher_leave(leave_data):
     """Save or update a teacher leave (TeacherLeaves table).
@@ -4485,7 +4516,7 @@ def get_teacher_leaves(center_id=None, teacher_id=None, approval_status=None, se
 
 
 def delete_holiday_by_id(holiday_id):
-    """Soft delete holiday by ID - set status to False"""
+    """Soft delete holiday by ID - set status to False and soft delete HolidayCenter entries"""
     logger.info(f"HolidaysHelper : DeleteHolidayById : Started")
     
     try:
@@ -4498,6 +4529,12 @@ def delete_holiday_by_id(holiday_id):
         holiday.status = False
         holiday.updated_on = datetime.now()
         holiday.save()
+        
+        # Also soft delete related HolidayCenter entries
+        HolidayCenter.objects.filter(holiday=holiday).update(
+            status=False,
+            updated_on=datetime.now()
+        )
         
         logger.info(f"HolidaysHelper : DeleteHolidayById : End")
         return {'id': holiday_id, 'deleted': True}
@@ -5180,6 +5217,7 @@ def get_all_schools():
 def check_holiday_and_sunday(center_id, check_date):
     """
     Check if given date is a holiday or Sunday for the center.
+    Used for student attendance marking.
     
     Args:
         center_id: Center ID
@@ -5197,18 +5235,109 @@ def check_holiday_and_sunday(center_id, check_date):
     if not ATTENDANCE_SKIP_SUNDAY_CHECK and check_date.weekday() == 6:
         return True, 'sunday'
     
-    # Check holiday
-    holiday = Holidays.objects.filter(
-        center_id=center_id,
+    # Check academic holiday (global - applies to all centers)
+    academic_holiday = Holidays.objects.filter(
+        academic_holiday=True,
         status=True,
-        start_date__date__lte=check_date,
-        end_date__date__gte=check_date
+        start_date__date__gte=check_date,
+        end_date__date__lte=check_date
+    ).first()
+    
+    if academic_holiday:
+        return True, 'holiday'
+    
+    # Check center-specific holiday (via HolidayCenter junction table)
+    holiday = Holidays.objects.filter(
+        holiday_centers__center_id=center_id,
+        academic_holiday=False,
+        status=True,
+        start_date__date__gte=check_date,
+        end_date__date__lte=check_date
     ).first()
     
     if holiday:
         return True, 'holiday'
     
     return False, None
+
+
+def check_class_start_conditions(center_id, teacher_user_id, check_date):
+    """
+    Comprehensive check before starting a class.
+    Validates:
+    1. Sunday (if not skipped)
+    2. Academic holiday (global - applies to all centers)
+    3. Center-specific holiday (via HolidayCenter junction table)
+    4. Teacher leave (approved or pending, not rejected)
+    
+    Args:
+        center_id: Center ID
+        teacher_user_id: Teacher's User ID (from token/request)
+        check_date: datetime.date or datetime.datetime object
+    
+    Returns:
+        tuple: (is_blocked, reason, details)
+        - is_blocked: True if class cannot start
+        - reason: 'sunday', 'academic_holiday', 'center_holiday', 'teacher_leave', or None
+        - details: Additional info dict (holiday name, leave details, etc.)
+    """
+    if isinstance(check_date, datetime):
+        check_date = check_date.date()
+    
+    # 1. Check Sunday (weekday 6 = Sunday)
+    if not ATTENDANCE_SKIP_SUNDAY_CHECK and check_date.weekday() == 6:
+        return True, 'sunday', {'message': 'Cannot start class on Sunday'}
+    
+    # 2. Check academic holiday (global - applies to all centers)
+    academic_holiday = Holidays.objects.filter(
+        academic_holiday=True,
+        status=True,
+        start_date__date__gte=check_date,
+        end_date__date__lte=check_date
+    ).first()
+    
+    if academic_holiday:
+        return True, 'academic_holiday', {
+            'message': f'Academic holiday: {academic_holiday.name}',
+            'holiday_name': academic_holiday.name,
+            'holiday_id': academic_holiday.id
+        }
+    
+    # 3. Check center-specific holiday (via HolidayCenter junction table)
+    center_holiday = Holidays.objects.filter(
+        holiday_centers__center_id=center_id,
+        academic_holiday=False,
+        status=True,
+        start_date__date__gte=check_date,
+        end_date__date__lte=check_date
+    ).first()
+    
+    if center_holiday:
+        return True, 'center_holiday', {
+            'message': f'Center holiday: {center_holiday.name}',
+            'holiday_name': center_holiday.name,
+            'holiday_id': center_holiday.id
+        }
+    
+    # 4. Check teacher leave (approved or pending, not rejected)
+    # TeacherLeaves.created_by stores the User ID of the applying teacher
+    teacher_leave = TeacherLeaves.objects.filter(
+        created_by=teacher_user_id,
+        status=True,
+        approval_status__in=['approved', 'pending'],
+        start_date__date__gte=check_date,
+        end_date__date__lte=check_date
+    ).first()
+    
+    if teacher_leave:
+        return True, 'teacher_leave', {
+            'message': f'Teacher leave: {teacher_leave.name} ({teacher_leave.approval_status})',
+            'leave_name': teacher_leave.name,
+            'leave_id': teacher_leave.id,
+            'approval_status': teacher_leave.approval_status
+        }
+    
+    return False, None, None
 
 
 #---------------------------------------------------------

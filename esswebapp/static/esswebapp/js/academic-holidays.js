@@ -17,6 +17,7 @@ function initializePage() {
     // Type + Center + Year filter dropdowns
     initCenterFilter();
     initYearFilter();
+    initCustomMultiselect();
     
     // Load holidays list
     loadHolidays();
@@ -112,22 +113,27 @@ function initCenterFilter() {
 
 let modalCentersLoaded = false;
 function loadModalCenters() {
-    const select = document.getElementById('holiday-center');
-    if (!select || modalCentersLoaded) return;
+    const optionsContainer = document.getElementById('holiday-center-options');
+    const hiddenInput = document.getElementById('holiday-center-values');
+    if (!optionsContainer || modalCentersLoaded) return;
+    
     apiCall('centers')
         .then(data => {
-            const currentVals = Array.from(select.selectedOptions).map(o => o.value);
-            select.innerHTML = '';
+            const currentVals = hiddenInput.value ? hiddenInput.value.split(',') : [];
+            optionsContainer.innerHTML = '';
+            
             (data.results || []).forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = c.center_name;
-                select.appendChild(opt);
+                const isSelected = currentVals.includes(String(c.id));
+                const label = document.createElement('label');
+                label.className = 'custom-multiselect-option';
+                label.innerHTML = `
+                    <input type="checkbox" value="${c.id}" ${isSelected ? 'checked' : ''}>
+                    <span>${escapeHtml(c.center_name)}</span>
+                `;
+                optionsContainer.appendChild(label);
             });
-            currentVals.forEach(v => {
-                const opt = select.querySelector(`option[value="${v}"]`);
-                if (opt) opt.selected = true;
-            });
+            
+            updateMultiselectTrigger();
             modalCentersLoaded = true;
         })
         .catch(err => console.error('Failed to load centers:', err));
@@ -136,10 +142,178 @@ function loadModalCenters() {
 function toggleCenterGroup() {
     const academic = document.getElementById('holiday-academic');
     const group = document.getElementById('holiday-center-group');
-    const centerSelect = document.getElementById('holiday-center');
     if (!academic || !group) return;
     // Academic holiday = global (all centers): hide center selector
     group.style.display = academic.checked ? 'none' : 'block';
+}
+
+// Custom Multi-Select Dropdown Functions
+function initCustomMultiselect() {
+    const trigger = document.getElementById('holiday-center-trigger');
+    const panel = document.getElementById('holiday-center-panel');
+    const searchInput = document.getElementById('holiday-center-search');
+    const clearBtn = document.getElementById('holiday-center-clear');
+    const doneBtn = document.getElementById('holiday-center-done');
+    const optionsContainer = document.getElementById('holiday-center-options');
+    
+    if (!trigger || !panel) return;
+    
+    // Move panel to body to avoid modal overflow clipping
+    document.body.appendChild(panel);
+    
+    function positionPanel() {
+        requestAnimationFrame(() => {
+            const rect = trigger.getBoundingClientRect();
+            panel.style.position = 'fixed';
+            panel.style.top   = rect.bottom + 'px';   // NO window.scrollY
+            panel.style.left  = rect.left   + 'px';   // NO window.scrollX
+            panel.style.width = rect.width  + 'px';
+            panel.style.zIndex = '9999';
+        });
+    }
+    
+    // Toggle panel on trigger click
+    trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = panel.classList.toggle('open');
+        trigger.setAttribute('aria-expanded', isOpen);
+        panel.setAttribute('aria-hidden', !isOpen);
+        if (isOpen) {
+            positionPanel();
+            searchInput.focus();
+            // Reposition on scroll/resize
+            window.addEventListener('scroll', positionPanel, { passive: true });
+            window.addEventListener('resize', positionPanel);
+        } else {
+            window.removeEventListener('scroll', positionPanel);
+            window.removeEventListener('resize', positionPanel);
+        }
+    });
+    
+    // Close panel when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!trigger.contains(e.target) && !panel.contains(e.target)) {
+            panel.classList.remove('open');
+            trigger.setAttribute('aria-expanded', 'false');
+            panel.setAttribute('aria-hidden', 'true');
+            window.removeEventListener('scroll', positionPanel);
+            window.removeEventListener('resize', positionPanel);
+        }
+    });
+    
+    // Search filter
+    searchInput.addEventListener('input', () => {
+        const search = searchInput.value.toLowerCase();
+        optionsContainer.querySelectorAll('.custom-multiselect-option').forEach(opt => {
+            const text = opt.textContent.toLowerCase();
+            opt.style.display = text.includes(search) ? '' : 'none';
+        });
+    });
+    
+    // Clear all selections
+    clearBtn.addEventListener('click', () => {
+        optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+        });
+        updateMultiselectTrigger();
+    });
+    
+    // Done button - close panel
+    doneBtn.addEventListener('click', () => {
+        panel.classList.remove('open');
+        trigger.setAttribute('aria-expanded', 'false');
+        panel.setAttribute('aria-hidden', 'true');
+        window.removeEventListener('scroll', positionPanel);
+        window.removeEventListener('resize', positionPanel);
+    });
+    
+    // Handle checkbox changes
+    optionsContainer.addEventListener('change', (e) => {
+        if (e.target.type === 'checkbox') {
+            updateMultiselectTrigger();
+        }
+    });
+}
+
+function updateMultiselectTrigger() {
+    const trigger = document.getElementById('holiday-center-trigger');
+    const hiddenInput = document.getElementById('holiday-center-values');
+    const optionsContainer = document.getElementById('holiday-center-options');
+
+    if (!trigger || !hiddenInput || !optionsContainer) return;
+
+    const allCheckboxes = optionsContainer.querySelectorAll('input[type="checkbox"]');
+    const selected = Array.from(
+        optionsContainer.querySelectorAll('input[type="checkbox"]:checked')
+    ).map(cb => ({ value: cb.value, text: cb.nextElementSibling.textContent }));
+
+    // Only sync hidden input when checkboxes actually exist
+    // (prevents setCustomMultiselectValues() from being wiped
+    //  before loadModalCenters() has populated the options)
+    if (allCheckboxes.length > 0) {
+        hiddenInput.value = selected.map(s => s.value).join(',');
+    }
+
+    const placeholder = trigger.querySelector('.custom-multiselect-placeholder');
+    if (selected.length === 0) {
+        placeholder.textContent = 'Select centers...';
+    } else if (selected.length <= 3) {
+        placeholder.textContent = selected.map(s => s.text).join(', ');
+    } else {
+        placeholder.textContent = `${selected.length} centers selected`;
+    }
+    placeholder.style.color = '';
+}
+
+function resetCustomMultiselect() {
+    const hiddenInput = document.getElementById('holiday-center-values');
+    const optionsContainer = document.getElementById('holiday-center-options');
+    const panel = document.getElementById('holiday-center-panel');
+    const trigger = document.getElementById('holiday-center-trigger');
+    
+    if (hiddenInput) hiddenInput.value = '';
+    if (optionsContainer) {
+        optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+        });
+    }
+    // Close panel if open
+    if (panel) {
+        panel.classList.remove('open');
+    }
+    if (trigger) {
+        trigger.setAttribute('aria-expanded', 'false');
+    }
+    updateMultiselectTrigger();
+}
+
+// Close custom multiselect panel
+function closeCustomMultiselect() {
+    const panel = document.getElementById('holiday-center-panel');
+    const trigger = document.getElementById('holiday-center-trigger');
+    if (panel) panel.classList.remove('open');
+    if (trigger) trigger.setAttribute('aria-expanded', 'false');
+}
+
+function setCustomMultiselectValues(values) {
+    const optionsContainer = document.getElementById('holiday-center-options');
+    const hiddenInput = document.getElementById('holiday-center-values');
+    
+    if (!optionsContainer || !hiddenInput) return;
+    
+    const valArray = Array.isArray(values) ? values : (values ? String(values).split(',') : []);
+    
+    optionsContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.checked = valArray.includes(cb.value);
+    });
+    
+    hiddenInput.value = valArray.join(',');
+    updateMultiselectTrigger();
+}
+
+function getCustomMultiselectValues() {
+    const hiddenInput = document.getElementById('holiday-center-values');
+    return hiddenInput ? hiddenInput.value : '';
 }
 
 function initYearFilter() {
@@ -242,7 +416,24 @@ function renderHolidaysTable(holidays) {
         return;
     }
     
-    tbody.innerHTML = holidays.map(h => `
+    tbody.innerHTML = holidays.map(h => {
+        let centerDisplay = '';
+        if (h.academic_holiday) {
+            centerDisplay = '<span class="text-muted">All Centers</span>';
+        } else if (h.centers && h.centers.length > 0) {
+            const centerNames = h.centers.map(c => escapeHtml(c.name)).filter(Boolean);
+            if (centerNames.length === 1) {
+                centerDisplay = centerNames[0];
+            } else {
+                centerDisplay = `<span class="center-count-badge" data-centers="${centerNames.join(', ')}">${centerNames.length} centers</span>`;
+            }
+        } else if (h.center_name) {
+            centerDisplay = escapeHtml(h.center_name);
+        } else {
+            centerDisplay = '<span class="text-muted">-</span>';
+        }
+        
+        return `
         <tr data-id="${h.id}">
             <td>
                 <div class="fw-medium">${escapeHtml(h.name)}</div>
@@ -253,7 +444,7 @@ function renderHolidaysTable(holidays) {
                     ${h.academic_holiday ? 'Academic' : 'Center'}
                 </span>
             </td>
-            <td>${h.academic_holiday ? '<span class="text-muted">All Centers</span>' : escapeHtml(h.center_name || '-')}</td>
+            <td>${centerDisplay}</td>
             <td>${formatDate(h.start_date)}</td>
             <td>${h.end_date ? formatDate(h.end_date) : '<span class="text-muted">-</span>'}</td>
             <td>
@@ -273,8 +464,21 @@ function renderHolidaysTable(holidays) {
                     </button>` : ''}
                 </div>
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
+    
+    // Add hover tooltip for center count badges (using event delegation)
+    tbody.querySelectorAll('.center-count-badge').forEach(badge => {
+        badge.addEventListener('mouseenter', (e) => {
+            const centers = e.target.dataset.centers;
+            if (centers) {
+                showTooltip(e.target, centers);
+            }
+        });
+        badge.addEventListener('mouseleave', () => {
+            startHideTimer();
+        });
+    });
     
     // Add event listeners to buttons
     tbody.querySelectorAll('.btn-edit').forEach(btn => {
@@ -283,6 +487,47 @@ function renderHolidaysTable(holidays) {
     tbody.querySelectorAll('.btn-delete').forEach(btn => {
         btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
     });
+}
+
+// Simple tooltip for center names
+let tooltipEl = null;
+let tooltipTimeout = null;
+let tooltipListenersAdded = false;
+
+function showTooltip(target, text) {
+    clearTimeout(tooltipTimeout);
+    hideTooltip();                       // remove any old element
+
+    tooltipEl = document.createElement('div');
+    tooltipEl.className = 'custom-tooltip';
+    tooltipEl.textContent = text;
+    document.body.appendChild(tooltipEl);
+
+    tooltipEl.addEventListener('mouseenter', () => clearTimeout(tooltipTimeout));
+    tooltipEl.addEventListener('mouseleave', () => startHideTimer());
+
+    positionTooltip(target);
+}
+
+function positionTooltip(target) {
+    if (!tooltipEl || !target) return;
+    const rect = target.getBoundingClientRect();
+    // .custom-tooltip is position:fixed → use viewport coords, NO scroll offsets
+    tooltipEl.style.left = rect.left + (rect.width / 2) - (tooltipEl.offsetWidth / 2) + 'px';
+    tooltipEl.style.top  = (rect.top - tooltipEl.offsetHeight - 8) + 'px';
+}
+
+function startHideTimer() {
+    clearTimeout(tooltipTimeout);
+    tooltipTimeout = setTimeout(hideTooltip, 200);
+}
+
+function hideTooltip() {
+    clearTimeout(tooltipTimeout);
+    if (tooltipEl) {
+        tooltipEl.remove();
+        tooltipEl = null;
+    }
 }
 
 function renderPagination(total, page, pageSize, totalPages) {
@@ -347,6 +592,7 @@ function showTableLoading(show) {
 // ================================================================
 
 function openHolidayModal(holidayId = null) {
+    closeCustomMultiselect();  // Ensure dropdown is closed
     resetForm();
     loadModalCenters();
     toggleCenterGroup();
@@ -378,11 +624,16 @@ function openHolidayModal(holidayId = null) {
             document.getElementById('holiday-status').checked = holiday.status;
             loadModalCenters();
             document.getElementById('holiday-academic').checked = !!holiday.academic_holiday;
-            if (holiday.center_id) {
-                Array.from(document.getElementById('holiday-center').options).forEach(o => {
-                    o.selected = (o.value == holiday.center_id);
-                });
+            
+            // Set selected centers from holiday.centers array
+            if (holiday.centers && holiday.centers.length > 0) {
+                const centerIds = holiday.centers.map(c => String(c.id));
+                setCustomMultiselectValues(centerIds);
+            } else if (holiday.center_id) {
+                // Backward compatibility
+                setCustomMultiselectValues([String(holiday.center_id)]);
             }
+            
             toggleCenterGroup();
         });
     } else {
@@ -408,7 +659,7 @@ function resetForm() {
     document.getElementById('holiday-status-group').style.display = 'none';
     document.getElementById('holiday-status').checked = true;
     document.getElementById('holiday-academic').checked = false;
-    Array.from(document.getElementById('holiday-center').options).forEach(o => { o.selected = false; });
+    resetCustomMultiselect();
     toggleCenterGroup();
 }
 
@@ -432,8 +683,7 @@ function handleFormSubmit(e) {
         return;
     }
     const academic = document.getElementById('holiday-academic').checked;
-    const centerSelect = document.getElementById('holiday-center');
-    const centerIds = Array.from(centerSelect.selectedOptions).map(o => o.value);
+    const centerIds = getCustomMultiselectValues().split(',').filter(v => v);
     if (!academic && centerIds.length === 0) {
         showToast('Select at least one center for center holidays', 'danger');
         return;

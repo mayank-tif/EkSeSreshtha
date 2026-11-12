@@ -747,9 +747,26 @@ class HolidaysDtoSerializer(serializers.Serializer):
     endDate = serializers.DateTimeField(source='EndDate', allow_null=True, required=False)
     createdBy = serializers.IntegerField(source='CreatedBy', allow_null=True, required=False)
     createdOn = serializers.DateTimeField(source='CreatedOn', allow_null=True, required=False)
-    centerId = serializers.IntegerField(source='CenterId', allow_null=True, required=False)
-    centerName = serializers.CharField(source='CenterName', allow_null=True, required=False)
+    # Center-specific holidays: list of centers (via HolidayCenter junction)
+    # Academic holidays: empty list
+    centers = serializers.SerializerMethodField()
     academicHoliday = serializers.BooleanField(source='AcademicHoliday', allow_null=True, required=False)
+    
+    def get_centers(self, obj):
+        # Handle both dict (from helper functions) and model instance
+        academic_holiday = obj.get('AcademicHoliday', False) if isinstance(obj, dict) else obj.academic_holiday
+        if academic_holiday:
+            return []
+        
+        # For dict from helper: Centers is already populated
+        if isinstance(obj, dict):
+            return obj.get('Centers', [])
+        
+        # For model instance: query HolidayCenter (only active)
+        return [
+            {'id': hc.center_id, 'name': hc.center.center_name}
+            for hc in obj.holiday_centers.filter(status=True).select_related('center').all()
+        ]
 
 
 class TeacherLeavesSaveRequestSerializer(RequestSerializer):

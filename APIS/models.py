@@ -471,9 +471,8 @@ class Holidays(models.Model):
     status = models.BooleanField(db_column="Status", null=True, blank=True, default=True)
     start_date = models.DateTimeField(db_column="StartDate", null=True, blank=True)
     end_date = models.DateTimeField(db_column="EndDate", null=True, blank=True)
-    center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='holidays')
-    # 1 = academic holiday (global, for ALL centers, center_id NULL),
-    # 0 = center-specific holiday (center_id set)
+    # 1 = academic holiday (global, for ALL centers),
+    # 0 = center-specific holiday (centers linked via HolidayCenter)
     academic_holiday = models.BooleanField(db_column="AcademicHoliday", null=True, blank=True, default=False)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
@@ -483,7 +482,6 @@ class Holidays(models.Model):
     class Meta:
         db_table = "Holidays"
         indexes = [
-            models.Index(fields=['center'], name='idx_holidays_center'),
             models.Index(fields=['status'], name='idx_holidays_status'),
             models.Index(fields=['start_date', 'end_date'], name='idx_holidays_dates'),
             models.Index(fields=['academic_holiday'], name='idx_holidays_academic'),
@@ -492,6 +490,32 @@ class Holidays(models.Model):
     def __str__(self):
         return self.name or str(self.id)
 
+
+class HolidayCenter(models.Model):
+    """Junction table linking Holidays to Centers (for center-specific holidays)."""
+    id = models.AutoField(db_column="Id", primary_key=True)
+    holiday = models.ForeignKey('Holidays', db_column="HolidayId", on_delete=models.CASCADE, related_name='holiday_centers')
+    center = models.ForeignKey('Center', db_column="CenterId", on_delete=models.CASCADE, related_name='center_holidays')
+    created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
+    created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
+    # Soft delete flag - False means removed (kept for history)
+    status = models.BooleanField(db_column="Status", default=True, null=True, blank=True)
+    updated_by = models.IntegerField(db_column="UpdatedBy", null=True, blank=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", null=True, blank=True)
+
+    class Meta:
+        db_table = "HolidayCenter"
+        constraints = [
+            models.UniqueConstraint(fields=['holiday', 'center'], name='uniq_holiday_center'),
+        ]
+        indexes = [
+            models.Index(fields=['center'], name='idx_holidaycenter_center'),
+            models.Index(fields=['holiday'], name='idx_holidaycenter_holiday'),
+            models.Index(fields=['status'], name='idx_holidaycenter_status'),
+        ]
+
+    def __str__(self):
+        return f"{self.holiday} @ {self.center}"
 
 class TeacherLeaves(models.Model):
     """Teacher-applied leave requests.

@@ -4,6 +4,152 @@
    modals, forms) come from components.css / layout.css.
    ================================================================ */
 
+/* ================================================================
+   CUSTOM MULTI-SELECT DROPDOWN
+   ================================================================ */
+.custom-multiselect {
+    display: inline-block;
+    width: 100%;
+}
+
+.custom-multiselect-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    background: var(--white);
+    font-size: var(--text-sm);
+    color: var(--gray-700);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.custom-multiselect-trigger:hover {
+    border-color: var(--brand-blue);
+}
+
+.custom-multiselect-trigger:focus {
+    outline: none;
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.custom-multiselect-placeholder {
+    color: var(--gray-400);
+    flex: 1;
+}
+
+.custom-multiselect-arrow {
+    flex-shrink: 0;
+    margin-left: var(--space-2);
+    color: var(--gray-400);
+    transition: transform var(--transition-fast);
+}
+
+.custom-multiselect-panel {
+    position: fixed;
+    z-index: 9999;
+    background: var(--white);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    max-height: 300px;
+    overflow: hidden;
+    display: none;
+    flex-direction: column;
+    min-width: 200px;
+}
+
+.custom-multiselect-panel.open {
+    display: flex;
+}
+
+.custom-multiselect-search {
+    position: relative;
+    padding: var(--space-3);
+    border-bottom: 1px solid var(--gray-200);
+}
+
+.custom-multiselect-search svg {
+    position: absolute;
+    left: var(--space-3);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    pointer-events: none;
+}
+
+.custom-multiselect-search-input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3) var(--space-2) calc(var(--space-3) + 20px);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    outline: none;
+}
+
+.custom-multiselect-search-input:focus {
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.custom-multiselect-options {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 220px;
+    padding: var(--space-2);
+}
+
+.custom-multiselect-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.custom-multiselect-option:hover {
+    background: var(--gray-50);
+}
+
+.custom-multiselect-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--brand-blue);
+    cursor: pointer;
+}
+
+.custom-multiselect-option span {
+    font-size: var(--text-sm);
+    color: var(--gray-700);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.custom-multiselect-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-top: 1px solid var(--gray-200);
+    background: var(--gray-50);
+}
+
+.custom-multiselect-footer .btn {
+    font-size: var(--text-sm);
+    padding: var(--space-2) var(--space-4);
+}
+
+/* ================================================================
+   FILTERS BAR
+   ================================================================ */
+
 /* ---------- Filters bar: compact, auto-width (NOT full width) ---------- */
 .filters-bar {
     background-color: var(--white);
@@ -73,6 +219,30 @@
         flex: 1 1 100%;
         width: 100%;
     }
+}
+
+/* ================================================================
+   CUSTOM TOOLTIP
+   ================================================================ */
+.custom-tooltip {
+    position: fixed;
+    background: var(--gray-900);
+    color: var(--white);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    z-index: 10000;
+    max-width: 300px;
+    box-shadow: var(--shadow-lg);
+    pointer-events: auto;
+}
+
+.center-count-badge {
+    cursor: help;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-decoration-color: var(--gray-400);
 }
 
 /* ---------- Modal form helpers ---------- */

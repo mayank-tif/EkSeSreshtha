@@ -499,12 +499,19 @@
                 <div class="count" id="count-cancelled">0</div>
                 <div class="label">Cancelled</div>
             </div>
-            <div class="summary-counters-card" data-tooltip="Holiday">
+            <div class="summary-counters-card" data-tooltip="Holiday" id="card-holiday" style="cursor: pointer;" onclick="openHolidayDetailModal()">
                 <div class="icon" style="background: #fef3c7; color: #f59e0b;">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                 </div>
                 <div class="count" id="count-holiday">0</div>
                 <div class="label">Holiday</div>
+            </div>
+            <div class="summary-counters-card" data-tooltip="Teacher Leave" id="card-teacher-leave" style="cursor: pointer;" onclick="openTeacherLeaveDetailModal()">
+                <div class="icon" style="background: #fce7f3; color: #db2777;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <div class="count" id="count-teacher-leave">0</div>
+                <div class="label">Teacher Leave</div>
             </div>
             <div class="summary-counters-card" data-tooltip="Not Started">
                 <div class="icon" style="background: #f3f4f6; color: #6b7280;">
@@ -638,6 +645,82 @@
         </div>
     </div>
 </div>
+
+<!-- Holiday Detail Modal -->
+<div class="modal-backdrop" id="holiday-detail-modal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Holidays on <span id="holiday-detail-date"></span></h3>
+            <button class="modal-close" data-close-modal aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+                <table class="table" id="holiday-detail-table">
+                    <thead>
+                        <tr>
+                            <th>Holiday Name</th>
+                            <th>Description</th>
+                            <th>Type</th>
+                            <th>Center</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Regional Admin(s)</th>
+                            <th>Teacher(s)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="holiday-detail-tbody">
+                    </tbody>
+                </table>
+            </div>
+            <div id="holiday-detail-empty" style="display: none; text-align: center; padding: 20px; color: #6b7280;">
+                No holidays on this date.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Teacher Leave Detail Modal -->
+<div class="modal-backdrop" id="teacher-leave-detail-modal">
+    <div class="modal modal-lg">
+        <div class="modal-header">
+            <h3 class="modal-title">Teacher Leaves on <span id="teacher-leave-detail-date"></span></h3>
+            <button class="modal-close" data-close-modal aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="table-wrapper" style="max-height: 400px; overflow-y: auto;">
+                <table class="table" id="teacher-leave-detail-table">
+                    <thead>
+                        <tr>
+                            <th>Teacher Name</th>
+                            <th>Center</th>
+                            <th>Leave Name</th>
+                            <th>Description</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Approval Status</th>
+                            <th>Continuous Days</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teacher-leave-detail-tbody">
+                    </tbody>
+                </table>
+            </div>
+            <div id="teacher-leave-detail-empty" style="display: none; text-align: center; padding: 20px; color: #6b7280;">
+                No teacher leaves on this date.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-close-modal>Close</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra-js %}
@@ -651,6 +734,6 @@
     {% if GOOGLE_MAPS_API_KEY %}
     <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places" async defer></script>
     {% endif %}
-    <script src="{% static 'esswebapp/js/class-attendance-logs.js' %}?v=1"></script>
+    <script src="{% static 'esswebapp/js/class-attendance-logs.js' %}?v=5"></script>
     
 {% endblock %}

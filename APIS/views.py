@@ -3201,21 +3201,21 @@ class TeacherLeavesApproveRejectPostView(APIView):
                 allowed_center_ids = list(Center.objects.filter(status=True, assigned_regional_admin=logged_user_id).values_list('id', flat=True))
                 if not TeacherLeaves.objects.filter(id=holiday_id, center_id__in=allowed_center_ids, status=True).exists():
                     return Response(
-                        {"status": False, "error": "Holiday not found in your assigned centers", "code": status.HTTP_404_NOT_FOUND},
+                        {"status": False, "error": "Teacher leaves not found in your assigned centers", "code": status.HTTP_404_NOT_FOUND},
                         status=status.HTTP_404_NOT_FOUND,
                     )
             result = approve_reject_teacher_leave(int(holiday_id), action, updated_by=logged_user_id)
             if result is None or 'error' in result:
                 return Response(
-                    {"status": False, "error": (result or {}).get('error', 'Holiday not found'), "code": status.HTTP_400_BAD_REQUEST},
+                    {"status": False, "error": (result or {}).get('error', 'Teacher leaves not found'), "code": status.HTTP_400_BAD_REQUEST},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             return Response(
-                {"status": True, "message": ("Holiday approved successfully" if action == "approve" else "Holiday rejected successfully"), "data": result, "code": status.HTTP_200_OK},
+                {"status": True, "message": ("Teacher's leave approved successfully" if action == "approve" else "Teacher leave rejected successfully"), "data": result, "code": status.HTTP_200_OK},
                 status=status.HTTP_200_OK,
             )
         except Exception as e:
-            logger.error(f"UserView : ApproveRejectHoliday : {str(e)}")
+            logger.error(f"UserView : ApproveRejectTeacherHoliday : {str(e)}")
             return Response(
                 {"status": False, "error": str(e), "code": status.HTTP_400_BAD_REQUEST},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -3225,8 +3225,9 @@ class TeacherLeavesApproveRejectPostView(APIView):
 class TeacherLeavesSavePostView(APIView):
     """Saves or updates teacher leave applications (TeacherLeaves table).
 
-    Only used by teachers: the teacher's single assigned center is
-    resolved from the logged-in user id in the token - the client
+    Only used by teachers: the teacher's assigned center is
+    resolved from the Center.assigned_teachers field (stores User ID)
+    for the logged-in user id in the token - the client
     does not send a center list. Over-max continuous leave ->
     pending approval, else auto-approved.
     """
@@ -3235,16 +3236,16 @@ class TeacherLeavesSavePostView(APIView):
         try:
             logger.info("TeacherLeavesView : SaveTeacherLeave : Started")
 
-            # Logged-in user from token -> their Teacher record -> the
-            # one center they are assigned to
+            # Logged-in user from token -> find center via Center.assigned_teachers (User ID)
             logged_user_id = get_user_id_from_token(request)
             if not logged_user_id:
                 return Response(
                     {"status": False, "error": "Invalid or missing token", "code": status.HTTP_401_UNAUTHORIZED},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
-            teacher = Teacher.objects.filter(user_id=logged_user_id, status=True).first()
-            if not teacher or not teacher.center_id:
+            # Center.assigned_teachers stores User ID directly (not Teacher ID)
+            center = Center.objects.filter(assigned_teachers=logged_user_id, status=True).first()
+            if not center:
                 return Response(
                     {"status": False, "error": "No center assigned to this teacher", "code": status.HTTP_400_BAD_REQUEST},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -3252,7 +3253,7 @@ class TeacherLeavesSavePostView(APIView):
 
             data = request.data.copy()
             data['CreatedBy'] = logged_user_id
-            data['ListCenterIds'] = str(teacher.center_id)
+            data['ListCenterIds'] = str(center.id)
 
             for field in ['StartDate', 'EndDate', 'CreatedOn']:
                 if field in data and data[field]:
@@ -3273,7 +3274,7 @@ class TeacherLeavesSavePostView(APIView):
                 )
 
             leave_data = serializer.validated_data
-            leave_data['ListCenterIds'] = str(teacher.center_id)
+            leave_data['ListCenterIds'] = str(center.id)
             leave_data['CreatedBy'] = logged_user_id
             result = save_teacher_leave(leave_data)
             if result:
