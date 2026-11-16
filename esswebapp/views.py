@@ -6465,7 +6465,8 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
         if allowed is not None and not academic_holiday:
             not_allowed = [cid for cid in center_ids if cid not in allowed]
             if not_allowed:
-                raise ValueError('You are not authorized to create holidays for center(s): ' + ', '.join(map(str, not_allowed)))
+                not_allowed_names = list(Center.objects.filter(id__in=not_allowed).values_list('center_name', flat=True))
+                raise ValueError('You are not authorized to create holidays for center(s): ' + ', '.join(not_allowed_names))
 
         start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
         end_date = None
@@ -6580,14 +6581,27 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             if not holiday_id:
                 return JsonResponse({'detail': 'Holiday ID required'}, status=400)
             holiday = Holidays.objects.get(id=holiday_id)
+            
+            # RegionalAdmin scoping: only their assigned centers
+            user_id = request.web_user.get('user_id')
+            role_code = request.web_user.get('role_code')
+            if role_code == 'REGIONAL_ADMIN':
+                allowed_center_ids = get_regional_admin_allowed_center_ids(user_id)
+                authorized, error_msg, not_allowed = check_holiday_authorization_for_regional_admin(holiday, allowed_center_ids)
+                if not authorized:
+                    return JsonResponse({'detail': error_msg}, status=403)
+            elif role_code != 'SUPER_ADMIN':
+                # Teachers and other roles cannot delete holidays
+                return JsonResponse({'detail': 'Only SuperAdmin or RegionalAdmin can delete holidays'}, status=403)
+            
             holiday.status = False
-            holiday.updated_by = request.web_user.get('user_id')
+            holiday.updated_by = user_id
             holiday.updated_on = datetime.now()
             holiday.save()
             # Also soft-delete related HolidayCenter entries
             HolidayCenter.objects.filter(holiday=holiday).update(
                 status=False,
-                updated_by=request.web_user.get('user_id'),
+                updated_by=user_id,
                 updated_on=datetime.now()
             )
             return JsonResponse({'status': True, 'message': 'Holiday deleted successfully'})

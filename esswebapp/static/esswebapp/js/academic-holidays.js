@@ -173,6 +173,27 @@ function initCustomMultiselect() {
     }
     
     // Toggle panel on trigger click
+    let rafId = null;
+    function startContinuousPositioning() {
+        if (rafId) return;
+        function loop() {
+            if (panel.classList.contains('open')) {
+                positionPanel();
+                rafId = requestAnimationFrame(loop);
+            } else {
+                rafId = null;
+            }
+        }
+        rafId = requestAnimationFrame(loop);
+    }
+    function stopContinuousPositioning() {
+        if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+        }
+    }
+
+    // Toggle panel on trigger click
     trigger.addEventListener('click', (e) => {
         e.stopPropagation();
         const isOpen = panel.classList.toggle('open');
@@ -181,12 +202,9 @@ function initCustomMultiselect() {
         if (isOpen) {
             positionPanel();
             searchInput.focus();
-            // Reposition on scroll/resize
-            window.addEventListener('scroll', positionPanel, { passive: true });
-            window.addEventListener('resize', positionPanel);
+            startContinuousPositioning();
         } else {
-            window.removeEventListener('scroll', positionPanel);
-            window.removeEventListener('resize', positionPanel);
+            stopContinuousPositioning();
         }
     });
     
@@ -196,8 +214,7 @@ function initCustomMultiselect() {
             panel.classList.remove('open');
             trigger.setAttribute('aria-expanded', 'false');
             panel.setAttribute('aria-hidden', 'true');
-            window.removeEventListener('scroll', positionPanel);
-            window.removeEventListener('resize', positionPanel);
+            stopContinuousPositioning();
         }
     });
     
@@ -223,8 +240,7 @@ function initCustomMultiselect() {
         panel.classList.remove('open');
         trigger.setAttribute('aria-expanded', 'false');
         panel.setAttribute('aria-hidden', 'true');
-        window.removeEventListener('scroll', positionPanel);
-        window.removeEventListener('resize', positionPanel);
+        stopContinuousPositioning();
     });
     
     // Handle checkbox changes
@@ -698,6 +714,7 @@ function handleFormSubmit(e) {
     // Checkbox state is not always included in FormData
     data.academic_holiday = academic ? 'true' : 'false';
     data.center_id = academic ? '' : centerIds.join(',');
+    data.status = document.getElementById('holiday-status').checked ? 'true' : 'false';
     
     // Disable button
     submitBtn.disabled = true;

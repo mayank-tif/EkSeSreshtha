@@ -4116,7 +4116,7 @@ def save_holidays(holidays_data):
         description = holidays_data.get('Description')
         status = holidays_data.get('Status')
         created_by = holidays_data.get('CreatedBy')
-        created_on = holidays_data.get('CreatedOn') or datetime.now()
+        created_on = datetime.now()
         
         if holiday_id > 0:
             # Get existing holiday by name (single row per name for center holidays)
@@ -4192,14 +4192,53 @@ def save_holidays(holidays_data):
         logger.error(f"HolidaysHelper : SaveHolidays : {str(e)}")
         raise e
 
-def get_all_holidays_by_year(year):
-    """Get all holidays by year"""
-    logger.info(f"HolidaysHelper : GetAllHolidaysByYear : Started")
+def get_all_holidays_by_year(year, user_id=None, user_type=None):
+    """Get all holidays by year with RBAC filtering
+    
+    Args:
+        year: Year to filter holidays
+        user_id: User ID from token (for RegionalAdmin/Teacher scoping)
+        user_type: Role type from token ("SUPER_ADMIN", "REGIONAL_ADMIN", "TEACHER")
+    
+    Returns:
+        List of holidays filtered by user's role and assigned centers
+    """
+    logger.info(f"HolidaysHelper : GetAllHolidaysByYear : Started for year={year}, user_id={user_id}, user_type={user_type}")
     
     try:
-        holidays = Holidays.objects.filter(status=True, start_date__year=year).prefetch_related(Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center')))
+        # Determine allowed center IDs based on user_type
+        if user_type == "SUPER_ADMIN" or user_id is None:
+            # SuperAdmin - see all holidays
+            allowed_center_ids = None  # None means no restriction
+        elif user_type == "REGIONAL_ADMIN":
+            # RegionalAdmin - only assigned centers
+            allowed_center_ids = get_regional_admin_allowed_center_ids(user_id)
+        elif user_type == "TEACHER":
+            # Teacher - only their center
+            teacher = Teacher.objects.filter(user_id=user_id, status=True).first()
+            if teacher and teacher.center_id:
+                allowed_center_ids = [teacher.center_id]
+            else:
+                allowed_center_ids = []
+        else:
+            # Unknown role - no access
+            allowed_center_ids = []
+        
+        # Build queryset with RBAC filtering
+        queryset = Holidays.objects.filter(status=True, start_date__year=year).prefetch_related(
+            Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center'))
+        )
+        
+        if allowed_center_ids is not None:
+            # Filter: academic holidays (global) OR center-specific holidays in allowed centers
+            queryset = queryset.filter(
+                Q(academic_holiday=True) | Q(holiday_centers__center_id__in=allowed_center_ids)
+            ).distinct()
+        
+        queryset = queryset.order_by('start_date')
+        
         result = []
-        for h in holidays:
+        for h in queryset:
             # Build centers list
             if h.academic_holiday:
                 centers_list = []
@@ -4251,8 +4290,6 @@ def get_all_holidays_by_center_id(center_id):
                 'Centers': centers_list,
                 'CreatedOn': h.created_on,
                 'CreatedBy': h.created_by,
-                'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
-                'TeacherName': teacher_info_map().get(h.created_by, {}).get('teacher_name'),
                 'AcademicHoliday': bool(h.academic_holiday),
             })
         return result
@@ -4311,25 +4348,95 @@ def get_all_holidays(status, user_id=0):
         raise e
 
 
-def get_all_holidays_by_teacher_id(teacher_id):
-    """Get all holidays for a teacher's assigned center"""
-    logger.info(f"HolidaysHelper : GetAllHolidaysByTeacherId : Started")
+def get_all_holidays_by_teacher_id(user_id, logged_user_id=None, user_type=None):
+    """Get all holidays for a teacher's assigned center with RBAC authorization.
+    
+    Args:
+        user_id: Target teacher's User ID (whose holidays to fetch)
+        logged_user_id: ID of the user making the request (from token)
+        user_type: Role type of the user making the request ("SuperAdmin", "RegionalAdmin", "Teacher")
+    
+    Returns both center-specific holidays (via HolidayCenter) and academic holidays (global).
+    
+    Authorization:
+        - SuperAdmin: can view any teacher's holidays
+        - RegionalAdmin: can view holidays for teachers in their assigned centers
+        - Teacher: can only view their own holidays (user_id must match logged_user_id)
+    """
+    logger.info(f"HolidaysHelper : GetAllHolidaysByTeacherId : Started for user_id={user_id}, logged_user_id={logged_user_id}, user_type={user_type}")
     
     try:
-        # Get teacher's center
-        teacher = Teacher.objects.filter(id=teacher_id, status=True).first()
+        # Get teacher by user_id (frontend sends User ID, not Teacher ID)
+        teacher = Teacher.objects.filter(user_id=user_id, status=True).first()
         if not teacher:
             return []
         
-        center_id = get_center_by_user_id(teacher.user_id) if teacher.user_id else None
+        # Use teacher's center_id directly (FK to Center)
+        center_id = teacher.center_id
         if not center_id:
             return []
         
-        # Use existing center-specific function
-        return get_all_holidays_by_center_id(center_id)
+        # RBAC Authorization check based on user_type string (RoleCode from token)
+        if user_type == "TEACHER":
+            # Teacher - can only view own holidays
+            if logged_user_id != user_id:
+                logger.warning(f"Teacher {logged_user_id} attempted to access holidays of teacher {user_id}")
+                return []
+        elif user_type == "REGIONAL_ADMIN":
+            # RegionalAdmin - only teachers in assigned centers
+            allowed_center_ids = get_regional_admin_allowed_center_ids(logged_user_id)
+            if center_id not in allowed_center_ids:
+                logger.warning(f"RegionalAdmin {logged_user_id} attempted to access holidays for center {center_id} (not assigned)")
+                return []
+        # SuperAdmin - no restriction (user_type == "SUPER_ADMIN" or None)
+        
+        # Get center-specific holidays
+        center_holidays = get_all_holidays_by_center_id(center_id)
+        
+        # Get academic holidays (global)
+        academic_holidays = get_all_academic_holidays()
+        
+        # Combine both (avoid duplicates by ID)
+        seen_ids = set()
+        result = []
+        for h in center_holidays + academic_holidays:
+            if h['Id'] not in seen_ids:
+                seen_ids.add(h['Id'])
+                result.append(h)
+        
+        return result
             
     except Exception as e:
         logger.error(f"HolidaysHelper : GetAllHolidaysByTeacherId : {str(e)}")
+        raise e
+
+
+def get_all_academic_holidays():
+    """Get all academic (global) holidays"""
+    logger.info(f"HolidaysHelper : GetAllAcademicHolidays : Started")
+    
+    try:
+        holidays = Holidays.objects.filter(status=True, academic_holiday=True).order_by('start_date')
+        result = []
+        for h in holidays:
+            result.append({
+                'Id': h.id,
+                'Name': h.name,
+                'Description': h.description,
+                'Status': h.status,
+                'StartDate': h.start_date,
+                'EndDate': h.end_date,
+                'Centers': [],  # Academic holidays are global
+                'CreatedOn': h.created_on,
+                'CreatedBy': h.created_by,
+                'TeacherId': teacher_info_map().get(h.created_by, {}).get('teacher_id'),
+                'TeacherName': teacher_info_map().get(h.created_by, {}).get('teacher_name'),
+                'AcademicHoliday': True,
+            })
+        return result
+            
+    except Exception as e:
+        logger.error(f"HolidaysHelper : GetAllAcademicHolidays : {str(e)}")
         raise e
 
 
@@ -6638,6 +6745,99 @@ def get_user_id_from_token(request):
     except (TokenError, InvalidToken, Exception) as e:
         logger.error(f"Error extracting user ID from token: {str(e)}")
         return None
+
+
+def get_user_type_from_token(request):
+    """
+    Extract user type/role from JWT token in the request header.
+    Returns user_type (e.g., 'SuperAdmin', 'RegionalAdmin', 'Teacher') if found, None otherwise.
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return None
+        
+        parts = auth_header.split(' ')
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return None
+        
+        token = parts[1]
+        access_token = AccessToken(token)
+        user_type = access_token.get('user_type')
+        return user_type
+        
+    except (TokenError, InvalidToken, Exception) as e:
+        logger.error(f"Error extracting user type from token: {str(e)}")
+        return None
+
+
+def get_user_role_from_token(request):
+    """
+    Extract user role ID from JWT token in the request header.
+    Returns role_id (1=SuperAdmin, 2=RegionalAdmin, 3=Teacher) if found, None otherwise.
+    """
+    try:
+        auth_header = request.headers.get('Authorization')
+        if not auth_header:
+            return None
+        
+        parts = auth_header.split(' ')
+        if len(parts) != 2 or parts[0].lower() != 'bearer':
+            return None
+        
+        token = parts[1]
+        access_token = AccessToken(token)
+        role_id = access_token.get('role_id')
+        return role_id
+        
+    except (TokenError, InvalidToken, Exception) as e:
+        logger.error(f"Error extracting user role from token: {str(e)}")
+        return None
+
+
+def get_regional_admin_allowed_center_ids(user_id):
+    """
+    Get center IDs assigned to a RegionalAdmin via Center.assigned_regional_admin field.
+    Returns list of center IDs.
+    """
+    return list(Center.objects.filter(status=True, assigned_regional_admin=user_id).values_list('id', flat=True))
+
+
+def check_holiday_authorization_for_regional_admin(holiday, allowed_center_ids):
+    """
+    Check if a RegionalAdmin is authorized to manage a holiday.
+    Returns tuple (is_authorized: bool, error_message: str or None, not_allowed_centers: list).
+    
+    - Academic holidays (global): always authorized for any RegionalAdmin
+    - Center-specific holidays: all centers must be in allowed_center_ids
+    """
+    if holiday.academic_holiday:
+        # Academic holidays are global - any RegionalAdmin can manage
+        return True, None, []
+    
+    # Center-specific: check if all centers are in allowed list
+    holiday_center_ids = list(holiday.holiday_centers.filter(status=True).values_list('center_id', flat=True))
+    not_allowed = [cid for cid in holiday_center_ids if cid not in allowed_center_ids]
+    
+    if not_allowed:
+        not_allowed_names = list(Center.objects.filter(id__in=not_allowed).values_list('center_name', flat=True))
+        return False, f'You are not authorized to manage holidays for center(s): {", ".join(not_allowed_names)}', not_allowed
+    
+    return True, None, []
+
+
+def check_center_ids_authorization_for_regional_admin(center_ids, allowed_center_ids):
+    """
+    Check if a RegionalAdmin is authorized to create holidays for given center IDs.
+    Returns tuple (is_authorized: bool, error_message: str or None, not_allowed_centers: list).
+    """
+    not_allowed = [cid for cid in center_ids if cid not in allowed_center_ids]
+    
+    if not_allowed:
+        not_allowed_names = list(Center.objects.filter(id__in=not_allowed).values_list('center_name', flat=True))
+        return False, f'You are not authorized to create holidays for center(s): {", ".join(not_allowed_names)}', not_allowed
+    
+    return True, None, []
 
 def end_class_session(class_id, photo_url, class_obj, teacher_id=0):
     """End class session with attendance counts calculated from records.

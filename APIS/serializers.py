@@ -690,8 +690,6 @@ class HolidaysSaveHolidaysRequestSerializer(RequestSerializer):
     Status = optional_bool()
     StartDate = required_datetime()
     EndDate = optional_datetime()
-    CreatedBy = required_int()
-    CreatedOn = optional_datetime()
     # 1 = academic holiday (global, all centers, no center needed),
     # 0/absent = center-specific holiday (ListCenterIds required)
     AcademicHoliday = optional_bool()
