@@ -797,7 +797,6 @@ class TeacherLeavesDtoSerializer(serializers.Serializer):
     createdOn = serializers.DateTimeField(source='CreatedOn', allow_null=True, required=False)
     centerId = serializers.IntegerField(source='CenterId', allow_null=True, required=False)
     centerName = serializers.CharField(source='CenterName', allow_null=True, required=False)
-    teacherId = serializers.IntegerField(source='TeacherId', allow_null=True, required=False)
     teacherName = serializers.CharField(source='TeacherName', allow_null=True, required=False)
     approvalStatus = serializers.CharField(source='ApprovalStatus', allow_null=True, required=False)
     continuousDays = serializers.IntegerField(source='ContinuousDays', allow_null=True, required=False)
