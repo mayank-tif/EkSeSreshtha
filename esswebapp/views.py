@@ -6555,15 +6555,27 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
                         updated_on=datetime.now()
                     )
 
-                # Add new centers
+                # Add new centers - check for soft-deleted entries to re-activate instead of creating duplicates
                 to_add = new_center_ids - existing_center_ids
                 for cid in to_add:
-                    HolidayCenter.objects.create(
-                        holiday=holiday,
-                        center_id=cid,
-                        created_by=user_id,
-                        created_on=datetime.now(),
-                    )
+                    # Check if there's a soft-deleted entry to re-activate
+                    existing_inactive = HolidayCenter.objects.filter(
+                        holiday=holiday, center_id=cid, status=False
+                    ).first()
+                    if existing_inactive:
+                        # Re-activate the existing entry
+                        existing_inactive.status = True
+                        existing_inactive.updated_by = user_id
+                        existing_inactive.updated_on = datetime.now()
+                        existing_inactive.save()
+                    else:
+                        # Create new entry
+                        HolidayCenter.objects.create(
+                            holiday=holiday,
+                            center_id=cid,
+                            created_by=user_id,
+                            created_on=datetime.now(),
+                        )
 
             return JsonResponse({'status': True, 'message': 'Holiday updated successfully'})
         except Holidays.DoesNotExist:

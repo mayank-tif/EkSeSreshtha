@@ -2819,6 +2819,15 @@ class HolidaysSaveholidaysPostView(APIView):
                 center_ids = [int(x.strip()) for x in data['ListCenterIds'].split(',') if x.strip()]
             
             print("user_type:", user_type, "logged_user_id:", logged_user_id, "center_ids:", center_ids, "AcademicHoliday:", academic_holiday)
+            
+            # Authorization: Only SuperAdmin and RegionalAdmin can create/update holidays
+            # Teachers cannot create any holidays (academic or center)
+            if user_type not in ('SUPER_ADMIN', 'REGIONAL_ADMIN'):
+                return Response(
+                    {"status": False, "error": "Only SuperAdmin or RegionalAdmin can create holidays", "code": status.HTTP_403_FORBIDDEN},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
             if not academic_holiday:
                 if not center_ids:
                     return Response(
@@ -2837,12 +2846,7 @@ class HolidaysSaveholidaysPostView(APIView):
                             {"status": False, "error": error_msg, "code": status.HTTP_403_FORBIDDEN},
                             status=status.HTTP_403_FORBIDDEN
                         )
-                elif user_type != 'SUPER_ADMIN':
-                    # Teachers and other roles cannot create center holidays
-                    return Response(
-                        {"status": False, "error": "Only SuperAdmin or RegionalAdmin can create center holidays", "code": status.HTTP_403_FORBIDDEN},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
+                # SuperAdmin can create center holidays for any center - no restriction
             
             logger.info(f"HolidaysSaveholidaysPostView data: {data}")
             
@@ -2994,6 +2998,205 @@ class HolidaysGetallholidaysbyteacheridGetView(APIView):
                 
         except Exception as e:
             logger.error(f"HolidaysGetallholidaysbyteacheridGetView : Get : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+class HolidaysGetHolidayByIdGetView(APIView):
+    """Get a single holiday by ID with RBAC authorization.
+    
+    Authorization:
+        - SuperAdmin: can view any holiday
+        - RegionalAdmin: can view holidays in their assigned centers (or academic)
+        - Teacher: can view holidays in their center (or academic)
+    """
+    
+    def get(self, request):
+        try:
+            logger.info("HolidaysGetHolidayByIdGetView : Get : Started")
+            
+            holiday_id = request.query_params.get('id')
+            if not holiday_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Holiday ID is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            holiday_id = int(holiday_id)
+            
+            # Extract logged-in user info from token for RBAC
+            logged_user_id = get_user_id_from_token(request)
+            user_type = get_user_type_from_token(request)
+            
+            if not logged_user_id or not user_type:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Authentication required",
+                        "code": status.HTTP_401_UNAUTHORIZED
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # First check if holiday exists (without RBAC)
+            from APIS.models import Holidays
+            holiday_exists = Holidays.objects.filter(id=holiday_id, status=True).first()
+            if not holiday_exists:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Holiday not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check authorization
+            holiday = get_holiday_by_id(holiday_id, logged_user_id, user_type)
+            
+            if holiday:
+                # Log activity for viewing
+                log_activity(
+                    module='Holidays',
+                    action='VIEW',
+                    record_id=holiday_id,
+                    data={'holidayId': holiday_id},
+                    request=request
+                )
+                return Response(
+                    {
+                        "status": True,
+                        "data": holiday,
+                        "message": "Holiday details",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "You are not authorized to view this holiday",
+                        "code": status.HTTP_403_FORBIDDEN
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+                
+        except Exception as e:
+            logger.error(f"HolidaysGetHolidayByIdGetView : Get : {str(e)}")
+            return Response(
+                {
+                    "status": False,
+                    "error": str(e),
+                    "code": status.HTTP_400_BAD_REQUEST
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class TeacherLeavesGetByIdGetView(APIView):
+    """Get a single teacher leave by ID with RBAC authorization.
+    
+    Authorization:
+        - SuperAdmin: can view any leave
+        - RegionalAdmin: can view leaves in their assigned centers
+        - Teacher: can view only their own leaves
+    """
+    
+    def get(self, request):
+        try:
+            logger.info("TeacherLeavesGetByIdGetView : Get : Started")
+            
+            leave_id = request.query_params.get('id')
+            if not leave_id:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Leave ID is required",
+                        "code": status.HTTP_400_BAD_REQUEST
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            leave_id = int(leave_id)
+            
+            # Extract logged-in user info from token for RBAC
+            logged_user_id = get_user_id_from_token(request)
+            user_type = get_user_type_from_token(request)
+            
+            if not logged_user_id or not user_type:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Authentication required",
+                        "code": status.HTTP_401_UNAUTHORIZED
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # First check if leave exists (without RBAC)
+            from APIS.models import TeacherLeaves
+            leave_exists = TeacherLeaves.objects.filter(id=leave_id, status=True).first()
+            if not leave_exists:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Teacher Leave not found",
+                        "code": status.HTTP_404_NOT_FOUND
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check authorization
+            leave = get_teacher_leave_by_id(leave_id, logged_user_id, user_type)
+            
+            if leave:
+                # Log activity for viewing
+                log_activity(
+                    module='TeacherLeaves',
+                    action='VIEW',
+                    record_id=leave_id,
+                    data={'leaveId': leave_id},
+                    request=request
+                )
+                return Response(
+                    {
+                        "status": True,
+                        "data": leave,
+                        "message": "Teacher Leave details",
+                        "code": status.HTTP_200_OK
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "You are not authorized to view this teacher leave",
+                        "code": status.HTTP_403_FORBIDDEN
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+                
+        except Exception as e:
+            logger.error(f"TeacherLeavesGetByIdGetView : Get : {str(e)}")
             return Response(
                 {
                     "status": False,
@@ -3199,29 +3402,70 @@ class HolidaysGetallholidaysbyyearGetView(APIView):
             )
 
 class HolidaysGetallholidaysGetView(APIView):
-    """Lists holidays, optionally filtered by status."""
+    """Lists all holidays with RBAC filtering and optional center filter.
+    
+    - SuperAdmin: sees all holidays (academic + all centers) with optional center filter
+    - RegionalAdmin: sees academic + assigned centers with optional center filter (must be assigned)
+    - Teacher: sees academic + own center only
+    
+    Query params:
+        - status: 1=all, other=upcoming only
+        - centerId: optional center filter
+    """
     
     def get(self, request):
         try:
-            logger.info("DistrictView : GetAllHolidaysByYear : Started")
+            logger.info("HolidaysGetallholidaysGetView : Get : Started")
             
             status_param = request.query_params.get('status', 1)
-            user_id = request.query_params.get('userId', 0)
+            center_id = request.query_params.get('centerId')
             
-            holidays = get_all_holidays(int(status_param), int(user_id))
+            # Extract user info from token for RBAC
+            logged_user_id = get_user_id_from_token(request)
+            user_type = get_user_type_from_token(request)
+            
+            if not logged_user_id or not user_type:
+                return Response(
+                    {
+                        "status": False,
+                        "data": None,
+                        "message": "Authentication required",
+                        "code": status.HTTP_401_UNAUTHORIZED
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # RegionalAdmin center filter must be within assigned centers
+            if user_type == "REGIONAL_ADMIN" and center_id:
+                allowed_center_ids = get_regional_admin_allowed_center_ids(logged_user_id)
+                if int(center_id) not in allowed_center_ids:
+                    return Response(
+                        {
+                            "status": False,
+                            "data": None,
+                            "message": "You are not authorized to view holidays for this center",
+                            "code": status.HTTP_403_FORBIDDEN
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            
+            holidays = get_all_holidays(
+                int(status_param), 
+                logged_user_id, 
+                user_type, 
+                int(center_id) if center_id else None
+            )
             
             if holidays is not None and len(holidays) > 0:
                 response_serializer = api_serializers.HolidaysDtoSerializer(holidays, many=True)
-                 # Log activity for viewing
-                logged_user_id = get_user_id_from_token(request)
-                if logged_user_id:
-                    log_activity(
-                        module='Holidays',
-                        action='VIEW',
-                        record_id=0,
-                        data={'count': len(holidays)},
-                        request=request
-                    )
+                # Log activity for viewing
+                log_activity(
+                    module='Holidays',
+                    action='VIEW',
+                    record_id=0,
+                    data={'count': len(holidays), 'status': status_param, 'centerId': center_id},
+                    request=request
+                )
                 return Response(
                     {
                         "status": True,
@@ -3243,7 +3487,7 @@ class HolidaysGetallholidaysGetView(APIView):
                 )
                 
         except Exception as e:
-            logger.error(f"DistrictView : GetAllHolidays : {str(e)}")
+            logger.error(f"HolidaysGetallholidaysGetView : Get : {str(e)}")
             return Response(
                 {
                     "status": False,

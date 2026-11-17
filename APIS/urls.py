@@ -58,7 +58,9 @@ urlpatterns = [
     path('Holidays/GetAllHolidaysByYear', HolidaysGetallholidaysbyyearGetView.as_view(), name='holidays-getallholidaysbyyear-get'),
     path('Holidays/GetAllHolidays', HolidaysGetallholidaysGetView.as_view(), name='holidays-getallholidays-get'),
     path('Holidays/DeleteHolidayById', HolidaysDeleteholidaybyidPostView.as_view(), name='holidays-deleteholidaybyid-post'),
+    path('Holidays/GetHolidayById', HolidaysGetHolidayByIdGetView.as_view(), name='holidays-getholidaybyid-get'),
     path('TeacherLeaves/SaveTeacherLeave', TeacherLeavesSavePostView.as_view(), name='teacherleaves-saveteacherleave-post'),
+    path('TeacherLeaves/GetById', TeacherLeavesGetByIdGetView.as_view(), name='teacherleaves-getbyid-get'),
     path('TeacherLeaves/ApproveRejectLeave', TeacherLeavesApproveRejectPostView.as_view(), name='teacherleaves-approverejectleave-post'),
     path('TeacherLeaves/GetTeacherLeaves', TeacherLeavesGetAllGetView.as_view(), name='teacherleaves-getteacherleaves-get'),
     
