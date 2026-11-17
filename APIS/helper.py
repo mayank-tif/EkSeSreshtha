@@ -4027,12 +4027,15 @@ def get_max_allowed_teacher_holidays():
         return TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS
 
 
-def count_continuous_working_days(start_date, end_date):
+def count_continuous_working_days(start_date, end_date, exclude_holidays=True):
     """Count working days in [start_date, end_date] excluding
-    Saturday, Sunday and active Holidays (academic + center) days.
+    Saturday, Sunday and optionally active Holidays (academic + center) days.
 
     Accepts datetime or date; end defaults to start when missing.
     Returns the number of continuous working days (0 if range empty).
+    
+    For teacher leave approval, use exclude_holidays=False to count
+    weekdays in the leave period regardless of existing holidays.
     """
     if not start_date:
         return 0
@@ -4042,14 +4045,15 @@ def count_continuous_working_days(start_date, end_date):
         start, end = end, start
 
     holiday_days = set()
-    # Query all active holidays (both academic and center-specific)
-    for h in Holidays.objects.filter(status=True, start_date__date__lte=end, end_date__date__gte=start):
-        s = h.start_date.date() if h.start_date else start
-        e = h.end_date.date() if h.end_date else s
-        day = max(s, start)
-        while day <= min(e, end):
-            holiday_days.add(day)
-            day += timedelta(days=1)
+    if exclude_holidays:
+        # Query all active holidays (both academic and center-specific)
+        for h in Holidays.objects.filter(status=True, start_date__date__lte=end, end_date__date__gte=start):
+            s = h.start_date.date() if h.start_date else start
+            e = h.end_date.date() if h.end_date else s
+            day = max(s, start)
+            while day <= min(e, end):
+                holiday_days.add(day)
+                day += timedelta(days=1)
 
     count = 0
     day = start
@@ -4657,16 +4661,20 @@ def save_teacher_leave(leave_data):
         created_by = leave_data.get('CreatedBy')
         created_on = datetime.now()
 
-        continuous_days = count_continuous_working_days(start_date, end_date)
+        continuous_days = count_continuous_working_days(start_date, end_date, exclude_holidays=False)
         max_allowed = get_max_allowed_teacher_holidays()
         approval_status = 'pending' if continuous_days > max_allowed else 'approved'
 
         if leave_id > 0:
-            existing = TeacherLeaves.objects.filter(name=name, status=True)
-            existing_center_ids = list(existing.values_list('center_id', flat=True))
+            # Fetch existing leave by ID (not name, since name can change)
+            existing_leaves = TeacherLeaves.objects.filter(id=leave_id, status=True)
+            if not existing_leaves.exists():
+                logger.error(f"Leave with id {leave_id} not found for update")
+                return None
+            existing_center_ids = list(existing_leaves.values_list('center_id', flat=True))
             center_ids_to_remove = [cid for cid in existing_center_ids if cid not in center_ids]
             if center_ids_to_remove:
-                TeacherLeaves.objects.filter(name=name, center_id__in=center_ids_to_remove, status=True).update(
+                TeacherLeaves.objects.filter(id=leave_id, center_id__in=center_ids_to_remove, status=True).update(
                     status=False, updated_on=datetime.now(), updated_by=created_by
                 )
             for center_id in [cid for cid in center_ids if cid not in existing_center_ids]:
@@ -4678,7 +4686,7 @@ def save_teacher_leave(leave_data):
                 )
             for center_id in existing_center_ids:
                 if center_id in center_ids:
-                    TeacherLeaves.objects.filter(name=name, center_id=center_id, status=True).update(
+                    TeacherLeaves.objects.filter(id=leave_id, center_id=center_id, status=True).update(
                         start_date=start_date, end_date=end_date, name=name,
                         description=description, status=status,
                         approval_status=approval_status, continuous_days=continuous_days,
@@ -4744,6 +4752,53 @@ def approve_reject_teacher_leave(leave_id, action, updated_by=None):
     return {'id': leave.id, 'approval_status': leave.approval_status, 'status': leave.status, 'approved_by': leave.approved_by}
 
 
+def cancel_teacher_leave(leave_id, user_id, user_type):
+    """Cancel a teacher leave.
+    
+    Rules:
+    - Only upcoming leaves (start_date >= today) can be cancelled
+    - Teachers can only cancel their own leaves (created_by = user_id)
+    - RegionalAdmin can cancel leaves in their assigned centers
+    - SuperAdmin can cancel any leave
+    
+    Returns dict with status or None if not found/unauthorized.
+    """
+    logger.info(f"TeacherLeavesHelper : CancelTeacherLeave : Started id={leave_id} user={user_id}")
+    today = datetime.now().date()
+    
+    leave = TeacherLeaves.objects.filter(id=leave_id, status=True).first()
+    if not leave:
+        return None
+    
+    # Check if leave is upcoming (start_date >= today)
+    if leave.start_date and leave.start_date.date() < today:
+        return {'error': 'Cannot cancel past leaves'}
+    
+    # Authorization checks
+    if user_type == 'TEACHER':
+        # Teacher can only cancel their own leaves
+        if leave.created_by != user_id:
+            return {'error': 'Not authorized to cancel this leave'}
+    elif user_type == 'REGIONAL_ADMIN':
+        # RegionalAdmin can only cancel leaves in their assigned centers
+        allowed_center_ids = get_regional_admin_allowed_center_ids(user_id)
+        if leave.center_id not in allowed_center_ids:
+            return {'error': 'Not authorized to cancel this leave'}
+    elif user_type == 'SUPER_ADMIN':
+        # SuperAdmin can cancel any leave
+        pass
+    else:
+        return {'error': 'Not authorized'}
+    
+    # Soft delete - set status=False
+    leave.status = False
+    leave.updated_on = datetime.now()
+    leave.updated_by = user_id
+    leave.save(update_fields=['status', 'updated_on', 'updated_by'])
+    
+    return {'id': leave.id, 'status': leave.status, 'message': 'Leave cancelled successfully'}
+
+
 def get_teacher_leaves(center_id=None, teacher_id=None, approval_status=None, search='', allowed_center_ids=None, start_date=None, end_date=None):
     """Teacher leave applications: Holidays rows whose CreatedBy is a
     teacher's user id (CreatedBy already stores the applying
@@ -4792,7 +4847,6 @@ def get_teacher_leaves(center_id=None, teacher_id=None, approval_status=None, se
             'EndDate': h.end_date,
             'CenterId': h.center_id,
             'CenterName': h.center.center_name if h.center else None,
-            'TeacherId': tinfo.get('teacher_id'),
             'TeacherName': tinfo.get('teacher_name'),
             'ApprovalStatus': h.approval_status or 'approved',
             'ContinuousDays': h.continuous_days,

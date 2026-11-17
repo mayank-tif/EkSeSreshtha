@@ -62,6 +62,7 @@ urlpatterns = [
     path('TeacherLeaves/SaveTeacherLeave', TeacherLeavesSavePostView.as_view(), name='teacherleaves-saveteacherleave-post'),
     path('TeacherLeaves/GetById', TeacherLeavesGetByIdGetView.as_view(), name='teacherleaves-getbyid-get'),
     path('TeacherLeaves/ApproveRejectLeave', TeacherLeavesApproveRejectPostView.as_view(), name='teacherleaves-approverejectleave-post'),
+    path('TeacherLeaves/CancelLeave', TeacherLeavesCancelPostView.as_view(), name='teacherleaves-cancelleave-post'),
     path('TeacherLeaves/GetTeacherLeaves', TeacherLeavesGetAllGetView.as_view(), name='teacherleaves-getteacherleaves-get'),
     
     path('Panchayat/GetAllPanchayat', PanchayatGetallpanchayatGetView.as_view(), name='panchayat-getallpanchayat-get'),

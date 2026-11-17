@@ -3648,6 +3648,79 @@ class TeacherLeavesApproveRejectPostView(APIView):
             )
 
 
+class TeacherLeavesCancelPostView(APIView):
+    """Cancel a teacher leave (Teacher/RegionalAdmin/SuperAdmin).
+    
+    Rules:
+    - Only upcoming leaves (start_date >= today) can be cancelled
+    - Teachers can only cancel their own leaves
+    - RegionalAdmin can cancel leaves in their assigned centers
+    - SuperAdmin can cancel any leave
+    Body: {id}
+    """
+
+    def post(self, request):
+        try:
+            logger.info("TeacherLeavesCancelPostView : Post : Started")
+            
+            leave_id = request.data.get('id')
+            if not leave_id:
+                return Response(
+                    {"status": False, "error": "Leave ID is required", "code": status.HTTP_400_BAD_REQUEST},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
+            # Auth: token required
+            logged_user_id = get_user_id_from_token(request)
+            user_type = get_user_type_from_token(request)
+            
+            if not logged_user_id or not user_type:
+                return Response(
+                    {"status": False, "error": "Authentication required", "code": status.HTTP_401_UNAUTHORIZED},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            
+            result = cancel_teacher_leave(int(leave_id), logged_user_id, user_type)
+            
+            if result is None:
+                return Response(
+                    {"status": False, "error": "Teacher leave not found", "code": status.HTTP_404_NOT_FOUND},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            
+            if 'error' in result:
+                error_msg = result['error']
+                if 'Not authorized' in error_msg or 'past leaves' in error_msg:
+                    return Response(
+                        {"status": False, "error": error_msg, "code": status.HTTP_403_FORBIDDEN},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                return Response(
+                    {"status": False, "error": error_msg, "code": status.HTTP_400_BAD_REQUEST},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            
+            # Log activity
+            log_activity(
+                module='TeacherLeaves',
+                action='CANCEL',
+                record_id=int(leave_id),
+                data={'leaveId': leave_id},
+                request=request
+            )
+            
+            return Response(
+                {"status": True, "message": "Teacher leave cancelled successfully", "data": result, "code": status.HTTP_200_OK},
+                status=status.HTTP_200_OK,
+            )
+        except Exception as e:
+            logger.error(f"TeacherLeavesCancelPostView : Post : {str(e)}")
+            return Response(
+                {"status": False, "error": str(e), "code": status.HTTP_400_BAD_REQUEST},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
 class TeacherLeavesSavePostView(APIView):
     """Saves or updates teacher leave applications (TeacherLeaves table).
 
@@ -3734,9 +3807,20 @@ class TeacherLeavesSavePostView(APIView):
 
 
 class TeacherLeavesGetAllGetView(APIView):
-    """List teacher leave applications. Filters: centerId, teacherId
-    (User table id - the id stored in CreatedBy, not the Teacher
-    table id), approvalStatus (pending/approved/rejected), search."""
+    """List teacher leave applications with RBAC.
+    
+    Filters:
+        - centerId: filter by center
+        - teacherId: filter by teacher (User table id = CreatedBy)
+        - approvalStatus: pending/approved/rejected
+        - search: search in name/description
+        - startDate: filter by leave start date (gte)
+        - endDate: filter by leave start date (lte)
+    
+    Authorization:
+        - SuperAdmin: sees all leaves, can filter by center/teacher
+        - RegionalAdmin: sees leaves in assigned centers, can filter by center/teacher
+        - Teacher: sees only their own leaves (teacherId forced to own user_id)"""
 
     def get(self, request):
         try:
@@ -3744,33 +3828,54 @@ class TeacherLeavesGetAllGetView(APIView):
             teacher_id = request.query_params.get('teacherId')
             approval_status = request.query_params.get('approvalStatus')
             search = request.query_params.get('search', '')
-            # Auth + RBAC: token required. SuperAdmin sees all;
-            # RegionalAdmin only their assigned centers; anyone
-            # else (or no/invalid token) is rejected.
+            start_date = request.query_params.get('startDate')
+            end_date = request.query_params.get('endDate')
+            
+            # Auth + RBAC: token required
             logged_user_id = get_user_id_from_token(request)
-            if not logged_user_id:
+            user_type = get_user_type_from_token(request)
+            
+            if not logged_user_id or not user_type:
                 return Response(
-                    {"status": False, "error": "Invalid or missing token", "code": status.HTTP_401_UNAUTHORIZED},
+                    {"status": False, "error": "Authentication required", "code": status.HTTP_401_UNAUTHORIZED},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
-            caller = User.objects.filter(id=logged_user_id).first()
-            caller_role = getattr(caller, 'role', None)
-            caller_role = getattr(caller_role, 'role_code', None) if caller_role else None
-            if caller_role == 'SUPER_ADMIN':
-                allowed_center_ids = None
-            elif caller_role == 'REGIONAL_ADMIN':
+            
+            # Determine allowed centers based on role
+            if user_type == 'SUPER_ADMIN':
+                allowed_center_ids = None  # All centers
+                # Teacher can optionally filter by teacherId
+            elif user_type == 'REGIONAL_ADMIN':
                 allowed_center_ids = list(Center.objects.filter(status=True, assigned_regional_admin=logged_user_id).values_list('id', flat=True))
+                if not allowed_center_ids:
+                    return Response(
+                        {"status": True, "data": [], "message": "No centers assigned", "code": status.HTTP_200_OK},
+                        status=status.HTTP_200_OK,
+                    )
+            elif user_type == 'TEACHER':
+                # Teacher can only see their own leaves
+                allowed_center_ids = list(Center.objects.filter(assigned_teachers=logged_user_id, status=True).values_list('id', flat=True))
+                if not allowed_center_ids:
+                    return Response(
+                        {"status": True, "data": [], "message": "No center assigned", "code": status.HTTP_200_OK},
+                        status=status.HTTP_200_OK,
+                    )
+                # Force teacher_id to own user_id (CreatedBy)
+                teacher_id = str(logged_user_id)
             else:
                 return Response(
-                    {"status": False, "error": "Only SuperAdmin or RegionalAdmin can list teacher leaves", "code": status.HTTP_403_FORBIDDEN},
+                    {"status": False, "error": "Unauthorized", "code": status.HTTP_403_FORBIDDEN},
                     status=status.HTTP_403_FORBIDDEN,
                 )
+            
             leaves = get_teacher_leaves(
                 center_id=int(center_id) if center_id else None,
                 teacher_id=int(teacher_id) if teacher_id else None,
                 approval_status=approval_status or None,
                 search=search,
                 allowed_center_ids=allowed_center_ids,
+                start_date=start_date,
+                end_date=end_date,
             )
             if leaves:
                 response_serializer = api_serializers.TeacherLeavesDtoSerializer(leaves, many=True)
