@@ -1767,8 +1767,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         academic_holidays = Holidays.objects.filter(
             academic_holiday=True,
             status=True,
-            start_date__date__lte=filter_date_obj,
-            end_date__date__gte=filter_date_obj
+            start_date__date__gte=filter_date_obj,
+            end_date__date__lte=filter_date_obj
         )
         
         # Get center-specific holidays for accessible centers
@@ -1776,8 +1776,8 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             holiday_centers__center__in=centers,
             academic_holiday=False,
             status=True,
-            start_date__date__lte=filter_date_obj,
-            end_date__date__gte=filter_date_obj
+            start_date__date__gte=filter_date_obj,
+            end_date__date__lte=filter_date_obj
         ).prefetch_related('holiday_centers__center').distinct()
         
         holidays_data = []
@@ -1788,7 +1788,9 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             regional_admins = []
             for c in centers:
                 if c.assigned_regional_admin:
-                    regional_admins.append(c.assigned_regional_admin.name)
+                    ra_user = User.objects.filter(id=c.assigned_regional_admin).first()
+                    if ra_user:
+                        regional_admins.append(ra_user.name)
             regional_admins = list(set(regional_admins))  # deduplicate
             
             creator_name = None
@@ -1874,12 +1876,12 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             center_queryset = Center.objects.filter(id__in=accessible_center_ids, status=True)
         
         # Get teacher leaves for accessible centers where the leave spans the filter date
-        
+        print("center_queryset", center_queryset)
         leaves_qs = TeacherLeaves.objects.filter(
             center__in=center_queryset,
             status=True,
-            start_date__date__lte=filter_date_obj,
-            end_date__date__gte=filter_date_obj
+            start_date__date__gte=filter_date_obj,
+            end_date__date__lte=filter_date_obj
         ).select_related('center').order_by('-created_on')
         
         leaves_data = []

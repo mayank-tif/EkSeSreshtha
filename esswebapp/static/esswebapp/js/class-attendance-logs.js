@@ -828,17 +828,23 @@ async function fetchHolidayAndLeaveCounts(date) {
         return;
     }
     
+    console.log('[fetchHolidayAndLeaveCounts] Fetching for date:', date);
+    
     try {
         const holidaysRes = await fetch('/attendance/class-logs/?action=holidays_on_date&date=' + date, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
+        console.log('[fetchHolidayAndLeaveCounts] Holidays response status:', holidaysRes.status);
         const holidaysData = await holidaysRes.json();
+        console.log('[fetchHolidayAndLeaveCounts] Holidays data:', holidaysData);
         if (els.holidayCount) els.holidayCount.textContent = holidaysData.count || 0;
         
         const leavesRes = await fetch('/attendance/class-logs/?action=teacher_leaves_on_date&date=' + date, {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         });
+        console.log('[fetchHolidayAndLeaveCounts] Leaves response status:', leavesRes.status);
         const leavesData = await leavesRes.json();
+        console.log('[fetchHolidayAndLeaveCounts] Leaves data:', leavesData);
         if (els.teacherLeaveCount) els.teacherLeaveCount.textContent = leavesData.count || 0;
     } catch (e) {
         console.error('Failed to fetch holiday/leave counts:', e);
