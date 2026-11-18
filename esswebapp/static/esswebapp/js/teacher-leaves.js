@@ -33,9 +33,13 @@ function initializePage() {
         });
     });
 
-    document.getElementById('btn-clear-date-filter').addEventListener('click', () => {
+    document.getElementById('btn-clear-filters').addEventListener('click', () => {
+        document.getElementById('filter-center').value = '';
+        document.getElementById('filter-teacher').value = '';
+        document.getElementById('filter-approval-status').value = '';
         document.getElementById('filter-start-date').value = '';
         document.getElementById('filter-end-date').value = '';
+        document.getElementById('filter-search').value = '';
         currentPage = 1;
         loadLeaves();
     });

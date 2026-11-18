@@ -41,8 +41,22 @@
 .filters-row .filter-group:nth-child(3) { width: 190px; }  /* Approval Status */
 .filters-row .filter-group:nth-child(4) { width: 160px; }  /* Start Date */
 .filters-row .filter-group:nth-child(5) { width: 160px; }  /* End Date */
-.filters-row .filter-group:nth-child(6) { width: auto; }   /* Clear */
-.filters-row .filter-group:nth-child(7) { width: 240px; }  /* Search */
+.filters-row .filter-group:nth-child(6) { width: 240px; }  /* Search */
+.filters-row .filter-group:nth-child(7) { width: auto; min-width: 130px; }  /* Clear All */
+
+/* Clear button styling */
+.filter-group-actions {
+    margin-left: auto;
+}
+.filter-group-actions .btn {
+    height: 40px;
+    padding: 0 var(--space-4);
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+}
 
 /* Stack full-width only on small screens */
 @media (max-width: 768px) {

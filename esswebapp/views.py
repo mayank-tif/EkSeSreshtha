@@ -1874,7 +1874,6 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
             center_queryset = Center.objects.filter(id__in=accessible_center_ids, status=True)
         
         # Get teacher leaves for accessible centers where the leave spans the filter date
-        from APIS.models import TeacherLeaves
         
         leaves_qs = TeacherLeaves.objects.filter(
             center__in=center_queryset,
@@ -6306,11 +6305,35 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
             status_param = request.GET.get('status', '').strip().lower()
             filter_year = request.GET.get('filter_year', '').strip()
 
+            # RBAC: Determine accessible centers based on user role
+            # web_user is set by PermissionRequiredMixin.dispatch() from session
+            web_user = getattr(request, 'web_user', None)
+            allowed_center_ids = None
+            if web_user:
+                role_code = web_user.get('role_code')
+                user_id = web_user.get('user_id')
+                if role_code == 'SUPER_ADMIN':
+                    allowed_center_ids = None  # All centers
+                elif role_code == 'REGIONAL_ADMIN':
+                    # RegionalAdmin sees academic holidays (global) + their assigned centers
+                    allowed_center_ids = list(Center.objects.filter(status=True, assigned_regional_admin=user_id).values_list('id', flat=True))
+                elif role_code == 'TEACHER':
+                    # Teacher sees academic holidays + their assigned center
+                    allowed_center_ids = list(Center.objects.filter(assigned_teachers=user_id, status=True).values_list('id', flat=True))
+            
             # NOTE: do NOT hard-filter status=True here - 'All' must show
             # both active and inactive holidays.
             queryset = Holidays.objects.all().prefetch_related(
                 Prefetch('holiday_centers', queryset=HolidayCenter.objects.filter(status=True).select_related('center'))
             ).order_by('-start_date')
+
+            # Apply RBAC filtering
+            if allowed_center_ids is not None:
+                # RegionalAdmin/Teacher: show academic holidays (global) + center holidays in allowed centers
+                queryset = queryset.filter(
+                    Q(academic_holiday=True) | 
+                    Q(holiday_centers__center_id__in=allowed_center_ids)
+                ).distinct()
 
             # Type filter: academic (global, all centers) vs center-specific
             if holiday_type == 'academic':
@@ -6356,16 +6379,24 @@ class AcademicHolidaysView(PermissionRequiredMixin, View):
 
             items = []
             for h in holidays_page:
-                # Build centers list
+                # Build centers list - filter by allowed_center_ids for RBAC
                 if h.academic_holiday:
                     centers_list = []
                     center_id = None
                     center_name = 'All Centers'
                 else:
-                    centers_list = [
-                        {'id': hc.center_id, 'name': hc.center.center_name}
-                        for hc in h.holiday_centers.filter(status=True).select_related('center').all()
-                    ]
+                    if allowed_center_ids is not None:
+                        # RegionalAdmin/Teacher: only show centers they have access to
+                        centers_list = [
+                            {'id': hc.center_id, 'name': hc.center.center_name}
+                            for hc in h.holiday_centers.filter(status=True, center_id__in=allowed_center_ids).select_related('center').all()
+                        ]
+                    else:
+                        # SuperAdmin: show all centers
+                        centers_list = [
+                            {'id': hc.center_id, 'name': hc.center.center_name}
+                            for hc in h.holiday_centers.filter(status=True).select_related('center').all()
+                        ]
                     # For backward compatibility: use first center
                     center_id = centers_list[0]['id'] if centers_list else None
                     center_name = centers_list[0]['name'] if centers_list else None
@@ -6737,7 +6768,6 @@ class TeacherLeavesView(PermissionRequiredMixin, View):
                     'name': leaf['Name'],
                     'description': leaf['Description'],
                     'teacher_name': leaf['TeacherName'],
-                    'teacher_id': leaf['TeacherId'],
                     'center_name': leaf['CenterName'],
                     'center_id': leaf['CenterId'],
                     'start_date': leaf['StartDate'].isoformat() if leaf['StartDate'] else None,
@@ -6790,7 +6820,6 @@ class TeacherLeavesView(PermissionRequiredMixin, View):
                 leave = TeacherLeaves.objects.filter(id=holiday_id, center_id__in=allowed, status=True).first()
                 if not leave:
                     return JsonResponse({'detail': 'Holiday not found in your assigned centers'}, status=404)
-            from APIS.helper import approve_reject_teacher_leave
             result = approve_reject_teacher_leave(int(holiday_id), action, updated_by=request.web_user.get('user_id'))
             if result is None or 'error' in (result or {}):
                 return JsonResponse({'detail': (result or {}).get('error', 'Holiday not found')}, status=400)
