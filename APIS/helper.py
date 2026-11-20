@@ -5634,8 +5634,8 @@ def check_class_start_conditions(center_id, teacher_user_id, check_date):
     academic_holiday = Holidays.objects.filter(
         academic_holiday=True,
         status=True,
-        start_date__date__gte=check_date,
-        end_date__date__lte=check_date
+        start_date__date__lte=check_date,
+        end_date__date__gte=check_date
     ).first()
     
     if academic_holiday:
@@ -5648,10 +5648,11 @@ def check_class_start_conditions(center_id, teacher_user_id, check_date):
     # 3. Check center-specific holiday (via HolidayCenter junction table)
     center_holiday = Holidays.objects.filter(
         holiday_centers__center_id=center_id,
+        holiday_centers__status=True,
         academic_holiday=False,
         status=True,
-        start_date__date__gte=check_date,
-        end_date__date__lte=check_date
+        start_date__date__lte=check_date,
+        end_date__date__gte=check_date
     ).first()
     
     if center_holiday:
@@ -5667,8 +5668,8 @@ def check_class_start_conditions(center_id, teacher_user_id, check_date):
         created_by=teacher_user_id,
         status=True,
         approval_status__in=['approved', 'pending'],
-        start_date__date__gte=check_date,
-        end_date__date__lte=check_date
+        start_date__date__lte=check_date,
+        end_date__date__gte=check_date
     ).first()
     
     if teacher_leave:

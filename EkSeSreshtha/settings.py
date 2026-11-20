@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -192,6 +193,12 @@ LOGGING = {
             'format': '{levelname} {asctime} {name} {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
+        'schedule_formatter': {
+            'format': os.getenv('SCHEDULE_LOG_FILE_FORMAT', '%(asctime)s %(name)s - %(levelname)s - %(message)s'),
+        },
+        'daily_class_report_schedule_formatter': {
+            'format': os.getenv('DAILY_CLASS_REPORT_SCHEDULE_LOG_FILE_FORMAT', '%(asctime)s %(name)s - %(levelname)s - %(message)s'),
+        },
     },
     'handlers': {
         'app_file': {
@@ -209,6 +216,14 @@ LOGGING = {
             'maxBytes': 1024 * 1024 * 5,
             'backupCount': 5,
             'formatter': 'verbose',
+        },
+        'daily_class_report_schedule_file': {
+            'level': os.getenv('DAILY_CLASS_REPORT_SCHEDULE_LOGGING_LEVEL', 'INFO'),
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / os.getenv('DAILY_CLASS_REPORT_SCHEDULE_LOG_FILE_NAME', 'daily_class_report_scheduler.log'),
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 5,
+            'formatter': 'daily_class_report_schedule_formatter',
         },
     },
     'loggers': {
@@ -232,6 +247,11 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        os.getenv('DAILY_CLASS_REPORT_SCHEDULE_LOGGER_NAME', 'daily_class_report_scheduler_logs'): {
+            'handlers': ['daily_class_report_schedule_file'],
+            'level': os.getenv('DAILY_CLASS_REPORT_SCHEDULE_LOGGING_LEVEL', 'INFO'),
+            'propagate': False,
+        },
     },
 }
 
@@ -246,3 +266,12 @@ ATTENDANCE_IP_RESTRICTIONS = {
     ],
     'local_hosts': ['localhost', '127.0.0.1', '[::1]', 'testserver'],
 }
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'alerts@tiftechnologies.com' 
+EMAIL_HOST_PASSWORD = 'nold jruy fvzw aalp'      
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

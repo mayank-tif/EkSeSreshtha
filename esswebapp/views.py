@@ -879,6 +879,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     # Check for holiday on filter_date for this center
                     holiday = Holidays.objects.filter(
                         holiday_centers__center_id=center.id,
+                        holiday_centers__status=True,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -927,6 +928,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     # Check holiday
                     holiday = Holidays.objects.filter(
                         holiday_centers__center_id=center.id,
+                        holiday_centers__status=True,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -1129,6 +1131,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 if class_on_date:
                     holiday = Holidays.objects.filter(
                         holiday_centers__center_id=center.id,
+                        holiday_centers__status=True,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -1158,6 +1161,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                     # NO class started on this exact date for this center
                     holiday = Holidays.objects.filter(
                         holiday_centers__center_id=center.id,
+                        holiday_centers__status=True,
                         status=True,
                         start_date__date__lte=filter_date_obj,
                         end_date__date__gte=filter_date_obj
@@ -1230,6 +1234,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         if cls.center_id:
             holiday = Holidays.objects.filter(
                 holiday_centers__center_id=cls.center_id,
+                holiday_centers__status=True,
                 status=True,
                 start_date__date__lte=class_date,
                 end_date__date__gte=class_date
@@ -1767,17 +1772,18 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
         academic_holidays = Holidays.objects.filter(
             academic_holiday=True,
             status=True,
-            start_date__date__gte=filter_date_obj,
-            end_date__date__lte=filter_date_obj
+            start_date__date__lte=filter_date_obj,
+            end_date__date__gte=filter_date_obj
         )
         
         # Get center-specific holidays for accessible centers
         center_holidays = Holidays.objects.filter(
             holiday_centers__center__in=centers,
+            holiday_centers__status=True,
             academic_holiday=False,
             status=True,
-            start_date__date__gte=filter_date_obj,
-            end_date__date__lte=filter_date_obj
+            start_date__date__lte=filter_date_obj,
+            end_date__date__gte=filter_date_obj
         ).prefetch_related('holiday_centers__center').distinct()
         
         holidays_data = []
@@ -6832,3 +6838,201 @@ class TeacherLeavesView(PermissionRequiredMixin, View):
             })
         except Exception as e:
             return JsonResponse({'detail': str(e)}, status=500)
+
+
+def send_daily_class_report(target_date=None, recipients=None):
+    """
+    Generate daily class attendance summary Excel and send via email.
+    
+    Args:
+        target_date: date object (defaults to today)
+        recipients: list of email addresses (defaults to DEFAULT_FROM_EMAIL)
+    """
+    import io
+    import logging
+    from datetime import date, datetime
+    
+    import pandas as pd
+    from django.conf import settings
+    from django.core.mail import EmailMessage
+    from django.test import RequestFactory
+    from django.contrib.sessions.middleware import SessionMiddleware
+    
+    from EkSeSreshtha.env_details import DAILY_CLASS_REPORT_SCHEDULE_LOGGER_NAME, DAILY_CLASS_REPORT_TO_EMAILS, DAILY_CLASS_REPORT_CC_EMAILS
+    
+    # Use the dedicated scheduler logger
+    logger = logging.getLogger(DAILY_CLASS_REPORT_SCHEDULE_LOGGER_NAME)
+    
+    if target_date is None:
+        target_date = date.today()
+    
+    # Parse email recipients from env vars (comma-separated)
+    if recipients is None:
+        to_emails = [e.strip() for e in DAILY_CLASS_REPORT_TO_EMAILS.split(',') if e.strip()]
+        cc_emails = [e.strip() for e in DAILY_CLASS_REPORT_CC_EMAILS.split(',') if e.strip()]
+    else:
+        to_emails = recipients
+        cc_emails = []
+    
+    logger.info(f"Generating daily class summary for {target_date}")
+    
+    try:
+        # Create a mock request to reuse _get_class_log_summary_api logic
+        # This ensures the report data matches the UI exactly
+        factory = RequestFactory()
+        request = factory.get(
+            f'/attendance/class-logs/?action=summary&date={target_date}',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        
+        # Add session middleware
+        middleware = SessionMiddleware(lambda req: None)
+        middleware.process_request(request)
+        request.session.save()
+        
+        # SuperAdmin session (no center restrictions)
+        request.session['user'] = {
+            'user_id': 1,
+            'role_code': 'SUPER_ADMIN',
+            'name': 'System'
+        }
+        request.session.save()
+        request.web_user = {'user_id': 1, 'role_code': 'SUPER_ADMIN', 'name': 'System'}
+        
+        # Call the existing summary API logic
+        from esswebapp.views import ClassAttendanceLogsView
+        view = ClassAttendanceLogsView()
+        response = view._get_class_log_summary_api(request)
+        
+        import json
+        summary_data = json.loads(response.content)
+        
+        logger.info(f"Summary data retrieved: {summary_data}")
+        
+        # Create simple summary card data (matching the UI summary cards)
+        # These are the 5 key metrics shown in the cards
+        rows = [
+            {'Metric': 'Total Students', 'Count': summary_data.get('total_students', 0)},
+            {'Metric': 'Class Completed', 'Count': summary_data.get('completed', 0) + summary_data.get('completed_no_attendance', 0)},
+            {'Metric': 'Total Present', 'Count': summary_data.get('total_present', 0)},
+            {'Metric': 'Total Absent', 'Count': summary_data.get('total_absent', 0)},
+            {'Metric': 'Not Started', 'Count': summary_data.get('not_started', 0)},
+        ]
+        
+        df = pd.DataFrame(rows)
+        
+        # Write to Excel buffer
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Daily Class Summary')
+            
+            worksheet = writer.sheets['Daily Class Summary']
+            
+            # Insert a row at the top for the date header
+            worksheet.insert_rows(1)
+            worksheet['A1'] = f'Daily Class Attendance Summary - {target_date.strftime("%Y-%m-%d")}'
+            
+            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+            from openpyxl.utils import get_column_letter
+            
+            worksheet['A1'].font = Font(bold=True, size=14)
+            worksheet.merge_cells('A1:B1')
+            worksheet['A1'].alignment = Alignment(horizontal='center')
+            
+            # Style header row (now row 2)
+            header_font = Font(bold=True, color='FFFFFF')
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_alignment = Alignment(horizontal='center', wrap_text=True)
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            for col_num, column_title in enumerate(df.columns, 1):
+                cell = worksheet.cell(row=2, column=col_num, value=column_title)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+                cell.border = thin_border
+            
+            # Style data rows - highlight all 5 key metrics
+            for row_num in range(3, worksheet.max_row + 1):
+                for col_num in range(1, len(df.columns) + 1):
+                    cell = worksheet.cell(row=row_num, column=col_num)
+                    cell.border = thin_border
+                    cell.alignment = Alignment(horizontal='center')
+                    cell.fill = PatternFill(start_color='E2EFDA', end_color='E2EFDA', fill_type='solid')
+                    cell.font = Font(bold=True)
+            
+            # Auto-fit column widths
+            for col_num, column_title in enumerate(df.columns, 1):
+                column_letter = get_column_letter(col_num)
+                max_length = max(
+                    len(str(column_title)),
+                    *[len(str(worksheet.cell(row=row, column=col_num).value)) 
+                      for row in range(2, worksheet.max_row + 1) 
+                      if worksheet.cell(row=row, column=col_num).value]
+                )
+                worksheet.column_dimensions[column_letter].width = min(max_length + 2, 40)
+        
+        buffer.seek(0)
+        
+        # Send email
+        subject = f'Daily Class Attendance Summary - {target_date.strftime("%Y-%m-%d")}'
+        
+        # Build HTML table with the 5 key metrics
+        key_metrics = [
+            ('Total Students', summary_data.get('total_students', 0)),
+            ('Class Completed', summary_data.get('completed', 0) + summary_data.get('completed_no_attendance', 0)),
+            ('Total Present', summary_data.get('total_present', 0)),
+            ('Total Absent', summary_data.get('total_absent', 0)),
+            ('Not Started', summary_data.get('not_started', 0)),
+        ]
+        
+        key_metrics_html = ''.join([
+            f'<tr style="background-color: #E2EFDA;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>{m}</strong></td><td style="padding: 8px; border: 1px solid #ddd; text-align: center;"><strong>{c}</strong></td></tr>'
+            for m, c in key_metrics
+        ])
+        
+        body = f"""
+        <html>
+        <body>
+            <p>Dear Team,</p>
+            <p>Please find below the daily class attendance summary for <strong>{target_date.strftime("%Y-%m-%d")}</strong>.</p>
+            <table style="border-collapse: collapse; width: 50%; margin-bottom: 20px;">
+                <tr style="background-color: #4472C4; color: white;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">Metric</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Count</th>
+                </tr>
+                {key_metrics_html}
+            </table>
+            <p>Detailed Excel file is attached.</p>
+            <br>
+            <p>Thanks & Regards<br>
+            <strong>EkSeSreshtha System</strong></p>
+        </body>
+        </html>
+        """
+        
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=to_emails,
+            cc=cc_emails,
+        )
+        email.content_subtype = 'html'
+        
+        filename = f'Daily_Class_Summary_{target_date.strftime("%Y%m%d")}.xlsx'
+        email.attach(filename, buffer.getvalue(), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        
+        email.send()
+        all_recipients = to_emails + cc_emails
+        logger.info(f"Daily class summary email sent to {', '.join(all_recipients)} for {target_date}")
+        
+    except Exception as e:
+        logger.error(f"Failed to send daily class summary: {e}", exc_info=True)
+        raise
+
