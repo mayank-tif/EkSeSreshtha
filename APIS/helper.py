@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 import uuid
-from django.db.models import Prefetch, OuterRef, Prefetch, Subquery, Count, Q
+from django.db.models import Prefetch, OuterRef, Prefetch, Subquery, Count, Q, F
 from .models import *
 from django.db import IntegrityError, connection, transaction
 from .utils import *
@@ -4064,6 +4064,28 @@ def count_continuous_working_days(start_date, end_date, exclude_holidays=True):
     return count
 
 
+def calculate_leave_days(start_date, end_date):
+    """Count Mon-Fri days in [start_date, end_date] (excludes Sat/Sun only).
+    
+    This is used for monthly leave quota calculation.
+    Holidays are NOT excluded here - only weekends.
+    """
+    if not start_date:
+        return 0
+    start = start_date.date() if hasattr(start_date, 'date') else start_date
+    end = end_date.date() if (end_date and hasattr(end_date, 'date')) else (end_date or start)
+    if end < start:
+        start, end = end, start
+
+    count = 0
+    day = start
+    while day <= end:
+        if day.weekday() < 5:  # Mon-Fri
+            count += 1
+        day += timedelta(days=1)
+    return count
+
+
 def resolve_teacher(created_by):
     """Resolve the applying Teacher via CreatedBy, which already
     stores the teacher's user id (no separate teacher column on
@@ -4628,11 +4650,9 @@ def get_all_academic_holidays():
 def save_teacher_leave(leave_data):
     """Save or update a teacher leave (TeacherLeaves table).
 
-    Approval rule: continuous working days excluding Sat/Sun and
-    Holidays (academic + center) days. Beyond
-    TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS -> 'pending' approval,
-    otherwise auto-approved. The applying teacher's user id is
-    stored in CreatedBy.
+    Approval rule: Monthly leave quota (Mon-Fri days) per teacher.
+    If total leave_days in month > TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS -> 'pending',
+    otherwise auto-approved.
     """
     logger.info("TeacherLeavesHelper : SaveTeacherLeave : Started")
     try:
@@ -4661,12 +4681,37 @@ def save_teacher_leave(leave_data):
         created_by = leave_data.get('CreatedBy')
         created_on = datetime.now()
 
+        # Calculate leave days (Mon-Fri only) for quota check
+        leave_days = calculate_leave_days(start_date, end_date)
         continuous_days = count_continuous_working_days(start_date, end_date, exclude_holidays=False)
         max_allowed = get_max_allowed_teacher_holidays()
-        approval_status = 'pending' if continuous_days > max_allowed else 'approved'
+
+        # Check monthly quota
+        if start_date:
+            month_start = start_date.replace(day=1) if hasattr(start_date, 'replace') else start_date
+            month = month_start.month if hasattr(month_start, 'month') else int(str(month_start)[5:7])
+            year = month_start.year if hasattr(month_start, 'year') else int(str(month_start)[:4])
+        else:
+            now = datetime.now()
+            month = now.month
+            year = now.year
+
+        quota = TeacherMonthlyLeaveQuota.objects.filter(
+            teacher_user_id=created_by,
+            year=year,
+            month=month
+        ).first()
+        used_days = quota.leave_days_used if quota else 0
+
+        if used_days + leave_days > max_allowed:
+            approval_status = 'pending'
+            quota_message = f'Monthly quota exceeded (used: {used_days}, new: {leave_days}, max: {max_allowed})'
+        else:
+            approval_status = 'approved'
+            quota_message = f'Within monthly quota (used: {used_days}, new: {leave_days}, max: {max_allowed})'
 
         if leave_id > 0:
-            # Fetch existing leave by ID (not name, since name can change)
+            # Fetch existing leave by ID
             existing_leaves = TeacherLeaves.objects.filter(id=leave_id, status=True)
             if not existing_leaves.exists():
                 logger.error(f"Leave with id {leave_id} not found for update")
@@ -4682,6 +4727,7 @@ def save_teacher_leave(leave_data):
                     start_date=start_date, end_date=end_date, name=name,
                     description=description, status=status, center_id=center_id,
                     approval_status=approval_status, continuous_days=continuous_days,
+                    leave_days=leave_days,
                     created_on=created_on, created_by=created_by,
                 )
             for center_id in existing_center_ids:
@@ -4690,6 +4736,7 @@ def save_teacher_leave(leave_data):
                         start_date=start_date, end_date=end_date, name=name,
                         description=description, status=status,
                         approval_status=approval_status, continuous_days=continuous_days,
+                        leave_days=leave_days,
                         updated_on=datetime.now(),
                     )
         else:
@@ -4698,24 +4745,41 @@ def save_teacher_leave(leave_data):
                     start_date=start_date, end_date=end_date, name=name,
                     description=description, status=status, center_id=center_id,
                     approval_status=approval_status, continuous_days=continuous_days,
+                    leave_days=leave_days,
                     created_on=created_on, created_by=created_by,
                 )
+
+        # Update quota for auto-approved leaves
+        if approval_status == 'approved' and leave_days > 0 and start_date:
+            quota, created = TeacherMonthlyLeaveQuota.objects.get_or_create(
+                teacher_user_id=created_by,
+                year=year,
+                month=month,
+                defaults={'leave_days_used': leave_days}
+            )
+            if not created:
+                quota.leave_days_used = F('leave_days_used') + leave_days
+                quota.save(update_fields=['leave_days_used', 'updated_on'])
 
         logger.info("TeacherLeavesHelper : SaveTeacherLeave : End")
         if approval_status == 'pending':
             return {
                 'status': True,
-                'message': 'Holiday Leave Pending: continuous leave exceeds the allowed maximum, awaiting approval',
+                'message': f'Holiday Leave Pending: {quota_message}',
                 'approval_status': 'pending',
+                'leave_days': leave_days,
                 'continuous_days': continuous_days,
                 'max_allowed': max_allowed,
+                'used_this_month': used_days,
             }
         return {
             'status': True,
-            'message': 'Teacher leave saved successfully',
+            'message': f'Teacher leave saved successfully: {quota_message}',
             'approval_status': approval_status,
+            'leave_days': leave_days,
             'continuous_days': continuous_days,
             'max_allowed': max_allowed,
+            'used_this_month': used_days,
         }
     except Exception as e:
         logger.error(f"TeacherLeavesHelper : SaveTeacherLeave : {str(e)}")
@@ -4724,7 +4788,7 @@ def save_teacher_leave(leave_data):
 
 def approve_reject_teacher_leave(leave_id, action, updated_by=None):
     """Approve/reject a pending teacher leave.
-    action: 'approve' -> approval_status='approved', status=True
+    action: 'approve' -> approval_status='approved', status=True, updates monthly quota
             'reject'  -> approval_status='rejected', status=True
     Returns dict or None if not found / not pending."""
     logger.info(f"TeacherLeavesHelper : ApproveRejectLeave : Started action={action} id={leave_id}")
@@ -4736,6 +4800,17 @@ def approve_reject_teacher_leave(leave_id, action, updated_by=None):
     if action == 'approve':
         leave.approval_status = 'approved'
         leave.status = True
+        # Update monthly quota
+        if leave.start_date and leave.leave_days > 0:
+            month_start = leave.start_date.replace(day=1) if hasattr(leave.start_date, 'replace') else leave.start_date
+            month = month_start.month if hasattr(month_start, 'month') else int(str(month_start)[5:7])
+            year = month_start.year if hasattr(month_start, 'year') else int(str(month_start)[:4])
+            TeacherMonthlyLeaveQuota.objects.update_or_create(
+                teacher_user_id=leave.created_by,
+                year=year,
+                month=month,
+                defaults={'leave_days_used': F('leave_days_used') + leave.leave_days}
+            )
     elif action == 'reject':
         # Keep status=True so the row stays visible (every
         # TeacherLeaves query filters status=True); 'rejected'
@@ -4789,6 +4864,17 @@ def cancel_teacher_leave(leave_id, user_id, user_type):
         pass
     else:
         return {'error': 'Not authorized'}
+    
+    # Decrement quota if leave was approved
+    if leave.approval_status == 'approved' and leave.leave_days > 0 and leave.start_date:
+        month_start = leave.start_date.replace(day=1) if hasattr(leave.start_date, 'replace') else leave.start_date
+        month = month_start.month if hasattr(month_start, 'month') else int(str(month_start)[5:7])
+        year = month_start.year if hasattr(month_start, 'year') else int(str(month_start)[:4])
+        TeacherMonthlyLeaveQuota.objects.filter(
+            teacher_user_id=leave.created_by,
+            year=year,
+            month=month
+        ).update(leave_days_used=F('leave_days_used') - leave.leave_days)
     
     # Soft delete - set status=False
     leave.status = False

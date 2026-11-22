@@ -540,6 +540,7 @@ class TeacherLeaves(models.Model):
     ]
     approval_status = models.CharField(db_column="ApprovalStatus", max_length=20, choices=APPROVAL_STATUS_CHOICES, null=True, blank=True, default='approved')
     continuous_days = models.IntegerField(db_column="ContinuousDays", null=True, blank=True)
+    leave_days = models.IntegerField(db_column="LeaveDays", default=0)
     approved_by = models.IntegerField(db_column="ApprovedBy", null=True, blank=True)
     created_by = models.IntegerField(db_column="CreatedBy", null=True, blank=True)
     created_on = models.DateTimeField(db_column="CreatedOn", null=True, blank=True)
@@ -558,6 +559,32 @@ class TeacherLeaves(models.Model):
 
     def __str__(self):
         return self.name or str(self.id)
+
+
+class TeacherMonthlyLeaveQuota(models.Model):
+    """Track monthly leave days used per teacher (Mon-Fri only).
+    
+    Updated when a leave is approved (auto or by admin).
+    """
+    id = models.AutoField(db_column="Id", primary_key=True)
+    teacher_user_id = models.IntegerField(db_column="TeacherUserId")
+    year = models.IntegerField(db_column="Year")
+    month = models.IntegerField(db_column="Month")
+    leave_days_used = models.IntegerField(db_column="LeaveDaysUsed", default=0)
+    created_on = models.DateTimeField(db_column="CreatedOn", auto_now_add=True)
+    updated_on = models.DateTimeField(db_column="UpdatedOn", auto_now=True)
+
+    class Meta:
+        db_table = "TeacherMonthlyLeaveQuota"
+        constraints = [
+            models.UniqueConstraint(fields=['teacher_user_id', 'year', 'month'], name='unique_teacher_month_quota'),
+        ]
+        indexes = [
+            models.Index(fields=['teacher_user_id', 'year', 'month'], name='idx_teacher_monthly_quota'),
+        ]
+
+    def __str__(self):
+        return f"{self.teacher_user_id} - {self.year}-{self.month:02d} - {self.leave_days_used} days"
 
 
 class Announcement(models.Model):

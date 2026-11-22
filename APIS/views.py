@@ -3777,19 +3777,15 @@ class TeacherLeavesSavePostView(APIView):
             leave_data['CreatedBy'] = logged_user_id
             result = save_teacher_leave(leave_data)
             if result:
-                if result.get('approval_status') == 'pending':
-                    message = "Holiday Leave Pending: continuous leave exceeds the allowed maximum, awaiting approval"
-                elif serializer.validated_data.get('Id', 0) > 0:
-                    message = "Teacher leave update successfully"
-                else:
-                    message = "Teacher leave save successfully"
                 return Response(
                     {
                         "status": True,
-                        "message": message,
+                        "message": result.get('message', 'Teacher leave saved successfully'),
                         "approvalStatus": result.get('approval_status', 'approved'),
+                        "leaveDays": result.get('leave_days'),
                         "continuousDays": result.get('continuous_days'),
                         "maxAllowed": result.get('max_allowed'),
+                        "usedThisMonth": result.get('used_this_month'),
                         "code": status.HTTP_200_OK,
                     },
                     status=status.HTTP_200_OK,
