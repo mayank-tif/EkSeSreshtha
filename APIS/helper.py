@@ -4647,12 +4647,49 @@ def get_all_academic_holidays():
         raise e
 
 
+# Teacher-leave approval status is stored as a small integer so the DB can
+# index/filter it cheaply. The text labels are only used at the API/UI edge.
+APPROVAL_STATUS_APPROVED = 1
+APPROVAL_STATUS_PENDING = 2
+APPROVAL_STATUS_REJECTED = 3
+APPROVAL_STATUS_CANCELLED = 4
+
+APPROVAL_STATUS_LABELS = {
+    APPROVAL_STATUS_APPROVED: 'Approved',
+    APPROVAL_STATUS_PENDING: 'Pending',
+    APPROVAL_STATUS_REJECTED: 'Rejected',
+    APPROVAL_STATUS_CANCELLED: 'Cancelled',
+}
+
+# Accept the legacy string labels as well as integer codes at the API edge so
+# existing clients keep working; everything below this boundary uses ints.
+_APPROVAL_STATUS_VALUES = {
+    'approved': APPROVAL_STATUS_APPROVED,
+    'pending': APPROVAL_STATUS_PENDING,
+    'rejected': APPROVAL_STATUS_REJECTED,
+    'cancelled': APPROVAL_STATUS_CANCELLED,
+    '1': APPROVAL_STATUS_APPROVED,
+    '2': APPROVAL_STATUS_PENDING,
+    '3': APPROVAL_STATUS_REJECTED,
+    '4': APPROVAL_STATUS_CANCELLED,
+}
+
+
+def normalize_approval_status(value):
+    """Map an API filter value (integer code or legacy label) to its int code."""
+    if value is None or value == '':
+        return None
+    if isinstance(value, int):
+        return value if value in APPROVAL_STATUS_LABELS else None
+    return _APPROVAL_STATUS_VALUES.get(str(value).strip().lower())
+
+
 def save_teacher_leave(leave_data):
     """Save or update a teacher leave (TeacherLeaves table).
 
     Approval rule: Monthly leave quota (Mon-Fri days) per teacher.
-    If total leave_days in month > TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS -> 'pending',
-    otherwise auto-approved.
+    If total leave_days in month > TEACHERS_MAXIMUM_ALLOWED_HOLIDAYS -> 2 (Pending),
+    otherwise auto-approved (1).
     """
     logger.info("TeacherLeavesHelper : SaveTeacherLeave : Started")
     try:
@@ -4704,10 +4741,10 @@ def save_teacher_leave(leave_data):
         used_days = quota.leave_days_used if quota else 0
 
         if used_days + leave_days > max_allowed:
-            approval_status = 'pending'
+            approval_status = APPROVAL_STATUS_PENDING
             quota_message = f'Monthly quota exceeded (used: {used_days}, new: {leave_days}, max: {max_allowed})'
         else:
-            approval_status = 'approved'
+            approval_status = APPROVAL_STATUS_APPROVED
             quota_message = f'Within monthly quota (used: {used_days}, new: {leave_days}, max: {max_allowed})'
 
         if leave_id > 0:
@@ -4750,7 +4787,7 @@ def save_teacher_leave(leave_data):
                 )
 
         # Update quota for auto-approved leaves
-        if approval_status == 'approved' and leave_days > 0 and start_date:
+        if approval_status == APPROVAL_STATUS_APPROVED and leave_days > 0 and start_date:
             quota, created = TeacherMonthlyLeaveQuota.objects.get_or_create(
                 teacher_user_id=created_by,
                 year=year,
@@ -4762,11 +4799,11 @@ def save_teacher_leave(leave_data):
                 quota.save(update_fields=['leave_days_used', 'updated_on'])
 
         logger.info("TeacherLeavesHelper : SaveTeacherLeave : End")
-        if approval_status == 'pending':
+        if approval_status == APPROVAL_STATUS_PENDING:
             return {
                 'status': True,
                 'message': f'Holiday Leave Pending: {quota_message}',
-                'approval_status': 'pending',
+                'approval_status': APPROVAL_STATUS_PENDING,
                 'leave_days': leave_days,
                 'continuous_days': continuous_days,
                 'max_allowed': max_allowed,
@@ -4786,20 +4823,26 @@ def save_teacher_leave(leave_data):
         raise e
 
 
-def approve_reject_teacher_leave(leave_id, action, updated_by=None):
-    """Approve/reject a pending teacher leave.
-    action: 'approve' -> approval_status='approved', status=True, updates monthly quota
-            'reject'  -> approval_status='rejected', status=True
+def approve_reject_teacher_leave(leave_id, approval_status, updated_by=None):
+    """Set the approval status of a pending teacher leave.
+
+    approval_status: 1 (Approved) -> status=True, updates monthly quota
+                     3 (Rejected) -> status=True
     Returns dict or None if not found / not pending."""
-    logger.info(f"TeacherLeavesHelper : ApproveRejectLeave : Started action={action} id={leave_id}")
+    logger.info(f"TeacherLeavesHelper : ApproveRejectLeave : Started status={approval_status} id={leave_id}")
     leave = TeacherLeaves.objects.filter(id=leave_id, status=True).first()
     if not leave:
         return None
-    if (leave.approval_status or 'approved') != 'pending':
+    approval_status = normalize_approval_status(approval_status)
+    if approval_status not in (APPROVAL_STATUS_APPROVED, APPROVAL_STATUS_REJECTED):
+        return {'error': 'approvalStatus must be 1 (Approved) or 3 (Rejected)'}
+    if (leave.approval_status or APPROVAL_STATUS_APPROVED) != APPROVAL_STATUS_PENDING:
         return {'error': 'Leave is not pending approval'}
-    if action == 'approve':
-        leave.approval_status = 'approved'
-        leave.status = True
+    # Keep status=True so the row stays visible (every TeacherLeaves
+    # query filters status=True); the decision lives in approval_status.
+    leave.approval_status = approval_status
+    leave.status = True
+    if approval_status == APPROVAL_STATUS_APPROVED:
         # Update monthly quota
         if leave.start_date and leave.leave_days > 0:
             month_start = leave.start_date.replace(day=1) if hasattr(leave.start_date, 'replace') else leave.start_date
@@ -4811,14 +4854,6 @@ def approve_reject_teacher_leave(leave_id, action, updated_by=None):
                 month=month,
                 defaults={'leave_days_used': F('leave_days_used') + leave.leave_days}
             )
-    elif action == 'reject':
-        # Keep status=True so the row stays visible (every
-        # TeacherLeaves query filters status=True); 'rejected'
-        # lives in approval_status.
-        leave.approval_status = 'rejected'
-        leave.status = True
-    else:
-        return {'error': "action must be 'approve' or 'reject'"}
     leave.updated_on = datetime.now()
     leave.updated_by = updated_by
     # Record who approved/rejected this leave
@@ -4866,7 +4901,7 @@ def cancel_teacher_leave(leave_id, user_id, user_type):
         return {'error': 'Not authorized'}
     
     # Decrement quota if leave was approved
-    if leave.approval_status == 'approved' and leave.leave_days > 0 and leave.start_date:
+    if leave.approval_status == APPROVAL_STATUS_APPROVED and leave.leave_days > 0 and leave.start_date:
         month_start = leave.start_date.replace(day=1) if hasattr(leave.start_date, 'replace') else leave.start_date
         month = month_start.month if hasattr(month_start, 'month') else int(str(month_start)[5:7])
         year = month_start.year if hasattr(month_start, 'year') else int(str(month_start)[:4])
@@ -4876,13 +4911,13 @@ def cancel_teacher_leave(leave_id, user_id, user_type):
             month=month
         ).update(leave_days_used=F('leave_days_used') - leave.leave_days)
     
-    # Soft delete - set status=False
-    leave.status = False
+    # Set approval_status to cancelled (keep status=True so leave remains visible)
+    leave.approval_status = APPROVAL_STATUS_CANCELLED
     leave.updated_on = datetime.now()
     leave.updated_by = user_id
-    leave.save(update_fields=['status', 'updated_on', 'updated_by'])
+    leave.save(update_fields=['approval_status', 'updated_on', 'updated_by'])
     
-    return {'id': leave.id, 'status': leave.status, 'message': 'Leave cancelled successfully'}
+    return {'id': leave.id, 'approval_status': leave.approval_status, 'message': 'Leave cancelled successfully'}
 
 
 def get_teacher_leaves(center_id=None, teacher_id=None, approval_status=None, search='', allowed_center_ids=None, start_date=None, end_date=None):
@@ -4912,6 +4947,7 @@ def get_teacher_leaves(center_id=None, teacher_id=None, approval_status=None, se
     if teacher_id:
         # User table id (same id stored in CreatedBy)
         queryset = queryset.filter(created_by=teacher_id)
+    approval_status = normalize_approval_status(approval_status)
     if approval_status:
         queryset = queryset.filter(approval_status=approval_status)
     # Calendar filter: on the leave StartDate
@@ -4934,7 +4970,7 @@ def get_teacher_leaves(center_id=None, teacher_id=None, approval_status=None, se
             'CenterId': h.center_id,
             'CenterName': h.center.center_name if h.center else None,
             'TeacherName': tinfo.get('teacher_name'),
-            'ApprovalStatus': h.approval_status or 'approved',
+            'ApprovalStatus': h.approval_status or APPROVAL_STATUS_APPROVED,
             'ContinuousDays': h.continuous_days,
             'ApprovedBy': h.approved_by,
             'CreatedOn': h.created_on,
@@ -5753,14 +5789,14 @@ def check_class_start_conditions(center_id, teacher_user_id, check_date):
     teacher_leave = TeacherLeaves.objects.filter(
         created_by=teacher_user_id,
         status=True,
-        approval_status__in=['approved', 'pending'],
+        approval_status__in=[APPROVAL_STATUS_APPROVED, APPROVAL_STATUS_PENDING],
         start_date__date__lte=check_date,
         end_date__date__gte=check_date
     ).first()
     
     if teacher_leave:
         return True, 'teacher_leave', {
-            'message': f'Teacher leave: {teacher_leave.name} ({teacher_leave.approval_status})',
+            'message': f'Teacher leave: {teacher_leave.name} ({APPROVAL_STATUS_LABELS.get(teacher_leave.approval_status, teacher_leave.approval_status)})',
             'leave_name': teacher_leave.name,
             'leave_id': teacher_leave.id,
             'approval_status': teacher_leave.approval_status

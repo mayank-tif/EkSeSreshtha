@@ -10,6 +10,15 @@ let currentPage = 1;
 const pageSize = 50;
 let pendingLeaveAction = null; // { id, action }
 
+// Approval status codes (match TeacherLeaves.APPROVAL_STATUS_CHOICES).
+const APPROVAL_STATUS = { APPROVED: 1, PENDING: 2, REJECTED: 3, CANCELLED: 4 };
+const APPROVAL_STATUS_LABELS = {
+    1: 'Approved', 2: 'Pending', 3: 'Rejected', 4: 'Cancelled'
+};
+const APPROVAL_STATUS_BADGES = {
+    1: 'badge-success', 2: 'badge-warning', 3: 'badge-danger', 4: 'badge-secondary'
+};
+
 document.addEventListener('DOMContentLoaded', function () {
     initializePage();
 });
@@ -185,7 +194,9 @@ function renderLeavesTable(leaves) {
         return;
     }
 
-    tbody.innerHTML = leaves.map(leave => `
+    tbody.innerHTML = leaves.map(leave => {
+        const status = Number(leave.approval_status);
+        return `
         <tr data-id="${leave.id}">
             <td>
                 <div class="fw-medium">${escapeHtml(leave.teacher_name || '-')}</div>
@@ -199,14 +210,14 @@ function renderLeavesTable(leaves) {
             <td>${leave.end_date ? formatDate(leave.end_date) : '<span class="text-muted">-</span>'}</td>
             <td class="text-center">${leave.continuous_days ?? '-'}</td>
             <td>
-                <span class="badge ${leave.approval_status === 'pending' ? 'badge-warning' : leave.approval_status === 'rejected' ? 'badge-danger' : 'badge-success'}">
-                    ${leave.approval_status === 'pending' ? 'Pending' : leave.approval_status === 'rejected' ? 'Rejected' : 'Approved'}
+                <span class="badge ${APPROVAL_STATUS_BADGES[status] || 'badge-secondary'}">
+                    ${APPROVAL_STATUS_LABELS[status] || '-'}
                 </span>
             </td>
             <td>${escapeHtml(leave.approved_by_name || '-')}</td>
             <td class="text-center">
                 <div class="table-actions">
-                    ${leave.approval_status === 'pending' ? `
+                    ${status === APPROVAL_STATUS.PENDING ? `
                     <button type="button" class="btn btn-success btn-sm btn-approve" data-id="${leave.id}" title="Approve" aria-label="Approve">
                         Approve
                     </button>
@@ -216,7 +227,8 @@ function renderLeavesTable(leaves) {
                 </div>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 
     tbody.querySelectorAll('.btn-approve').forEach(btn => {
         btn.addEventListener('click', () => openLeaveActionModal(btn.dataset.id, 'approve'));
@@ -284,11 +296,12 @@ function openLeaveActionModal(id, action) {
 function confirmLeaveAction() {
     if (!pendingLeaveAction) return;
     const { id, action } = pendingLeaveAction;
+    const approvalStatus = action === 'approve' ? APPROVAL_STATUS.APPROVED : APPROVAL_STATUS.REJECTED;
     const btn = document.getElementById('leave-action-confirm');
     btn.disabled = true;
     btn.textContent = 'Saving...';
 
-    apiCall(action, {}, 'POST', { action, id })
+    apiCall(action, {}, 'POST', { approvalStatus, id })
         .then(() => {
             showToast(action === 'approve' ? 'Leave approved successfully' : 'Leave rejected successfully', 'success');
             closeModal('leave-action-modal');

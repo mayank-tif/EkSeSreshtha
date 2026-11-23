@@ -9,6 +9,10 @@
    - Detail modal with student attendance breakdown
    ================================================================ */
 
+// Teacher-leave approval status codes (match TeacherLeaves.APPROVAL_STATUS_CHOICES)
+const LEAVE_STATUS_LABELS = { 1: 'Approved', 2: 'Pending', 3: 'Rejected', 4: 'Cancelled' };
+const LEAVE_STATUS_BADGES = { 1: 'badge-success', 2: 'badge-warning', 3: 'badge-danger', 4: 'badge-secondary' };
+
 // ── State ─────────────────────────────────────────────────────────
 const state = {
     page: 1,
@@ -930,7 +934,7 @@ window.openTeacherLeaveDetailModal = async function() {
                     '<td>' + escapeHtml(l.description || '-') + '</td>' +
                     '<td>' + l.start_date + '</td>' +
                     '<td>' + l.end_date + '</td>' +
-                    '<td><span class="badge badge-' + (l.approval_status === 'approved' ? 'success' : l.approval_status === 'pending' ? 'warning' : 'danger') + '">' + l.approval_status + '</span></td>' +
+                    '<td><span class="badge ' + (LEAVE_STATUS_BADGES[Number(l.approval_status)] || 'badge-secondary') + '">' + (LEAVE_STATUS_LABELS[Number(l.approval_status)] || '-') + '</span></td>' +
                     '<td>' + (l.continuous_days || 0) + '</td>' +
                     '</tr>'
                 ).join('');

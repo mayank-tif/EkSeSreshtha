@@ -534,11 +534,12 @@ class TeacherLeaves(models.Model):
     end_date = models.DateTimeField(db_column="EndDate", null=True, blank=True)
     center = models.ForeignKey(Center, db_column="CenterId", on_delete=models.SET_NULL, null=True, blank=True, related_name='teacher_leaves')
     APPROVAL_STATUS_CHOICES = [
-        ('approved', 'Approved'),
-        ('pending', 'Pending'),
-        ('rejected', 'Rejected'),
+        (1, 'Approved'),
+        (2, 'Pending'),
+        (3, 'Rejected'),
+        (4, 'Cancelled'),
     ]
-    approval_status = models.CharField(db_column="ApprovalStatus", max_length=20, choices=APPROVAL_STATUS_CHOICES, null=True, blank=True, default='approved')
+    approval_status = models.IntegerField(db_column="ApprovalStatus", choices=APPROVAL_STATUS_CHOICES, null=True, blank=True, default=1)
     continuous_days = models.IntegerField(db_column="ContinuousDays", null=True, blank=True)
     leave_days = models.IntegerField(db_column="LeaveDays", default=0)
     approved_by = models.IntegerField(db_column="ApprovedBy", null=True, blank=True)

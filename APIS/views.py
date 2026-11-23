@@ -3595,15 +3595,22 @@ class HolidaysDeleteholidaybyidPostView(APIView):
 
 class TeacherLeavesApproveRejectPostView(APIView):
     """Approve/reject a pending teacher leave (SuperAdmin/RegionalAdmin).
-    Body: {id, action: 'approve'|'reject'} """
+    Body: {id, approvalStatus: 1|3} where 1=Approved, 3=Rejected.
+    Legacy {action: 'approve'|'reject'} is still accepted."""
 
     def post(self, request):
         try:
             holiday_id = request.data.get('id')
-            action = (request.data.get('action') or '').lower()
-            if not holiday_id or action not in ('approve', 'reject'):
+            approval_status = request.data.get('approvalStatus')
+            if approval_status is None:
+                # Backward compatibility with older string-based clients.
+                approval_status = {'approve': 1, 'reject': 3}.get(
+                    (request.data.get('action') or '').lower()
+                )
+            approval_status = normalize_approval_status(approval_status)
+            if not holiday_id or approval_status not in (APPROVAL_STATUS_APPROVED, APPROVAL_STATUS_REJECTED):
                 return Response(
-                    {"status": False, "error": "id and action ('approve'|'reject') are required", "code": status.HTTP_400_BAD_REQUEST},
+                    {"status": False, "error": "id and approvalStatus (1=Approved, 3=Rejected) are required", "code": status.HTTP_400_BAD_REQUEST},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             # Auth + RBAC: token required before any action.
@@ -3630,14 +3637,14 @@ class TeacherLeavesApproveRejectPostView(APIView):
                         {"status": False, "error": "Teacher leaves not found in your assigned centers", "code": status.HTTP_404_NOT_FOUND},
                         status=status.HTTP_404_NOT_FOUND,
                     )
-            result = approve_reject_teacher_leave(int(holiday_id), action, updated_by=logged_user_id)
+            result = approve_reject_teacher_leave(int(holiday_id), approval_status, updated_by=logged_user_id)
             if result is None or 'error' in result:
                 return Response(
                     {"status": False, "error": (result or {}).get('error', 'Teacher leaves not found'), "code": status.HTTP_400_BAD_REQUEST},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             return Response(
-                {"status": True, "message": ("Teacher's leave approved successfully" if action == "approve" else "Teacher leave rejected successfully"), "data": result, "code": status.HTTP_200_OK},
+                {"status": True, "message": ("Teacher's leave approved successfully" if approval_status == APPROVAL_STATUS_APPROVED else "Teacher leave rejected successfully"), "data": result, "code": status.HTTP_200_OK},
                 status=status.HTTP_200_OK,
             )
         except Exception as e:
@@ -3781,7 +3788,7 @@ class TeacherLeavesSavePostView(APIView):
                     {
                         "status": True,
                         "message": result.get('message', 'Teacher leave saved successfully'),
-                        "approvalStatus": result.get('approval_status', 'approved'),
+                        "approvalStatus": result.get('approval_status', 1),
                         "leaveDays": result.get('leave_days'),
                         "continuousDays": result.get('continuous_days'),
                         "maxAllowed": result.get('max_allowed'),
@@ -3808,7 +3815,7 @@ class TeacherLeavesGetAllGetView(APIView):
     Filters:
         - centerId: filter by center
         - teacherId: filter by teacher (User table id = CreatedBy)
-        - approvalStatus: pending/approved/rejected
+        - approvalStatus: integer code - 1=Approved, 2=Pending, 3=Rejected, 4=Cancelled
         - search: search in name/description
         - startDate: filter by leave start date (gte)
         - endDate: filter by leave start date (lte)
@@ -3826,7 +3833,26 @@ class TeacherLeavesGetAllGetView(APIView):
             search = request.query_params.get('search', '')
             start_date = request.query_params.get('startDate')
             end_date = request.query_params.get('endDate')
-            
+
+            # approvalStatus must be an integer code sent by the frontend:
+            # 1=Approved, 2=Pending, 3=Rejected, 4=Cancelled.
+            valid_statuses = (
+                APPROVAL_STATUS_APPROVED, APPROVAL_STATUS_PENDING,
+                APPROVAL_STATUS_REJECTED, APPROVAL_STATUS_CANCELLED,
+            )
+            if approval_status not in (None, ''):
+                try:
+                    approval_status = int(approval_status)
+                except (TypeError, ValueError):
+                    approval_status = None
+                if approval_status not in valid_statuses:
+                    return Response(
+                        {"status": False, "error": "approvalStatus must be an integer (1=Approved, 2=Pending, 3=Rejected, 4=Cancelled)", "code": status.HTTP_400_BAD_REQUEST},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            else:
+                approval_status = None
+
             # Auth + RBAC: token required
             logged_user_id = get_user_id_from_token(request)
             user_type = get_user_type_from_token(request)
