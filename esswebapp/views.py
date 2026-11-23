@@ -6866,12 +6866,19 @@ def send_daily_class_report(target_date=None, recipients=None):
     if target_date is None:
         target_date = date.today()
     
-    # Parse email recipients from env vars (comma-separated)
+    # Parse email recipients - env vars hold comma-separated addresses.
+    def parse_addresses(value):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            value = value.split(',')
+        return [e.strip() for e in value if e and e.strip()]
+
     if recipients is None:
-        to_emails = [e.strip() for e in DAILY_CLASS_REPORT_TO_EMAILS.split(',') if e.strip()]
-        cc_emails = [e.strip() for e in DAILY_CLASS_REPORT_CC_EMAILS.split(',') if e.strip()]
+        to_emails = parse_addresses(DAILY_CLASS_REPORT_TO_EMAILS)
+        cc_emails = parse_addresses(DAILY_CLASS_REPORT_CC_EMAILS)
     else:
-        to_emails = recipients
+        to_emails = parse_addresses(recipients)
         cc_emails = []
     
     report_logger.info(f"Generating daily class summary for {target_date}")
@@ -6907,33 +6914,52 @@ def send_daily_class_report(target_date=None, recipients=None):
         report_logger.info(f"Summary data retrieved: {summary_data}")
         
         # Use the counts returned directly by the summary API.
-        key_metrics = [
+        center_metrics = [
             ('Total Centers', summary_data.get('total', 0)),
             ('Class Started', summary_data.get('in_progress', 0)),
             ('Class Ended', summary_data.get('completed', 0)),
+            ('Class Completed (No Attendance)', summary_data.get('completed_no_attendance', 0)),
             ('Class Not Started', summary_data.get('not_started', 0)),
-            ('Class Not Ended', summary_data.get('active_ended', 0)),
+            ('Class Started But Not Ended', summary_data.get('active_ended', 0)),
+        ]
+        student_metrics = [
+            ('Total Students', summary_data.get('total_students', 0)),
+            ('Total Present', summary_data.get('total_present', 0)),
+            ('Total Absent', summary_data.get('total_absent', 0)),
         ]
 
         # Send email
         subject = f'Daily Class Attendance Summary - {target_date.strftime("%Y-%m-%d")}'
 
-        key_metrics_html = ''.join([
-            f'<tr style="background-color: #E2EFDA;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>{m}</strong></td><td style="padding: 8px; border: 1px solid #ddd; text-align: center;"><strong>{c}</strong></td></tr>'
-            for m, c in key_metrics
-        ])
-        
+        def metric_rows(metrics):
+            return ''.join(
+                f'<tr style="background-color: #E2EFDA;"><td style="padding: 8px; border: 1px solid #ddd;"><strong>{m}</strong></td><td style="padding: 8px; border: 1px solid #ddd; text-align: center;"><strong>{c}</strong></td></tr>'
+                for m, c in metrics
+            )
+
+        center_metrics_html = metric_rows(center_metrics)
+        student_metrics_html = metric_rows(student_metrics)
+
         body = f"""
         <html>
         <body>
             <p>Dear Team,</p>
             <p>Please find below the daily class attendance summary for <strong>{target_date.strftime("%Y-%m-%d")}</strong>.</p>
+            <p><strong>Centers</strong></p>
             <table style="border-collapse: collapse; width: 50%; margin-bottom: 20px;">
                 <tr style="background-color: #4472C4; color: white;">
                     <th style="padding: 10px; border: 1px solid #ddd;">Metric</th>
                     <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Count</th>
                 </tr>
-                {key_metrics_html}
+                {center_metrics_html}
+            </table>
+            <p><strong>Students</strong></p>
+            <table style="border-collapse: collapse; width: 50%; margin-bottom: 20px;">
+                <tr style="background-color: #4472C4; color: white;">
+                    <th style="padding: 10px; border: 1px solid #ddd;">Metric</th>
+                    <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Count</th>
+                </tr>
+                {student_metrics_html}
             </table>
             <br>
             <p>Thanks & Regards<br>
