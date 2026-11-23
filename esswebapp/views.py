@@ -1120,6 +1120,7 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 'not_started': 0,
                 'no_class': 0,
                 'total_students': 0,
+                'total_students_in_class': 0,
                 'total_present': 0,
                 'total_absent': 0
             }
@@ -1186,7 +1187,10 @@ class ClassAttendanceLogsView(PermissionRequiredMixin, View):
                 # Get total students from Student table (active students for this center) - ALWAYS
                 total_students = Student.objects.filter(center_id=center.id, status=True).count()
                 summary['total_students'] += total_students
-                
+                # Students belonging to centers where a class started on this date
+                if class_on_date:
+                    summary['total_students_in_class'] += total_students
+
                 summary['total'] += 1
             
             return JsonResponse(summary)
@@ -6923,9 +6927,10 @@ def send_daily_class_report(target_date=None, recipients=None):
             ('Class Started But Not Ended', summary_data.get('active_ended', 0)),
         ]
         student_metrics = [
-            ('Total Students', summary_data.get('total_students', 0)),
-            ('Total Present', summary_data.get('total_present', 0)),
-            ('Total Absent', summary_data.get('total_absent', 0)),
+            ('Total Students(All Centers)', summary_data.get('total_students', 0)),
+            ('Total Student (From Class Started Centers)', summary_data.get('total_students_in_class', 0)),
+            ('Total Present (From Class Started Centers)', summary_data.get('total_present', 0)),
+            ('Total Absent (From Class Started Centers)', summary_data.get('total_absent', 0)),
         ]
 
         # Send email

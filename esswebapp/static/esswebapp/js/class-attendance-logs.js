@@ -96,6 +96,7 @@ const SUMMARY_IDS = {
     not_started: 'count-not_started',
     no_class: 'count-no_class',
     total_students: 'count-total-students',
+    total_students_in_class: 'count-total-students-in-class',
     total_present: 'count-total-present',
     total_absent: 'count-total-absent'
 };
